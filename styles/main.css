@@ -1224,3 +1224,160 @@ body {
     font-family: inherit;
     width: 100%;
 }
+
+/* ================================
+   Analysis: Pivot Table
+   ================================ */
+.pivot-config,
+.cagr-config,
+.sankey-config,
+.wp-config {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 16px;
+}
+
+.pivot-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.cagr-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.sankey-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.wp-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.pivot-config-grid .settings-group,
+.cagr-config-grid .settings-group,
+.sankey-config-grid .settings-group,
+.wp-config-grid .settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pivot-config-grid select,
+.cagr-config-grid select,
+.sankey-config-grid select,
+.sankey-config-grid input[type="number"],
+.wp-config-grid select {
+    padding: 8px 12px;
+    font-size: 13px;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    color: #0F172A;
+    font-family: inherit;
+    width: 100%;
+}
+
+.pivot-table th.pivot-total,
+.pivot-table td.pivot-total {
+    font-weight: 600;
+    background-color: #F8FAFC;
+}
+
+.pivot-table td.numeric {
+    text-align: right;
+}
+
+.pivot-export-btns,
+.sankey-export-btns {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+/* CAGR */
+.cagr-result-table td.growth-positive {
+    color: #16A34A;
+    font-weight: 500;
+}
+
+.cagr-result-table td.growth-negative {
+    color: #DC2626;
+    font-weight: 500;
+}
+
+/* Sankey */
+.sankey-container {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 16px;
+}
+
+.sankey-svg {
+    width: 100%;
+    height: auto;
+}
+
+.sankey-svg .sankey-flow {
+    opacity: 0.3;
+    transition: opacity 0.15s;
+    cursor: pointer;
+}
+
+.sankey-svg .sankey-flow:hover {
+    opacity: 0.6;
+}
+
+.sankey-svg .sankey-node-label {
+    font-size: 11px;
+    fill: #0F172A;
+    font-family: 'DejaVu Sans', sans-serif;
+}
+
+.sankey-svg .sankey-node-value {
+    font-size: 10px;
+    fill: #64748B;
+    font-family: 'DejaVu Sans', sans-serif;
+}
+
+/* Weighted Prices */
+.wp-unit-label {
+    font-size: 12px;
+    color: #64748B;
+    font-style: italic;
+    margin-bottom: 8px;
+}
+
+/* Classification */
+.classification-distribution {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.classification-note {
+    font-size: 13px;
+    color: #2563EB;
+    background-color: #EFF6FF;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-top: 16px;
+}

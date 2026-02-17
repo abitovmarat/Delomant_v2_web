@@ -1341,10 +1341,16 @@ document.addEventListener('DOMContentLoaded', function () {
         analysisButtons[0].addEventListener('click', function () { runAnalysis('growth'); });
         analysisButtons[1].addEventListener('click', function () { runAnalysis('statistics'); });
         analysisButtons[2].addEventListener('click', function () { runAnalysis('trends'); });
+        if (analysisButtons[3]) analysisButtons[3].addEventListener('click', function () { runAnalysis('pivot'); });
+        if (analysisButtons[4]) analysisButtons[4].addEventListener('click', function () { runAnalysis('cagr'); });
+        if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('sankey'); });
+        if (analysisButtons[6]) analysisButtons[6].addEventListener('click', function () { runAnalysis('weighted-price'); });
+        if (analysisButtons[7]) analysisButtons[7].addEventListener('click', function () { runAnalysis('classification'); });
     }
 
     function runAnalysis(type) {
         var data = getActiveData();
+        var headers = getActiveHeaders();
         if (data.length === 0) {
             analysisResults.innerHTML =
                 '<div class="analysis-empty">' +
@@ -1353,7 +1359,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        var numericCols = getNumericColumns(data, getActiveHeaders());
+        var numericCols = getNumericColumns(data, headers);
+
+        /* Config-based features (render form, attach handlers) */
+        if (type === 'pivot') { renderPivotConfig(headers, numericCols); return; }
+        if (type === 'cagr') { renderCAGRConfig(headers, numericCols); return; }
+        if (type === 'sankey') { renderSankeyConfig(headers, numericCols); return; }
+        if (type === 'weighted-price') { renderWeightedPriceConfig(headers, numericCols); return; }
+        if (type === 'classification') { renderClassificationAnalysis(); return; }
+
         if (numericCols.length === 0) {
             analysisResults.innerHTML =
                 '<div class="analysis-empty">' +
@@ -1483,6 +1497,885 @@ document.addEventListener('DOMContentLoaded', function () {
 
         html += '</div></div>';
         return html;
+    }
+
+    /* ================================
+       Analysis: Pivot Table
+       ================================ */
+    function renderPivotConfig(headers, numericCols) {
+        var optAll = headers.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+        var optNum = numericCols.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+
+        var html = '<div class="pivot-config">' +
+            '<h3 class="analysis-section-title">Сводная таблица</h3>' +
+            '<div class="pivot-config-grid">' +
+            '<div class="settings-group"><label class="settings-label">Строки</label>' +
+            '<select id="pivot-row">' + optAll + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Столбцы</label>' +
+            '<select id="pivot-col"><option value="">Нет</option>' + optAll + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Значение</label>' +
+            '<select id="pivot-val">' + optNum + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Агрегация</label>' +
+            '<select id="pivot-agg">' +
+            '<option value="sum">Сумма</option>' +
+            '<option value="avg">Среднее</option>' +
+            '<option value="count">Количество</option>' +
+            '<option value="min">Минимум</option>' +
+            '<option value="max">Максимум</option>' +
+            '</select></div>' +
+            '</div>' +
+            '<button class="btn btn-primary" id="pivot-build">Построить</button>' +
+            '</div>' +
+            '<div id="pivot-output"></div>';
+
+        analysisResults.innerHTML = html;
+        document.getElementById('pivot-build').addEventListener('click', buildPivotTable);
+    }
+
+    function buildPivotTable() {
+        var data = getActiveData();
+        var rowField = document.getElementById('pivot-row').value;
+        var colField = document.getElementById('pivot-col').value;
+        var valField = document.getElementById('pivot-val').value;
+        var aggType = document.getElementById('pivot-agg').value;
+
+        var pivot = computePivot(data, rowField, colField, valField, aggType);
+        var html = renderPivotResult(pivot, rowField, colField, valField, aggType);
+        document.getElementById('pivot-output').innerHTML = html;
+
+        var csvBtn = document.getElementById('pivot-csv-btn');
+        var xlsxBtn = document.getElementById('pivot-xlsx-btn');
+        if (csvBtn) csvBtn.addEventListener('click', function () { exportPivotCSV(pivot, rowField, colField, aggType); });
+        if (xlsxBtn) xlsxBtn.addEventListener('click', function () { exportPivotXLSX(pivot, rowField, colField, valField, aggType); });
+    }
+
+    function computePivot(data, rowField, colField, valField, aggType) {
+        var rowKeysSet = {};
+        var colKeysSet = {};
+        var matrix = {};
+        var hasCol = colField !== '';
+
+        for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            var rk = String(row[rowField] || '');
+            var ck = hasCol ? String(row[colField] || '') : '__total__';
+            var val = Number(row[valField]);
+            if (isNaN(val)) val = 0;
+
+            rowKeysSet[rk] = true;
+            colKeysSet[ck] = true;
+            var key = rk + '|||' + ck;
+
+            if (!matrix[key]) {
+                matrix[key] = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            }
+            matrix[key].sum += val;
+            matrix[key].count++;
+            if (val < matrix[key].min) matrix[key].min = val;
+            if (val > matrix[key].max) matrix[key].max = val;
+        }
+
+        var rowKeys = Object.keys(rowKeysSet).sort();
+        var colKeys = Object.keys(colKeysSet).sort();
+
+        function getVal(cell) {
+            if (!cell) return 0;
+            if (aggType === 'sum') return cell.sum;
+            if (aggType === 'avg') return cell.count > 0 ? cell.sum / cell.count : 0;
+            if (aggType === 'count') return cell.count;
+            if (aggType === 'min') return cell.min === Infinity ? 0 : cell.min;
+            if (aggType === 'max') return cell.max === -Infinity ? 0 : cell.max;
+            return cell.sum;
+        }
+
+        var rowTotals = {};
+        var colTotals = {};
+        var grandCells = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+
+        rowKeys.forEach(function (rk) {
+            var rc = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            colKeys.forEach(function (ck) {
+                var cell = matrix[rk + '|||' + ck];
+                if (cell) {
+                    rc.sum += cell.sum;
+                    rc.count += cell.count;
+                    if (cell.min < rc.min) rc.min = cell.min;
+                    if (cell.max > rc.max) rc.max = cell.max;
+                }
+            });
+            rowTotals[rk] = getVal(rc);
+        });
+
+        colKeys.forEach(function (ck) {
+            var cc = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            rowKeys.forEach(function (rk) {
+                var cell = matrix[rk + '|||' + ck];
+                if (cell) {
+                    cc.sum += cell.sum;
+                    cc.count += cell.count;
+                    if (cell.min < cc.min) cc.min = cell.min;
+                    if (cell.max > cc.max) cc.max = cell.max;
+                }
+            });
+            colTotals[ck] = getVal(cc);
+            grandCells.sum += cc.sum;
+            grandCells.count += cc.count;
+            if (cc.min < grandCells.min) grandCells.min = cc.min;
+            if (cc.max > grandCells.max) grandCells.max = cc.max;
+        });
+
+        return {
+            rowKeys: rowKeys, colKeys: colKeys, matrix: matrix,
+            rowTotals: rowTotals, colTotals: colTotals,
+            grandTotal: getVal(grandCells), getVal: getVal, hasCol: hasCol
+        };
+    }
+
+    function renderPivotResult(pivot, rowField, colField, valField, aggType) {
+        var aggLabel = { sum: 'Сумма', avg: 'Среднее', count: 'Кол-во', min: 'Мин', max: 'Макс' }[aggType];
+        var html = '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">' + aggLabel + ': ' + valField + '</h3>';
+        html += '<div class="data-table-wrapper"><table class="data-table pivot-table">';
+
+        /* Header */
+        html += '<thead><tr><th>' + rowField + '</th>';
+        if (pivot.hasCol) {
+            pivot.colKeys.forEach(function (ck) { html += '<th>' + ck + '</th>'; });
+        }
+        html += '<th class="pivot-total">Итого</th></tr></thead>';
+
+        /* Body */
+        html += '<tbody>';
+        pivot.rowKeys.forEach(function (rk) {
+            html += '<tr><td>' + rk + '</td>';
+            if (pivot.hasCol) {
+                pivot.colKeys.forEach(function (ck) {
+                    var cell = pivot.matrix[rk + '|||' + ck];
+                    var v = pivot.getVal(cell);
+                    html += '<td class="numeric">' + formatNumber(v.toFixed(2)) + '</td>';
+                });
+            }
+            html += '<td class="numeric pivot-total">' + formatNumber(pivot.rowTotals[rk].toFixed(2)) + '</td>';
+            html += '</tr>';
+        });
+
+        /* Footer totals */
+        html += '<tr class="pivot-total"><td>Итого</td>';
+        if (pivot.hasCol) {
+            pivot.colKeys.forEach(function (ck) {
+                html += '<td class="numeric">' + formatNumber(pivot.colTotals[ck].toFixed(2)) + '</td>';
+            });
+        }
+        html += '<td class="numeric">' + formatNumber(pivot.grandTotal.toFixed(2)) + '</td>';
+        html += '</tr></tbody></table></div>';
+
+        html += '<div class="pivot-export-btns">' +
+            '<button class="btn btn-secondary" id="pivot-csv-btn">Экспорт CSV</button>' +
+            '<button class="btn btn-secondary" id="pivot-xlsx-btn">Экспорт XLSX</button>' +
+            '</div></div>';
+        return html;
+    }
+
+    function exportPivotCSV(pivot, rowField, colField, aggType) {
+        var sep = ';';
+        var lines = [];
+        var header = [rowField];
+        if (pivot.hasCol) pivot.colKeys.forEach(function (ck) { header.push(ck); });
+        header.push('Итого');
+        lines.push(header.join(sep));
+
+        pivot.rowKeys.forEach(function (rk) {
+            var row = [rk];
+            if (pivot.hasCol) {
+                pivot.colKeys.forEach(function (ck) {
+                    row.push(pivot.getVal(pivot.matrix[rk + '|||' + ck]).toFixed(2));
+                });
+            }
+            row.push(pivot.rowTotals[rk].toFixed(2));
+            lines.push(row.join(sep));
+        });
+
+        var totalRow = ['Итого'];
+        if (pivot.hasCol) pivot.colKeys.forEach(function (ck) { totalRow.push(pivot.colTotals[ck].toFixed(2)); });
+        totalRow.push(pivot.grandTotal.toFixed(2));
+        lines.push(totalRow.join(sep));
+
+        var csv = '\uFEFF' + lines.join('\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        triggerDownload(blob, 'pivot_export.csv');
+    }
+
+    function exportPivotXLSX(pivot, rowField, colField, valField, aggType) {
+        var aoa = [];
+        var header = [rowField];
+        if (pivot.hasCol) pivot.colKeys.forEach(function (ck) { header.push(ck); });
+        header.push('Итого');
+        aoa.push(header);
+
+        pivot.rowKeys.forEach(function (rk) {
+            var row = [rk];
+            if (pivot.hasCol) {
+                pivot.colKeys.forEach(function (ck) {
+                    row.push(pivot.getVal(pivot.matrix[rk + '|||' + ck]));
+                });
+            }
+            row.push(pivot.rowTotals[rk]);
+            aoa.push(row);
+        });
+
+        var totalRow = ['Итого'];
+        if (pivot.hasCol) pivot.colKeys.forEach(function (ck) { totalRow.push(pivot.colTotals[ck]); });
+        totalRow.push(pivot.grandTotal);
+        aoa.push(totalRow);
+
+        var wb = XLSX.utils.book_new();
+        var ws = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, ws, 'Сводная');
+        XLSX.writeFile(wb, 'pivot_export.xlsx');
+    }
+
+    /* ================================
+       Analysis: CAGR & Growth
+       ================================ */
+    function renderCAGRConfig(headers, numericCols) {
+        var optNum = numericCols.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+        var optGroup = '<option value="">Нет (общий итог)</option>' +
+            headers.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+
+        var html = '<div class="cagr-config">' +
+            '<h3 class="analysis-section-title">CAGR и темпы роста</h3>' +
+            '<div class="cagr-config-grid">' +
+            '<div class="settings-group"><label class="settings-label">Значение</label>' +
+            '<select id="cagr-val">' + optNum + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Группировка</label>' +
+            '<select id="cagr-group">' + optGroup + '</select></div>' +
+            '</div>' +
+            '<button class="btn btn-primary" id="cagr-build">Рассчитать</button>' +
+            '</div>' +
+            '<div id="cagr-output"></div>';
+
+        analysisResults.innerHTML = html;
+        document.getElementById('cagr-build').addEventListener('click', buildCAGRAnalysis);
+    }
+
+    function computeCAGR(startVal, endVal, years) {
+        if (startVal <= 0 || years <= 0) return null;
+        return Math.pow(endVal / startVal, 1 / years) - 1;
+    }
+
+    function buildCAGRAnalysis() {
+        var data = getActiveData();
+        var headers = getActiveHeaders();
+        var valField = document.getElementById('cagr-val').value;
+        var groupField = document.getElementById('cagr-group').value;
+
+        var yearCol = findColumn(headers, 'Год');
+        if (yearCol === -1) {
+            document.getElementById('cagr-output').innerHTML =
+                '<div class="analysis-empty"><p>Колонка "Год" не найдена. Выполните извлечение дат в обработке.</p></div>';
+            return;
+        }
+        var yearName = headers[yearCol];
+
+        /* Group by year (and optionally by group) */
+        var groups = {};
+        for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            var year = String(row[yearName] || '');
+            var gk = groupField ? String(row[groupField] || '') : '__all__';
+            var val = Number(row[valField]);
+            if (isNaN(val)) continue;
+
+            if (!groups[gk]) groups[gk] = {};
+            if (!groups[gk][year]) groups[gk][year] = 0;
+            groups[gk][year] += val;
+        }
+
+        var html = '<div class="analysis-section"><h3 class="analysis-section-title">CAGR: ' + valField + '</h3>';
+
+        var groupKeys = Object.keys(groups).sort();
+        groupKeys.forEach(function (gk) {
+            var yearlyData = groups[gk];
+            var years = Object.keys(yearlyData).sort();
+            if (years.length < 2) return;
+
+            var first = yearlyData[years[0]];
+            var last = yearlyData[years[years.length - 1]];
+            var n = years.length - 1;
+            var cagr = computeCAGR(first, last, n);
+            var cagrPct = cagr !== null ? (cagr * 100).toFixed(1) : 'N/A';
+            var cagrClass = cagr !== null && cagr >= 0 ? 'growth' : 'decline';
+
+            var title = gk === '__all__' ? 'Общий итог' : gk;
+            html += '<div class="kpi-grid" style="margin-bottom:16px">' +
+                '<div class="kpi-card"><h3 class="kpi-card-title">' + title + '</h3>' +
+                '<div class="kpi-card-value">' + cagrPct + '%</div>' +
+                '<div class="kpi-card-delta ' + cagrClass + '">CAGR (' + years[0] + '–' + years[years.length - 1] + ')</div>' +
+                '</div></div>';
+
+            /* YoY table */
+            html += '<div class="data-table-wrapper"><table class="data-table cagr-result-table">';
+            html += '<thead><tr><th>Год</th><th>Значение</th><th>Рост (%)</th></tr></thead><tbody>';
+            for (var j = 0; j < years.length; j++) {
+                var v = yearlyData[years[j]];
+                var yoy = '';
+                var yoyClass = '';
+                if (j > 0) {
+                    var prev = yearlyData[years[j - 1]];
+                    if (prev !== 0) {
+                        var pct = ((v - prev) / Math.abs(prev) * 100).toFixed(1);
+                        yoy = (pct >= 0 ? '+' : '') + pct + '%';
+                        yoyClass = pct >= 0 ? 'growth-positive' : 'growth-negative';
+                    }
+                }
+                html += '<tr><td>' + years[j] + '</td><td class="numeric">' +
+                    formatNumber(v.toFixed(2)) + '</td><td class="' + yoyClass + '">' + yoy + '</td></tr>';
+            }
+            html += '</tbody></table></div>';
+        });
+
+        html += '</div>';
+        document.getElementById('cagr-output').innerHTML = html;
+    }
+
+    /* ================================
+       Analysis: Sankey Diagram
+       ================================ */
+    var SANKEY_COLORS = [
+        '#2563EB', '#16A34A', '#DC2626', '#F59E0B', '#8B5CF6',
+        '#06B6D4', '#EC4899', '#84CC16', '#F97316', '#6366F1',
+        '#14B8A6', '#E11D48', '#A855F7', '#0EA5E9', '#EAB308'
+    ];
+
+    function renderSankeyConfig(headers, numericCols) {
+        var optAll = headers.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+        var optNum = numericCols.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+
+        /* Pre-select defaults if available */
+        var srcDefault = 'Фирма-изготовитель';
+        var tgtDefault = 'Наименование получателя';
+        var valDefault = 'Вес нетто, кг';
+
+        function makeOpt(arr, def) {
+            return arr.map(function (h) {
+                var sel = h === def ? ' selected' : '';
+                return '<option value="' + h + '"' + sel + '>' + h + '</option>';
+            }).join('');
+        }
+
+        var html = '<div class="sankey-config">' +
+            '<h3 class="analysis-section-title">Диаграмма Санки</h3>' +
+            '<div class="sankey-config-grid">' +
+            '<div class="settings-group"><label class="settings-label">Источник</label>' +
+            '<select id="sankey-src">' + makeOpt(headers, srcDefault) + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Приёмник</label>' +
+            '<select id="sankey-tgt">' + makeOpt(headers, tgtDefault) + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Значение</label>' +
+            '<select id="sankey-val">' + makeOpt(numericCols, valDefault) + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">ТОП-N</label>' +
+            '<input type="number" id="sankey-topn" value="10" min="3" max="20"></div>' +
+            '<div class="settings-group"><label class="settings-label">&nbsp;</label>' +
+            '<button class="btn btn-primary" id="sankey-build">Построить</button></div>' +
+            '</div></div>' +
+            '<div id="sankey-output"></div>';
+
+        analysisResults.innerHTML = html;
+        document.getElementById('sankey-build').addEventListener('click', buildSankeyDiagram);
+    }
+
+    function buildSankeyData(data, srcField, tgtField, valField, topN) {
+        var flows = {};
+        var srcTotals = {};
+        var tgtTotals = {};
+
+        for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            var s = String(row[srcField] || '').trim();
+            var t = String(row[tgtField] || '').trim();
+            var v = Number(row[valField]);
+            if (!s || !t || isNaN(v) || v <= 0) continue;
+
+            var fk = s + '|||' + t;
+            flows[fk] = (flows[fk] || 0) + v;
+            srcTotals[s] = (srcTotals[s] || 0) + v;
+            tgtTotals[t] = (tgtTotals[t] || 0) + v;
+        }
+
+        /* Top N sources and targets */
+        function topKeys(obj, n) {
+            return Object.keys(obj).sort(function (a, b) { return obj[b] - obj[a]; }).slice(0, n);
+        }
+
+        var topSrc = topKeys(srcTotals, topN);
+        var topTgt = topKeys(tgtTotals, topN);
+        var topSrcSet = {};
+        var topTgtSet = {};
+        topSrc.forEach(function (s) { topSrcSet[s] = true; });
+        topTgt.forEach(function (t) { topTgtSet[t] = true; });
+
+        var sources = topSrc.map(function (s) { return { name: s, total: srcTotals[s] }; });
+        var targets = topTgt.map(function (t) { return { name: t, total: tgtTotals[t] }; });
+
+        var filteredFlows = [];
+        Object.keys(flows).forEach(function (fk) {
+            var parts = fk.split('|||');
+            if (topSrcSet[parts[0]] && topTgtSet[parts[1]]) {
+                filteredFlows.push({ source: parts[0], target: parts[1], value: flows[fk] });
+            }
+        });
+        filteredFlows.sort(function (a, b) { return b.value - a.value; });
+
+        /* Recalculate totals based on filtered flows */
+        var srcFiltered = {};
+        var tgtFiltered = {};
+        filteredFlows.forEach(function (f) {
+            srcFiltered[f.source] = (srcFiltered[f.source] || 0) + f.value;
+            tgtFiltered[f.target] = (tgtFiltered[f.target] || 0) + f.value;
+        });
+        sources.forEach(function (s) { s.total = srcFiltered[s.name] || 0; });
+        targets.forEach(function (t) { t.total = tgtFiltered[t.name] || 0; });
+        sources = sources.filter(function (s) { return s.total > 0; });
+        targets = targets.filter(function (t) { return t.total > 0; });
+
+        return { sources: sources, targets: targets, flows: filteredFlows };
+    }
+
+    function renderSankeyDiagram(sankeyData) {
+        var W = 900, H = 600;
+        var padT = 20, padB = 20, padL = 20, padR = 20;
+        var nodeW = 16;
+        var labelOffset = 6;
+        var srcX = padL;
+        var tgtX = W - padR - nodeW;
+        var gap = 6;
+        var availH = H - padT - padB;
+
+        var sources = sankeyData.sources;
+        var targets = sankeyData.targets;
+        var flows = sankeyData.flows;
+
+        var srcTotal = sources.reduce(function (a, s) { return a + s.total; }, 0);
+        var tgtTotal = targets.reduce(function (a, t) { return a + t.total; }, 0);
+        var maxTotal = Math.max(srcTotal, tgtTotal);
+
+        var srcScale = (availH - (sources.length - 1) * gap) / maxTotal;
+        var tgtScale = (availH - (targets.length - 1) * gap) / maxTotal;
+        var scale = Math.min(srcScale, tgtScale);
+
+        /* Position nodes */
+        var srcY = padT;
+        sources.forEach(function (s) {
+            s.h = Math.max(4, s.total * scale);
+            s.y = srcY;
+            s.offset = 0;
+            srcY += s.h + gap;
+        });
+
+        var tgtY = padT;
+        targets.forEach(function (t) {
+            t.h = Math.max(4, t.total * scale);
+            t.y = tgtY;
+            t.offset = 0;
+            tgtY += t.h + gap;
+        });
+
+        /* Build SVG */
+        var svg = '<svg class="sankey-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+
+        /* Index for fast lookup */
+        var srcIdx = {};
+        sources.forEach(function (s, i) { srcIdx[s.name] = i; });
+        var tgtIdx = {};
+        targets.forEach(function (t, i) { tgtIdx[t.name] = i; });
+
+        /* Draw flows */
+        var ctrlDist = (tgtX - srcX - nodeW) * 0.4;
+        flows.forEach(function (f) {
+            var si = srcIdx[f.source];
+            var ti = tgtIdx[f.target];
+            if (si === undefined || ti === undefined) return;
+            var s = sources[si];
+            var t = targets[ti];
+            var fh = Math.max(1, f.value * scale);
+
+            var sy = s.y + s.offset;
+            var ty = t.y + t.offset;
+            s.offset += fh;
+            t.offset += fh;
+
+            var x0 = srcX + nodeW;
+            var x1 = tgtX;
+            var color = SANKEY_COLORS[si % SANKEY_COLORS.length];
+
+            var d = 'M' + x0 + ',' + sy +
+                ' C' + (x0 + ctrlDist) + ',' + sy + ' ' + (x1 - ctrlDist) + ',' + ty + ' ' + x1 + ',' + ty +
+                ' L' + x1 + ',' + (ty + fh) +
+                ' C' + (x1 - ctrlDist) + ',' + (ty + fh) + ' ' + (x0 + ctrlDist) + ',' + (sy + fh) + ' ' + x0 + ',' + (sy + fh) +
+                ' Z';
+
+            svg += '<path class="sankey-flow" d="' + d + '" fill="' + color + '">' +
+                '<title>' + f.source + ' → ' + f.target + ': ' + formatNumber(f.value.toFixed(0)) + '</title></path>';
+        });
+
+        /* Draw source nodes */
+        sources.forEach(function (s, i) {
+            var color = SANKEY_COLORS[i % SANKEY_COLORS.length];
+            svg += '<rect x="' + srcX + '" y="' + s.y + '" width="' + nodeW + '" height="' + s.h +
+                '" fill="' + color + '" rx="2"/>';
+            var label = s.name.length > 22 ? s.name.substring(0, 20) + '...' : s.name;
+            svg += '<text class="sankey-node-label" x="' + (srcX + nodeW + labelOffset) + '" y="' +
+                (s.y + s.h / 2) + '" dominant-baseline="middle">' + label + '</text>';
+            svg += '<text class="sankey-node-value" x="' + (srcX + nodeW + labelOffset) + '" y="' +
+                (s.y + s.h / 2 + 14) + '" dominant-baseline="middle">' + formatNumber(s.total.toFixed(0)) + '</text>';
+        });
+
+        /* Draw target nodes */
+        targets.forEach(function (t, i) {
+            var color = SANKEY_COLORS[i % SANKEY_COLORS.length];
+            svg += '<rect x="' + tgtX + '" y="' + t.y + '" width="' + nodeW + '" height="' + t.h +
+                '" fill="' + color + '" rx="2"/>';
+            var label = t.name.length > 22 ? t.name.substring(0, 20) + '...' : t.name;
+            svg += '<text class="sankey-node-label" x="' + (tgtX - labelOffset) + '" y="' +
+                (t.y + t.h / 2) + '" dominant-baseline="middle" text-anchor="end">' + label + '</text>';
+            svg += '<text class="sankey-node-value" x="' + (tgtX - labelOffset) + '" y="' +
+                (t.y + t.h / 2 + 14) + '" dominant-baseline="middle" text-anchor="end">' + formatNumber(t.total.toFixed(0)) + '</text>';
+        });
+
+        svg += '</svg>';
+        return svg;
+    }
+
+    function buildSankeyDiagram() {
+        var data = getActiveData();
+        var srcField = document.getElementById('sankey-src').value;
+        var tgtField = document.getElementById('sankey-tgt').value;
+        var valField = document.getElementById('sankey-val').value;
+        var topN = parseInt(document.getElementById('sankey-topn').value) || 10;
+
+        var sankeyData = buildSankeyData(data, srcField, tgtField, valField, topN);
+
+        if (sankeyData.flows.length === 0) {
+            document.getElementById('sankey-output').innerHTML =
+                '<div class="analysis-empty"><p>Нет данных для построения диаграммы</p></div>';
+            return;
+        }
+
+        var svgStr = renderSankeyDiagram(sankeyData);
+        var html = '<div class="sankey-container">' + svgStr + '</div>';
+        html += '<div class="sankey-export-btns">' +
+            '<button class="btn btn-secondary" id="sankey-png-btn">Экспорт PNG</button>' +
+            '<button class="btn btn-secondary" id="sankey-svg-btn">Экспорт SVG</button>' +
+            '</div>';
+
+        document.getElementById('sankey-output').innerHTML = html;
+
+        /* Export handlers */
+        document.getElementById('sankey-png-btn').addEventListener('click', function () {
+            var svgEl = document.querySelector('.sankey-svg');
+            if (!svgEl) return;
+            var serializer = new XMLSerializer();
+            var svgString = serializer.serializeToString(svgEl);
+            var canvas = document.createElement('canvas');
+            canvas.width = 1800; canvas.height = 1200;
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, 1800, 1200);
+            var img = new Image();
+            img.onload = function () {
+                ctx.drawImage(img, 0, 0, 1800, 1200);
+                canvas.toBlob(function (blob) { triggerDownload(blob, 'sankey.png'); });
+            };
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+        });
+
+        document.getElementById('sankey-svg-btn').addEventListener('click', function () {
+            var svgEl = document.querySelector('.sankey-svg');
+            if (!svgEl) return;
+            var serializer = new XMLSerializer();
+            var svgString = serializer.serializeToString(svgEl);
+            var blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            triggerDownload(blob, 'sankey.svg');
+        });
+    }
+
+    /* ================================
+       Analysis: Weighted Average Prices
+       ================================ */
+    function renderWeightedPriceConfig(headers, numericCols) {
+        var optGroup = headers.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+
+        /* Pre-select value fields */
+        var valOptions = '';
+        var priceFields = ['Статистическая стоимость, USD', 'Фактурная стоимость в рублях', 'Фактурная стоимость', 'Таможенная стоимость'];
+        var availPrice = numericCols.filter(function (h) { return priceFields.indexOf(h) !== -1; });
+        if (availPrice.length === 0) availPrice = numericCols;
+        valOptions = availPrice.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+
+        var html = '<div class="wp-config">' +
+            '<h3 class="analysis-section-title">Средневзвешенные цены</h3>' +
+            '<div class="wp-config-grid">' +
+            '<div class="settings-group"><label class="settings-label">Группировка</label>' +
+            '<select id="wp-group">' + optGroup + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">Стоимость</label>' +
+            '<select id="wp-val">' + valOptions + '</select></div>' +
+            '<div class="settings-group"><label class="settings-label">&nbsp;</label>' +
+            '<button class="btn btn-primary" id="wp-build">Рассчитать</button></div>' +
+            '</div></div>' +
+            '<div id="wp-output"></div>';
+
+        analysisResults.innerHTML = html;
+        document.getElementById('wp-build').addEventListener('click', buildWeightedPrices);
+    }
+
+    function buildWeightedPrices() {
+        var data = getActiveData();
+        var headers = getActiveHeaders();
+        var groupField = document.getElementById('wp-group').value;
+        var valField = document.getElementById('wp-val').value;
+
+        var weightCol = findColumn(headers, 'Вес нетто, кг');
+        if (weightCol === -1) {
+            document.getElementById('wp-output').innerHTML =
+                '<div class="analysis-empty"><p>Колонка "Вес нетто, кг" не найдена</p></div>';
+            return;
+        }
+        var weightField = headers[weightCol];
+
+        var groups = {};
+        for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            var gk = String(row[groupField] || '');
+            var val = Number(row[valField]);
+            var w = Number(row[weightField]);
+            if (isNaN(val) || isNaN(w)) continue;
+
+            if (!groups[gk]) groups[gk] = { sumVal: 0, sumW: 0, count: 0 };
+            groups[gk].sumVal += val;
+            groups[gk].sumW += w;
+            groups[gk].count++;
+        }
+
+        var results = Object.keys(groups).map(function (gk) {
+            var g = groups[gk];
+            return {
+                group: gk,
+                sumValue: g.sumVal,
+                sumWeight: g.sumW,
+                weightedAvg: g.sumW > 0 ? g.sumVal / g.sumW : 0,
+                count: g.count
+            };
+        });
+        results.sort(function (a, b) { return b.sumWeight - a.sumWeight; });
+
+        /* Determine unit */
+        var unit = valField.indexOf('USD') !== -1 ? 'USD/кг' : 'руб./кг';
+
+        var html = '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">Средневзвешенная цена (' + unit + ')</h3>';
+        html += '<p class="wp-unit-label">' + valField + ' / ' + weightField + '</p>';
+
+        /* Table */
+        html += '<div class="data-table-wrapper"><table class="data-table">';
+        html += '<thead><tr><th>' + groupField + '</th><th>Сумма стоимости</th><th>Сумма веса (кг)</th><th>Цена (' + unit + ')</th><th>Записей</th></tr></thead><tbody>';
+
+        var totalVal = 0, totalW = 0, totalCount = 0;
+        results.forEach(function (r) {
+            html += '<tr><td>' + r.group + '</td>' +
+                '<td class="numeric">' + formatNumber(r.sumValue.toFixed(2)) + '</td>' +
+                '<td class="numeric">' + formatNumber(r.sumWeight.toFixed(2)) + '</td>' +
+                '<td class="numeric">' + formatNumber(r.weightedAvg.toFixed(2)) + '</td>' +
+                '<td class="numeric">' + formatNumber(r.count) + '</td></tr>';
+            totalVal += r.sumValue;
+            totalW += r.sumWeight;
+            totalCount += r.count;
+        });
+
+        var totalAvg = totalW > 0 ? totalVal / totalW : 0;
+        html += '<tr class="pivot-total"><td>Итого</td>' +
+            '<td class="numeric">' + formatNumber(totalVal.toFixed(2)) + '</td>' +
+            '<td class="numeric">' + formatNumber(totalW.toFixed(2)) + '</td>' +
+            '<td class="numeric">' + formatNumber(totalAvg.toFixed(2)) + '</td>' +
+            '<td class="numeric">' + formatNumber(totalCount) + '</td></tr>';
+
+        html += '</tbody></table></div>';
+
+        /* Bar chart */
+        html += '<div style="margin-top:16px;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:24px">';
+        html += renderWPBarChart(results, groupField, unit);
+        html += '</div>';
+
+        html += '</div>';
+        document.getElementById('wp-output').innerHTML = html;
+    }
+
+    function renderWPBarChart(results, groupField, unit) {
+        if (results.length === 0) return '';
+        var W = 700, H = 320;
+        var padL = 70, padR = 20, padT = 20, padB = 60;
+        var chartW = W - padL - padR;
+        var chartH = H - padT - padB;
+
+        var maxVal = 0;
+        results.forEach(function (r) { if (r.weightedAvg > maxVal) maxVal = r.weightedAvg; });
+        if (maxVal === 0) maxVal = 1;
+
+        var barW = Math.min(40, chartW / results.length * 0.7);
+        var barGap = (chartW - barW * results.length) / (results.length + 1);
+
+        var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+
+        /* Grid */
+        for (var g = 0; g <= 4; g++) {
+            var gy = padT + chartH - (g / 4) * chartH;
+            var gv = (maxVal * g / 4).toFixed(2);
+            svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
+            svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="#64748B" font-family="DejaVu Sans">' + gv + '</text>';
+        }
+
+        /* Bars */
+        results.forEach(function (r, idx) {
+            var x = padL + barGap + idx * (barW + barGap);
+            var barH = (r.weightedAvg / maxVal) * chartH;
+            var y = padT + chartH - barH;
+            svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" fill="#2563EB" rx="2"/>';
+
+            /* Value label */
+            svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="10" fill="#0F172A" font-family="DejaVu Sans">' + r.weightedAvg.toFixed(2) + '</text>';
+
+            /* X label */
+            var label = r.group.length > 12 ? r.group.substring(0, 10) + '..' : r.group;
+            svg += '<text x="' + (x + barW / 2) + '" y="' + (padT + chartH + 16) + '" text-anchor="middle" font-size="10" fill="#64748B" font-family="DejaVu Sans" transform="rotate(-30,' + (x + barW / 2) + ',' + (padT + chartH + 16) + ')">' + label + '</text>';
+        });
+
+        svg += '</svg>';
+        return svg;
+    }
+
+    /* ================================
+       Analysis: Product Classification
+       ================================ */
+    var PRODUCT_CATEGORIES = [
+        { keywords: ['жарен', 'roast', 'обжар'], category: 'Жареный' },
+        { keywords: ['бланшир', 'blanch'], category: 'Бланшированный' },
+        { keywords: ['готов', 'продукц', 'паст', 'масл', 'халв', 'конфет'], category: 'Готовая продукция' },
+        { keywords: ['дроблен', 'половинк', 'кусочк', 'split', 'broken', 'piece'], category: 'Дробленый' },
+        { keywords: ['очищен', 'лущен', 'шелушен', 'без скорлуп', 'без кожур', 'shelled', 'peeled', 'kernel'], category: 'Очищенный' },
+        { keywords: ['неочищен', 'в скорлуп', 'in shell', 'нелущен', 'in-shell'], category: 'Неочищенный' },
+        { keywords: ['сушен', 'dried'], category: 'Сушеный' }
+    ];
+
+    function classifyProduct(description) {
+        if (!description) return 'Прочее';
+        var lower = String(description).toLowerCase();
+        for (var i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+            var rule = PRODUCT_CATEGORIES[i];
+            for (var j = 0; j < rule.keywords.length; j++) {
+                if (lower.indexOf(rule.keywords[j]) !== -1) {
+                    return rule.category;
+                }
+            }
+        }
+        return 'Прочее';
+    }
+
+    function renderClassificationAnalysis() {
+        var data = getActiveData();
+        var headers = getActiveHeaders();
+        var descCol = findColumn(headers, 'Наименование и характеристики товаров');
+        if (descCol === -1) {
+            analysisResults.innerHTML =
+                '<div class="analysis-empty"><p>Колонка "Наименование и характеристики товаров" не найдена. Выполните маппинг колонок в обработке.</p></div>';
+            return;
+        }
+        var descField = headers[descCol];
+        var newColName = 'Характеристика товара';
+
+        /* Add classification column */
+        var alreadyExists = headers.indexOf(newColName) !== -1;
+        var dist = {};
+        for (var i = 0; i < data.length; i++) {
+            var cat = classifyProduct(data[i][descField]);
+            data[i][newColName] = cat;
+            dist[cat] = (dist[cat] || 0) + 1;
+        }
+        if (!alreadyExists) {
+            if (appState.isProcessed) {
+                appState.processedHeaders.push(newColName);
+            } else {
+                appState.headers.push(newColName);
+            }
+            renderColumnsList();
+            updateVisualizationFields();
+        }
+
+        /* Render results */
+        var categories = Object.keys(dist).sort(function (a, b) { return dist[b] - dist[a]; });
+        var total = data.length;
+
+        var html = '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">Классификация товаров</h3>';
+
+        /* KPI */
+        html += '<div class="kpi-grid">';
+        html += '<div class="kpi-card"><h3 class="kpi-card-title">Всего записей</h3>' +
+            '<div class="kpi-card-value">' + formatNumber(total) + '</div></div>';
+        html += '<div class="kpi-card"><h3 class="kpi-card-title">Категорий</h3>' +
+            '<div class="kpi-card-value">' + categories.length + '</div></div>';
+        html += '</div>';
+
+        /* Distribution */
+        html += '<div class="classification-distribution">';
+
+        /* Table */
+        html += '<div><div class="data-table-wrapper"><table class="data-table">';
+        html += '<thead><tr><th>Характеристика</th><th>Количество</th><th>Доля (%)</th></tr></thead><tbody>';
+        categories.forEach(function (cat) {
+            var pct = (dist[cat] / total * 100).toFixed(1);
+            html += '<tr><td>' + cat + '</td><td class="numeric">' + formatNumber(dist[cat]) + '</td><td class="numeric">' + pct + '%</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+
+        /* Bar chart */
+        html += '<div>' + renderClassificationChart(categories, dist, total) + '</div>';
+
+        html += '</div>';
+
+        html += '<div class="classification-note">Колонка «' + newColName + '» добавлена в данные. Используйте Сводную таблицу для дальнейшего анализа.</div>';
+        html += '</div>';
+
+        analysisResults.innerHTML = html;
+    }
+
+    function renderClassificationChart(categories, dist, total) {
+        var W = 340, H = 280;
+        var padL = 140, padR = 10, padT = 10, padB = 10;
+        var chartW = W - padL - padR;
+        var chartH = H - padT - padB;
+
+        var maxVal = 0;
+        categories.forEach(function (c) { if (dist[c] > maxVal) maxVal = dist[c]; });
+        if (maxVal === 0) maxVal = 1;
+
+        var barH = Math.min(24, chartH / categories.length * 0.7);
+        var barGap = (chartH - barH * categories.length) / (categories.length + 1);
+
+        var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+
+        categories.forEach(function (cat, idx) {
+            var y = padT + barGap + idx * (barH + barGap);
+            var bw = (dist[cat] / maxVal) * chartW;
+            svg += '<rect x="' + padL + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="#2563EB" rx="2"/>';
+
+            /* Label */
+            var label = cat.length > 18 ? cat.substring(0, 16) + '..' : cat;
+            svg += '<text x="' + (padL - 6) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" font-size="11" fill="#0F172A" font-family="DejaVu Sans">' + label + '</text>';
+
+            /* Value */
+            svg += '<text x="' + (padL + bw + 4) + '" y="' + (y + barH / 2 + 4) + '" font-size="10" fill="#64748B" font-family="DejaVu Sans">' + dist[cat] + '</text>';
+        });
+
+        svg += '</svg>';
+        return svg;
     }
 
     /* ================================
