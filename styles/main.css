@@ -440,8 +440,29 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    max-height: 108px;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.columns-list.expanded {
     max-height: none;
     overflow-y: auto;
+}
+
+.columns-toggle-btn {
+    background: none;
+    border: none;
+    color: #2563EB;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 4px 0;
+    margin-top: 4px;
+    font-family: inherit;
+}
+
+.columns-toggle-btn:hover {
+    text-decoration: underline;
 }
 
 .column-chip {

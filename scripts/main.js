@@ -346,6 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var columnsHint = document.querySelector('.columns-hint');
     var columnsSelectAll = document.querySelector('.columns-select-all');
     var columnsDeselectAll = document.querySelector('.columns-deselect-all');
+    var columnsToggleBtn = document.querySelector('.columns-toggle-btn');
 
     function renderColumnsList() {
         if (!columnsList) { return; }
@@ -365,11 +366,30 @@ document.addEventListener('DOMContentLoaded', function () {
                 '</label>';
         });
         columnsList.innerHTML = html;
+        columnsList.classList.remove('expanded');
+
+        if (columnsToggleBtn) {
+            setTimeout(function () {
+                if (columnsList.scrollHeight > 108) {
+                    columnsToggleBtn.style.display = '';
+                    columnsToggleBtn.textContent = 'Показать все ▼';
+                } else {
+                    columnsToggleBtn.style.display = 'none';
+                }
+            }, 0);
+        }
 
         columnsList.querySelectorAll('.column-checkbox').forEach(function (cb) {
             cb.addEventListener('change', function () {
                 this.closest('.column-chip').classList.toggle('unchecked', !this.checked);
             });
+        });
+    }
+
+    if (columnsToggleBtn) {
+        columnsToggleBtn.addEventListener('click', function () {
+            var expanded = columnsList.classList.toggle('expanded');
+            columnsToggleBtn.textContent = expanded ? 'Свернуть ▲' : 'Показать все ▼';
         });
     }
 
