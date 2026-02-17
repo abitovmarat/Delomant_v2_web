@@ -440,7 +440,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    max-height: 108px;
+    max-height: 300px;
     overflow: hidden;
     transition: max-height 0.2s ease;
 }

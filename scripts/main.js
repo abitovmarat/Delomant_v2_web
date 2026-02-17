@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (columnsToggleBtn) {
             setTimeout(function () {
-                if (columnsList.scrollHeight > 108) {
+                if (columnsList.scrollHeight > 300) {
                     columnsToggleBtn.style.display = '';
                     columnsToggleBtn.textContent = 'Показать все ▼';
                 } else {
