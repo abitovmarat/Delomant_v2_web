@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delomant — Аналитика</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="data/Logo.png" alt="Delomant" class="sidebar-logo-img">
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="sidebar-nav-item active">
+                    <span class="sidebar-nav-icon">📊</span>
+                    <span class="sidebar-nav-text">Дашборд</span>
+                </a>
+                <a href="#data" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">📁</span>
+                    <span class="sidebar-nav-text">Данные</span>
+                </a>
+                <a href="#processing" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">⚙️</span>
+                    <span class="sidebar-nav-text">Обработка</span>
+                </a>
+                <a href="#analysis" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">📈</span>
+                    <span class="sidebar-nav-text">Анализ</span>
+                </a>
+                <a href="#visualization" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">📉</span>
+                    <span class="sidebar-nav-text">Визуализация</span>
+                </a>
+                <a href="#reports" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">📄</span>
+                    <span class="sidebar-nav-text">Отчёты</span>
+                </a>
+                <a href="#settings" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon">⚙️</span>
+                    <span class="sidebar-nav-text">Настройки</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-filters">
+                    <div class="header-filter">
+                        <label for="period-select" class="header-filter-label">Период</label>
+                        <select id="period-select" class="header-filter-select">
+                            <option value="7d">Последние 7 дней</option>
+                            <option value="30d">Последние 30 дней</option>
+                            <option value="90d">Последние 90 дней</option>
+                            <option value="1y">Последний год</option>
+                            <option value="custom">Произвольный</option>
+                        </select>
+                    </div>
+                    <div class="header-filter">
+                        <label for="dataset-select" class="header-filter-label">Набор данных</label>
+                        <select id="dataset-select" class="header-filter-select">
+                            <option value="default">Набор по умолчанию</option>
+                            <option value="sales">Продажи</option>
+                            <option value="marketing">Маркетинг</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="header-user">
+                    <span class="header-user-name">Пользователь</span>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <main class="content">
+                <!-- Dashboard Module -->
+                <section id="dashboard" class="module module-dashboard active">
+                    <h2 class="module-title">Дашборд</h2>
+
+                    <!-- KPI Cards -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <h3 class="kpi-card-title">Количество строк</h3>
+                            <div class="kpi-card-value">0</div>
+                            <div class="kpi-card-delta">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <h3 class="kpi-card-title">Период данных</h3>
+                            <div class="kpi-card-value">—</div>
+                            <div class="kpi-card-delta">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <h3 class="kpi-card-title">Темп роста</h3>
+                            <div class="kpi-card-value">0%</div>
+                            <div class="kpi-card-delta">—</div>
+                        </div>
+                        <div class="kpi-card">
+                            <h3 class="kpi-card-title">Аномалии</h3>
+                            <div class="kpi-card-value">0</div>
+                            <div class="kpi-card-delta">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Main Chart -->
+                    <div class="chart-container">
+                        <h3 class="chart-title">Динамика ключевого показателя</h3>
+                        <div class="chart-placeholder">
+                            <p class="chart-placeholder-text">Нет данных для отображения</p>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="recent-activity">
+                        <div class="recent-section">
+                            <h3 class="recent-section-title">Последние файлы</h3>
+                            <div class="recent-list">
+                                <p class="recent-list-empty">Файлы не загружены</p>
+                            </div>
+                        </div>
+                        <div class="recent-section">
+                            <h3 class="recent-section-title">Последние отчёты</h3>
+                            <div class="recent-list">
+                                <p class="recent-list-empty">Отчёты не сформированы</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Data Module -->
+                <section id="data" class="module module-data">
+                    <h2 class="module-title">Загрузка данных</h2>
+
+                    <div class="upload-card">
+                        <div class="upload-area">
+                            <span class="upload-icon">📁</span>
+                            <div class="upload-body">
+                                <h3 class="upload-title">Перетащите файл сюда</h3>
+                                <p class="upload-description">или нажмите для выбора</p>
+                            </div>
+                            <input type="file" class="upload-input" accept=".csv,.xlsx,.xls">
+                        </div>
+                    </div>
+
+                    <div class="file-list">
+                        <!-- Карточки файлов будут добавлены сюда -->
+                    </div>
+                </section>
+
+                <!-- Processing Module -->
+                <section id="processing" class="module module-processing">
+                    <h2 class="module-title">Обработка данных</h2>
+
+                    <div class="processing-container">
+                        <div class="processing-operations">
+                            <h3 class="processing-section-title">Операции</h3>
+                            <div class="operation-list">
+                                <label class="operation-item" data-op="mapping" title="Переименовывает колонки из формата G## в читаемые русские названия и оставляет только известные колонки (32 шт.)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Маппинг колонок (авто)</span>
+                                </label>
+                                <label class="operation-item" data-op="extract-dates" title="Из колонки даты (Дата регистрации / Дата выпуска) извлекает три новых столбца: Месяц, КВАРТАЛ, Год">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Извлечь Месяц / Квартал / Год</span>
+                                </label>
+                                <label class="operation-item" data-op="join-lookup" title="Добавляет столбцы из загруженного справочника (аналог ВПР/VLOOKUP). Связывает строки по общему ключу, например ИНН получателя">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Обогатить из справочника</span>
+                                </label>
+
+                                <div class="operation-group-title">Очистка</div>
+                                <label class="operation-item" data-op="duplicates" title="Удаляет полностью одинаковые строки, оставляя только первое вхождение">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Удалить дубликаты</span>
+                                </label>
+                                <label class="operation-item" data-op="empty" title="Удаляет строки, в которых все ячейки пустые">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Убрать пустые строки</span>
+                                </label>
+                                <label class="operation-item" data-op="trim" title="Убирает лишние пробелы в начале и конце каждого текстового значения">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Обрезать пробелы</span>
+                                </label>
+                                <label class="operation-item" data-op="lowercase" title="Приводит все текстовые значения к нижнему регистру (числовые столбцы не затрагиваются)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Нижний регистр (текст)</span>
+                                </label>
+
+                                <div class="operation-group-title">Нормализация</div>
+                                <label class="operation-item" data-op="dates" title="Приводит даты к единому формату ISO (ГГГГ-ММ-ДД). Распознаёт форматы ДД.ММ.ГГГГ и числа Excel">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Нормализовать даты</span>
+                                </label>
+                                <label class="operation-item" data-op="numbers" title="Преобразует числа из текста в числовой формат: убирает пробелы-разделители, заменяет запятую на точку (1 234,56 → 1234.56)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Нормализовать числа</span>
+                                </label>
+                                <label class="operation-item" data-op="hs-code" title="Приводит коды ТН ВЭД к строке из 10 цифр: убирает пробелы, точки и дефисы, дополняет нулями справа">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Коды ТН ВЭД → строка (10 знаков)</span>
+                                </label>
+
+                                <div class="operation-group-title">Расчёт</div>
+                                <label class="operation-item" data-op="usd-per-kg-stat" title="Создаёт столбец «USD за КГ статистическая» = Статистическая стоимость (USD) / Вес нетто (кг)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">USD за КГ (статистическая)</span>
+                                </label>
+                                <label class="operation-item" data-op="usd-per-kg-invoice" title="Создаёт столбец «USD за КГ фактурная» = Фактурная стоимость / Вес нетто (кг)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">USD за КГ (фактурная)</span>
+                                </label>
+                                <label class="operation-item" data-op="rur-per-kg" title="Создаёт столбец «RUR за КГ» = Фактурная стоимость в рублях / Вес нетто (кг)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">RUR за КГ</span>
+                                </label>
+                                <label class="operation-item" data-op="ratio" title="Создаёт столбец-отношение из двух выбранных вами столбцов: числитель / знаменатель">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Произвольное отношение</span>
+                                </label>
+                                <div class="operation-sub operation-sub-ratio">
+                                    <select class="operation-select ratio-numerator">
+                                        <option value="">Числитель</option>
+                                    </select>
+                                    <span class="operation-sub-divider">/</span>
+                                    <select class="operation-select ratio-denominator">
+                                        <option value="">Знаменатель</option>
+                                    </select>
+                                </div>
+
+                                <div class="operation-group-title">Контроль качества</div>
+                                <label class="operation-item" data-op="empty-cols" title="Удаляет столбцы, в которых все значения пустые (ни одной заполненной ячейки)">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Удалить пустые столбцы</span>
+                                </label>
+                            </div>
+                            <button class="btn btn-primary processing-apply-btn">Применить обработку</button>
+                        </div>
+                        <div class="processing-columns">
+                            <h3 class="processing-section-title">Столбцы</h3>
+                            <p class="columns-hint">Загрузите данные, чтобы выбрать столбцы</p>
+                            <div class="columns-controls">
+                                <button class="btn btn-secondary columns-select-all">Выбрать все</button>
+                                <button class="btn btn-secondary columns-deselect-all">Снять все</button>
+                            </div>
+                            <div class="columns-templates">
+                                <div class="template-row">
+                                    <select class="template-select">
+                                        <option value="">Шаблон...</option>
+                                    </select>
+                                    <button class="btn btn-secondary template-load-btn" title="Применить">✓</button>
+                                    <button class="btn btn-secondary template-delete-btn" title="Удалить">✕</button>
+                                </div>
+                                <div class="template-row">
+                                    <input type="text" class="template-name-input" placeholder="Название шаблона">
+                                    <button class="btn btn-primary template-save-btn">Сохранить</button>
+                                </div>
+                            </div>
+                            <div class="columns-list"></div>
+                        </div>
+                        <div class="processing-lookup">
+                            <h3 class="processing-section-title">Справочник</h3>
+                            <div class="lookup-upload-area">
+                                <button class="btn btn-secondary lookup-upload-btn">Загрузить справочник</button>
+                                <input type="file" class="lookup-input" accept=".csv,.xlsx,.xls">
+                            </div>
+                            <p class="lookup-status">Справочник не загружен</p>
+                            <div class="lookup-keys" style="display:none">
+                                <div class="settings-group">
+                                    <label class="settings-label">Ключ в данных</label>
+                                    <select class="lookup-key-data"></select>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Ключ в справочнике</label>
+                                    <select class="lookup-key-ref"></select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="processing-preview"></div>
+                    </div>
+                </section>
+
+                <!-- Analysis Module -->
+                <section id="analysis" class="module module-analysis">
+                    <h2 class="module-title">Анализ</h2>
+
+                    <div class="action-cards">
+                        <div class="action-card">
+                            <span class="action-card-icon">📈</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Темп роста</h3>
+                                <p class="action-card-description">Расчёт динамики роста по периодам</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card">
+                            <span class="action-card-icon">📊</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Статистика</h3>
+                                <p class="action-card-description">Описательная статистика по данным</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card">
+                            <span class="action-card-icon">📉</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Тренды</h3>
+                                <p class="action-card-description">Выявление закономерностей и трендов</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                    </div>
+
+                    <div class="analysis-results">
+                        <!-- Результаты анализа будут добавлены сюда -->
+                    </div>
+                </section>
+
+                <!-- Visualization Module -->
+                <section id="visualization" class="module module-visualization">
+                    <h2 class="module-title">Визуализация</h2>
+
+                    <div class="visualization-container">
+                        <div class="visualization-chart">
+                            <div class="chart-placeholder">
+                                <p class="chart-placeholder-text">Настройте параметры для построения графика</p>
+                            </div>
+                        </div>
+                        <aside class="visualization-settings">
+                            <h3 class="settings-title">Настройки</h3>
+                            <div class="settings-groups">
+                                <div class="settings-group">
+                                    <label class="settings-label">Тип графика</label>
+                                    <select class="settings-select">
+                                        <option value="line">Линейный</option>
+                                        <option value="area">Площадной</option>
+                                        <option value="bar">Столбчатый</option>
+                                        <option value="scatter">Точечный</option>
+                                    </select>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Ось X</label>
+                                    <select class="settings-select">
+                                        <option value="">Выберите поле</option>
+                                    </select>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Ось Y</label>
+                                    <select class="settings-select">
+                                        <option value="">Выберите поле</option>
+                                    </select>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Агрегация</label>
+                                    <select class="settings-select">
+                                        <option value="sum">Сумма</option>
+                                        <option value="avg">Среднее</option>
+                                        <option value="count">Количество</option>
+                                        <option value="min">Минимум</option>
+                                        <option value="max">Максимум</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="settings-actions">
+                                <button class="btn btn-primary">Построить</button>
+                                <button class="btn btn-secondary">Экспорт PNG</button>
+                                <button class="btn btn-secondary">Экспорт SVG</button>
+                                <button class="btn btn-secondary">В отчёт</button>
+                            </div>
+                        </aside>
+                    </div>
+                </section>
+
+                <!-- Reports Module -->
+                <section id="reports" class="module module-reports">
+                    <h2 class="module-title">Отчёты</h2>
+
+                    <div class="reports-header">
+                        <button class="btn btn-primary">Создать отчёт</button>
+                    </div>
+
+                    <div class="reports-list">
+                        <p class="reports-list-empty">Нет доступных отчётов</p>
+                    </div>
+                </section>
+
+                <!-- Settings Module -->
+                <section id="settings" class="module module-settings">
+                    <h2 class="module-title">Настройки</h2>
+
+                    <div class="settings-content">
+                        <p>Конфигурация приложения</p>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Sheet Selection Modal -->
+    <div class="sheet-modal-overlay" style="display:none">
+        <div class="sheet-modal">
+            <h3 class="sheet-modal-title">Выберите лист</h3>
+            <select class="sheet-select"></select>
+            <div class="sheet-modal-actions">
+                <button class="btn btn-primary sheet-confirm-btn">Загрузить</button>
+                <button class="btn btn-secondary sheet-cancel-btn">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="scripts/main.js"></script>
+</body>
+</html>
