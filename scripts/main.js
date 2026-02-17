@@ -22,6 +22,56 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /* ================================
+       Constants
+       ================================ */
+    var COL_WEIGHT = 'Вес нетто, кг';
+    var COL_STAT_USD = 'Статистическая стоимость, USD';
+    var COL_INVOICE = 'Фактурная стоимость';
+    var COL_INVOICE_RUB = 'Фактурная стоимость в рублях';
+    var COL_CUSTOMS = 'Таможенная стоимость';
+    var COL_INN = 'ИНН получателя';
+    var COL_HS_CODE = 'Код товара по ТН ВЭД';
+    var COL_DATE_REG = 'Дата регистрации';
+    var COL_DATE_RELEASE = 'Дата выпуска';
+    var COL_YEAR = 'Год';
+    var COL_MONTH = 'Месяц';
+    var COL_QUARTER = 'КВАРТАЛ';
+    var COL_PRODUCT_NAME = 'Наименование и характеристики товаров';
+    var COL_MANUFACTURER = 'Фирма-изготовитель';
+    var COL_RECEIVER = 'Наименование получателя';
+
+    var UTF8_BOM = '\uFEFF';
+    var CSV_SEPARATOR = ';';
+    var KEY_SEPARATOR = '|||';
+    var HS_CODE_LENGTH = 10;
+    var EXCEL_EPOCH_OFFSET = 25569;
+    var MS_PER_DAY = 86400000;
+    var COLUMNS_COLLAPSE_HEIGHT = 300;
+    var TREND_THRESHOLD = 0.001;
+
+    var CHART_COLORS = {
+        primary: '#2563EB',
+        text: '#0F172A',
+        textMuted: '#64748B',
+        grid: '#E2E8F0',
+        bg: '#FFFFFF'
+    };
+    var CHART_FONT = 'DejaVu Sans, sans-serif';
+    var MIME_CSV = 'text/csv;charset=utf-8';
+
+    function round2(n) { return Math.round(n * 100) / 100; }
+
+    function baseFileName() {
+        return appState.fileName.replace(/\.[^.]+$/, '');
+    }
+
+    function isDateColumn(name) {
+        var h = name.toLowerCase();
+        return h.indexOf('date') !== -1 || h.indexOf('дата') !== -1 ||
+               h.indexOf('time') !== -1 || h.indexOf('период') !== -1;
+    }
+
+    /* ================================
        Navigation
        ================================ */
     var navItems = document.querySelectorAll('.sidebar-nav-item');
@@ -32,8 +82,9 @@ document.addEventListener('DOMContentLoaded', function () {
             e.preventDefault();
             var targetId = this.getAttribute('href').substring(1);
 
-            navItems.forEach(function (nav) { nav.classList.remove('active'); });
+            navItems.forEach(function (nav) { nav.classList.remove('active'); nav.removeAttribute('aria-current'); });
             this.classList.add('active');
+            this.setAttribute('aria-current', 'page');
 
             modules.forEach(function (mod) { mod.classList.remove('active'); });
             var target = document.getElementById(targetId);
@@ -316,9 +367,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function detectDateRange(rows, headers) {
         var dateCol = null;
         for (var i = 0; i < headers.length; i++) {
-            var h = headers[i].toLowerCase();
-            if (h.indexOf('date') !== -1 || h.indexOf('дата') !== -1 ||
-                h.indexOf('time') !== -1 || h.indexOf('период') !== -1) {
+            if (isDateColumn(headers[i])) {
                 dateCol = headers[i];
                 break;
             }
@@ -370,7 +419,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (columnsToggleBtn) {
             setTimeout(function () {
-                if (columnsList.scrollHeight > 300) {
+                if (columnsList.scrollHeight > COLUMNS_COLLAPSE_HEIGHT) {
                     columnsToggleBtn.style.display = '';
                     columnsToggleBtn.textContent = 'Показать все ▼';
                 } else {
@@ -567,8 +616,8 @@ document.addEventListener('DOMContentLoaded', function () {
         ratioDenominator.innerHTML = html;
 
         // Авто-выбор стоимости и веса
-        var priceCol = findColumn(headers, 'Таможенная стоимость');
-        var weightCol = findColumn(headers, 'Вес нетто, кг');
+        var priceCol = findColumn(headers, COL_CUSTOMS);
+        var weightCol = findColumn(headers, COL_WEIGHT);
         if (priceCol) { ratioNumerator.value = priceCol; }
         if (weightCol) { ratioDenominator.value = weightCol; }
     }
@@ -669,11 +718,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function normalizeDates(data, headers) {
         var count = 0;
-        var dateCols = headers.filter(function (h) {
-            var l = h.toLowerCase();
-            return l.indexOf('date') !== -1 || l.indexOf('дата') !== -1 ||
-                l.indexOf('time') !== -1 || l.indexOf('период') !== -1;
-        });
+        var dateCols = headers.filter(isDateColumn);
         data.forEach(function (row) {
             dateCols.forEach(function (col) {
                 if (row[col]) {
@@ -715,16 +760,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function normalizeHsCodes(data, headers) {
         var count = 0;
-        var hsCol = findColumn(headers, 'Код товара по ТН ВЭД');
+        var hsCol = findColumn(headers, COL_HS_CODE);
         if (!hsCol) { return count; }
 
         data.forEach(function (row) {
             var val = row[hsCol];
             if (val !== undefined && val !== null && val !== '') {
                 var str = String(val).replace(/[\s.\-]/g, '');
-                // Дополняем нулями до 10 знаков
-                while (str.length < 10) { str = str + '0'; }
-                if (str.length > 10) { str = str.substring(0, 10); }
+                while (str.length < HS_CODE_LENGTH) { str = str + '0'; }
+                if (str.length > HS_CODE_LENGTH) { str = str.substring(0, HS_CODE_LENGTH); }
                 if (row[hsCol] !== str) {
                     row[hsCol] = str;
                     count++;
@@ -735,9 +779,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function calcUsdPerKgStat(data, headers) {
-        var valueCol = findColumn(headers, 'Статистическая стоимость, USD');
-        var weightCol = findColumn(headers, 'Вес нетто, кг');
-        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «Статистическая стоимость, USD» или «Вес нетто, кг»' }; }
+        var valueCol = findColumn(headers, COL_STAT_USD);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_STAT_USD + '» или «' + COL_WEIGHT + '»' }; }
 
         var colName = 'USD за КГ статистическая';
         var count = 0;
@@ -745,7 +789,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = Number(row[valueCol]);
             var w = Number(row[weightCol]);
             if (!isNaN(v) && !isNaN(w) && w > 0) {
-                row[colName] = Math.round((v / w) * 100) / 100;
+                row[colName] = round2(v / w);
                 count++;
             } else {
                 row[colName] = '';
@@ -755,9 +799,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function calcUsdPerKgInvoice(data, headers) {
-        var valueCol = findColumn(headers, 'Фактурная стоимость');
-        var weightCol = findColumn(headers, 'Вес нетто, кг');
-        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «Фактурная стоимость» или «Вес нетто, кг»' }; }
+        var valueCol = findColumn(headers, COL_INVOICE);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_INVOICE + '» или «' + COL_WEIGHT + '»' }; }
 
         var colName = 'USD за КГ фактурная';
         var count = 0;
@@ -765,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = Number(row[valueCol]);
             var w = Number(row[weightCol]);
             if (!isNaN(v) && !isNaN(w) && w > 0) {
-                row[colName] = Math.round((v / w) * 100) / 100;
+                row[colName] = round2(v / w);
                 count++;
             } else {
                 row[colName] = '';
@@ -775,9 +819,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function calcRurPerKg(data, headers) {
-        var valueCol = findColumn(headers, 'Фактурная стоимость в рублях');
-        var weightCol = findColumn(headers, 'Вес нетто, кг');
-        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «Фактурная стоимость в рублях» или «Вес нетто, кг»' }; }
+        var valueCol = findColumn(headers, COL_INVOICE_RUB);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_INVOICE_RUB + '» или «' + COL_WEIGHT + '»' }; }
 
         var colName = 'RUR за КГ';
         var count = 0;
@@ -785,7 +829,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = Number(row[valueCol]);
             var w = Number(row[weightCol]);
             if (!isNaN(v) && !isNaN(w) && w > 0) {
-                row[colName] = Math.round((v / w) * 100) / 100;
+                row[colName] = round2(v / w);
                 count++;
             } else {
                 row[colName] = '';
@@ -801,7 +845,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var n = Number(row[numeratorCol]);
             var d = Number(row[denominatorCol]);
             if (!isNaN(n) && !isNaN(d) && d !== 0) {
-                row[colName] = Math.round((n / d) * 100) / 100;
+                row[colName] = round2(n / d);
                 count++;
             } else {
                 row[colName] = '';
@@ -842,7 +886,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!val && val !== 0) { return null; }
         // Excel serial number
         if (typeof val === 'number') {
-            var d = new Date((val - 25569) * 86400000);
+            var d = new Date((val - EXCEL_EPOCH_OFFSET) * MS_PER_DAY);
             return isNaN(d.getTime()) ? null : d;
         }
         var s = String(val).trim();
@@ -864,11 +908,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function extractDateParts(data, headers) {
         // Ищем колонку с датой (после маппинга — русские имена)
-        var dateCol = findColumn(headers, 'Дата регистрации') || findColumn(headers, 'Дата выпуска');
-        if (!dateCol) { return { headers: headers, count: 0, error: 'Не найдены столбцы «Дата регистрации» или «Дата выпуска»' }; }
+        var dateCol = findColumn(headers, COL_DATE_REG) || findColumn(headers, COL_DATE_RELEASE);
+        if (!dateCol) { return { headers: headers, count: 0, error: 'Не найдены столбцы «' + COL_DATE_REG + '» или «' + COL_DATE_RELEASE + '»' }; }
 
         var count = 0;
-        var newCols = ['Месяц', 'КВАРТАЛ', 'Год'];
+        var newCols = [COL_MONTH, COL_QUARTER, COL_YEAR];
         newCols.forEach(function (c) {
             if (headers.indexOf(c) === -1) { headers.push(c); }
         });
@@ -877,14 +921,14 @@ document.addEventListener('DOMContentLoaded', function () {
             var d = parseDate(row[dateCol]);
             if (d) {
                 var mon = d.getMonth() + 1;
-                row['Месяц'] = MONTH_NAMES[mon - 1];
-                row['КВАРТАЛ'] = getQuarter(mon);
-                row['Год'] = d.getFullYear();
+                row[COL_MONTH] = MONTH_NAMES[mon - 1];
+                row[COL_QUARTER] = getQuarter(mon);
+                row[COL_YEAR] = d.getFullYear();
                 count++;
             } else {
-                row['Месяц'] = '';
-                row['КВАРТАЛ'] = '';
-                row['Год'] = '';
+                row[COL_MONTH] = '';
+                row[COL_QUARTER] = '';
+                row[COL_YEAR] = '';
             }
         });
 
@@ -979,11 +1023,11 @@ document.addEventListener('DOMContentLoaded', function () {
         lookupKeyRef.innerHTML = htmlRef;
 
         // Авто-выбор ключа «ИНН получателя»
-        if (dataHeaders.indexOf('ИНН получателя') !== -1) {
-            lookupKeyData.value = 'ИНН получателя';
+        if (dataHeaders.indexOf(COL_INN) !== -1) {
+            lookupKeyData.value = COL_INN;
         }
-        if (parsed.headers.indexOf('ИНН получателя') !== -1) {
-            lookupKeyRef.value = 'ИНН получателя';
+        if (parsed.headers.indexOf(COL_INN) !== -1) {
+            lookupKeyRef.value = COL_INN;
         }
 
         lookupKeysDiv.style.display = '';
@@ -1055,6 +1099,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 renderProcessingMessage('Выберите хотя бы один столбец');
                 return;
             }
+
+            try {
 
             var data = JSON.parse(JSON.stringify(appState.rawData));
             var headers = appState.headers.slice();
@@ -1220,6 +1266,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
             renderPreviewResult(data, log, finalCols);
             updateVisualizationFields();
+
+            } catch (err) {
+                renderProcessingMessage('Ошибка обработки: ' + err.message);
+                console.error('Processing error:', err);
+            }
         });
     }
 
@@ -1278,8 +1329,8 @@ document.addEventListener('DOMContentLoaded', function () {
         text += '  Столбцов: ' + headers.length + '\n';
         text += '  Столбцы: ' + headers.join(', ') + '\n';
 
-        var blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
-        triggerDownload(blob, appState.fileName.replace(/\.[^.]+$/, '') + '_report.txt');
+        var blob = new Blob([UTF8_BOM + text], { type: 'text/plain;charset=utf-8' });
+        triggerDownload(blob, baseFileName() + '_report.txt');
     }
 
     function triggerDownload(blob, fileName) {
@@ -1299,7 +1350,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (data.length === 0) { return; }
 
         var headers = getActiveHeaders();
-        var csv = headers.join(';') + '\n';
+        var csv = headers.join(CSV_SEPARATOR) + '\n';
         data.forEach(function (row) {
             var line = headers.map(function (h) {
                 var val = row[h] !== undefined ? String(row[h]) : '';
@@ -1308,11 +1359,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 return val;
             });
-            csv += line.join(';') + '\n';
+            csv += line.join(CSV_SEPARATOR) + '\n';
         });
 
-        var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-        triggerDownload(blob, appState.fileName.replace(/\.[^.]+$/, '') + '_processed.csv');
+        var blob = new Blob([UTF8_BOM + csv], { type: MIME_CSV });
+        triggerDownload(blob, baseFileName() + '_processed.csv');
     }
 
     function downloadProcessedXLSX() {
@@ -1322,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var ws = XLSX.utils.json_to_sheet(data, { header: getActiveHeaders() });
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Processed');
-        XLSX.writeFile(wb, appState.fileName.replace(/\.[^.]+$/, '') + '_processed.xlsx');
+        XLSX.writeFile(wb, baseFileName() + '_processed.xlsx');
     }
 
     function updateProcessingState() {
@@ -1349,39 +1400,45 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function runAnalysis(type) {
-        var data = getActiveData();
-        var headers = getActiveHeaders();
-        if (data.length === 0) {
+        try {
+            var data = getActiveData();
+            var headers = getActiveHeaders();
+            if (data.length === 0) {
+                analysisResults.innerHTML =
+                    '<div class="analysis-empty">' +
+                    '  <p>Сначала загрузите данные</p>' +
+                    '</div>';
+                return;
+            }
+
+            var numericCols = getNumericColumns(data, headers);
+
+            /* Config-based features (render form, attach handlers) */
+            if (type === 'pivot') { renderPivotConfig(headers, numericCols); return; }
+            if (type === 'cagr') { renderCAGRConfig(headers, numericCols); return; }
+            if (type === 'sankey') { renderSankeyConfig(headers, numericCols); return; }
+            if (type === 'weighted-price') { renderWeightedPriceConfig(headers, numericCols); return; }
+            if (type === 'classification') { renderClassificationAnalysis(); return; }
+
+            if (numericCols.length === 0) {
+                analysisResults.innerHTML =
+                    '<div class="analysis-empty">' +
+                    '  <p>Числовые столбцы не найдены</p>' +
+                    '</div>';
+                return;
+            }
+
+            var html = '';
+            if (type === 'growth') { html = renderGrowthAnalysis(data, numericCols); }
+            if (type === 'statistics') { html = renderStatisticsAnalysis(data, numericCols); }
+            if (type === 'trends') { html = renderTrendsAnalysis(data, numericCols); }
+
+            analysisResults.innerHTML = html;
+        } catch (err) {
             analysisResults.innerHTML =
-                '<div class="analysis-empty">' +
-                '  <p>Сначала загрузите данные</p>' +
-                '</div>';
-            return;
+                '<div class="analysis-empty"><p>Ошибка анализа: ' + err.message + '</p></div>';
+            console.error('Analysis error:', err);
         }
-
-        var numericCols = getNumericColumns(data, headers);
-
-        /* Config-based features (render form, attach handlers) */
-        if (type === 'pivot') { renderPivotConfig(headers, numericCols); return; }
-        if (type === 'cagr') { renderCAGRConfig(headers, numericCols); return; }
-        if (type === 'sankey') { renderSankeyConfig(headers, numericCols); return; }
-        if (type === 'weighted-price') { renderWeightedPriceConfig(headers, numericCols); return; }
-        if (type === 'classification') { renderClassificationAnalysis(); return; }
-
-        if (numericCols.length === 0) {
-            analysisResults.innerHTML =
-                '<div class="analysis-empty">' +
-                '  <p>Числовые столбцы не найдены</p>' +
-                '</div>';
-            return;
-        }
-
-        var html = '';
-        if (type === 'growth') { html = renderGrowthAnalysis(data, numericCols); }
-        if (type === 'statistics') { html = renderStatisticsAnalysis(data, numericCols); }
-        if (type === 'trends') { html = renderTrendsAnalysis(data, numericCols); }
-
-        analysisResults.innerHTML = html;
     }
 
     function getNumericColumns(data, headers) {
@@ -1483,8 +1540,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 sumX2 += i * i;
             }
             var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-            var direction = slope > 0.001 ? 'Восходящий' : (slope < -0.001 ? 'Нисходящий' : 'Стабильный');
-            var icon = slope > 0.001 ? '📈' : (slope < -0.001 ? '📉' : '➡️');
+            var direction = slope > TREND_THRESHOLD ? 'Восходящий' : (slope < -TREND_THRESHOLD ? 'Нисходящий' : 'Стабильный');
+            var icon = slope > TREND_THRESHOLD ? '📈' : (slope < -TREND_THRESHOLD ? '📉' : '➡️');
 
             html += '<div class="action-card">' +
                 '<span class="action-card-icon">' + icon + '</span>' +
@@ -1564,7 +1621,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             rowKeysSet[rk] = true;
             colKeysSet[ck] = true;
-            var key = rk + '|||' + ck;
+            var key = rk + KEY_SEPARATOR + ck;
 
             if (!matrix[key]) {
                 matrix[key] = { sum: 0, count: 0, min: Infinity, max: -Infinity };
@@ -1595,7 +1652,7 @@ document.addEventListener('DOMContentLoaded', function () {
         rowKeys.forEach(function (rk) {
             var rc = { sum: 0, count: 0, min: Infinity, max: -Infinity };
             colKeys.forEach(function (ck) {
-                var cell = matrix[rk + '|||' + ck];
+                var cell = matrix[rk + KEY_SEPARATOR + ck];
                 if (cell) {
                     rc.sum += cell.sum;
                     rc.count += cell.count;
@@ -1609,7 +1666,7 @@ document.addEventListener('DOMContentLoaded', function () {
         colKeys.forEach(function (ck) {
             var cc = { sum: 0, count: 0, min: Infinity, max: -Infinity };
             rowKeys.forEach(function (rk) {
-                var cell = matrix[rk + '|||' + ck];
+                var cell = matrix[rk + KEY_SEPARATOR + ck];
                 if (cell) {
                     cc.sum += cell.sum;
                     cc.count += cell.count;
@@ -1650,7 +1707,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<tr><td>' + rk + '</td>';
             if (pivot.hasCol) {
                 pivot.colKeys.forEach(function (ck) {
-                    var cell = pivot.matrix[rk + '|||' + ck];
+                    var cell = pivot.matrix[rk + KEY_SEPARATOR + ck];
                     var v = pivot.getVal(cell);
                     html += '<td class="numeric">' + formatNumber(v.toFixed(2)) + '</td>';
                 });
@@ -1677,7 +1734,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function exportPivotCSV(pivot, rowField, colField, aggType) {
-        var sep = ';';
+        var sep = CSV_SEPARATOR;
         var lines = [];
         var header = [rowField];
         if (pivot.hasCol) pivot.colKeys.forEach(function (ck) { header.push(ck); });
@@ -1688,7 +1745,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var row = [rk];
             if (pivot.hasCol) {
                 pivot.colKeys.forEach(function (ck) {
-                    row.push(pivot.getVal(pivot.matrix[rk + '|||' + ck]).toFixed(2));
+                    row.push(pivot.getVal(pivot.matrix[rk + KEY_SEPARATOR + ck]).toFixed(2));
                 });
             }
             row.push(pivot.rowTotals[rk].toFixed(2));
@@ -1700,8 +1757,8 @@ document.addEventListener('DOMContentLoaded', function () {
         totalRow.push(pivot.grandTotal.toFixed(2));
         lines.push(totalRow.join(sep));
 
-        var csv = '\uFEFF' + lines.join('\n');
-        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var csv = UTF8_BOM + lines.join('\n');
+        var blob = new Blob([csv], { type: MIME_CSV });
         triggerDownload(blob, 'pivot_export.csv');
     }
 
@@ -1716,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var row = [rk];
             if (pivot.hasCol) {
                 pivot.colKeys.forEach(function (ck) {
-                    row.push(pivot.getVal(pivot.matrix[rk + '|||' + ck]));
+                    row.push(pivot.getVal(pivot.matrix[rk + KEY_SEPARATOR + ck]));
                 });
             }
             row.push(pivot.rowTotals[rk]);
@@ -1769,10 +1826,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var valField = document.getElementById('cagr-val').value;
         var groupField = document.getElementById('cagr-group').value;
 
-        var yearCol = findColumn(headers, 'Год');
-        if (yearCol === -1) {
+        var yearCol = findColumn(headers, COL_YEAR);
+        if (!yearCol) {
             document.getElementById('cagr-output').innerHTML =
-                '<div class="analysis-empty"><p>Колонка "Год" не найдена. Выполните извлечение дат в обработке.</p></div>';
+                '<div class="analysis-empty"><p>Колонка "' + COL_YEAR + '" не найдена. Выполните извлечение дат в обработке.</p></div>';
             return;
         }
         var yearName = headers[yearCol];
@@ -1852,9 +1909,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var optNum = numericCols.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
 
         /* Pre-select defaults if available */
-        var srcDefault = 'Фирма-изготовитель';
-        var tgtDefault = 'Наименование получателя';
-        var valDefault = 'Вес нетто, кг';
+        var srcDefault = COL_MANUFACTURER;
+        var tgtDefault = COL_RECEIVER;
+        var valDefault = COL_WEIGHT;
 
         function makeOpt(arr, def) {
             return arr.map(function (h) {
@@ -1895,7 +1952,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = Number(row[valField]);
             if (!s || !t || isNaN(v) || v <= 0) continue;
 
-            var fk = s + '|||' + t;
+            var fk = s + KEY_SEPARATOR + t;
             flows[fk] = (flows[fk] || 0) + v;
             srcTotals[s] = (srcTotals[s] || 0) + v;
             tgtTotals[t] = (tgtTotals[t] || 0) + v;
@@ -1918,7 +1975,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var filteredFlows = [];
         Object.keys(flows).forEach(function (fk) {
-            var parts = fk.split('|||');
+            var parts = fk.split(KEY_SEPARATOR);
             if (topSrcSet[parts[0]] && topTgtSet[parts[1]]) {
                 filteredFlows.push({ source: parts[0], target: parts[1], value: flows[fk] });
             }
@@ -2078,7 +2135,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var canvas = document.createElement('canvas');
             canvas.width = 1800; canvas.height = 1200;
             var ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFFFFF';
+            ctx.fillStyle = CHART_COLORS.bg;
             ctx.fillRect(0, 0, 1800, 1200);
             var img = new Image();
             img.onload = function () {
@@ -2106,7 +2163,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         /* Pre-select value fields */
         var valOptions = '';
-        var priceFields = ['Статистическая стоимость, USD', 'Фактурная стоимость в рублях', 'Фактурная стоимость', 'Таможенная стоимость'];
+        var priceFields = [COL_STAT_USD, COL_INVOICE_RUB, COL_INVOICE, COL_CUSTOMS];
         var availPrice = numericCols.filter(function (h) { return priceFields.indexOf(h) !== -1; });
         if (availPrice.length === 0) availPrice = numericCols;
         valOptions = availPrice.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
@@ -2133,13 +2190,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var groupField = document.getElementById('wp-group').value;
         var valField = document.getElementById('wp-val').value;
 
-        var weightCol = findColumn(headers, 'Вес нетто, кг');
-        if (weightCol === -1) {
+        var weightField = findColumn(headers, COL_WEIGHT);
+        if (!weightField) {
             document.getElementById('wp-output').innerHTML =
-                '<div class="analysis-empty"><p>Колонка "Вес нетто, кг" не найдена</p></div>';
+                '<div class="analysis-empty"><p>Колонка "' + COL_WEIGHT + '" не найдена</p></div>';
             return;
         }
-        var weightField = headers[weightCol];
 
         var groups = {};
         for (var i = 0; i < data.length; i++) {
@@ -2228,8 +2284,8 @@ document.addEventListener('DOMContentLoaded', function () {
         for (var g = 0; g <= 4; g++) {
             var gy = padT + chartH - (g / 4) * chartH;
             var gv = (maxVal * g / 4).toFixed(2);
-            svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
-            svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="#64748B" font-family="DejaVu Sans">' + gv + '</text>';
+            svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+            svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="' + CHART_COLORS.textMuted + '" font-family="' + CHART_FONT + '">' + gv + '</text>';
         }
 
         /* Bars */
@@ -2237,14 +2293,14 @@ document.addEventListener('DOMContentLoaded', function () {
             var x = padL + barGap + idx * (barW + barGap);
             var barH = (r.weightedAvg / maxVal) * chartH;
             var y = padT + chartH - barH;
-            svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" fill="#2563EB" rx="2"/>';
+            svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" fill="' + CHART_COLORS.primary + '" rx="2"/>';
 
             /* Value label */
-            svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="10" fill="#0F172A" font-family="DejaVu Sans">' + r.weightedAvg.toFixed(2) + '</text>';
+            svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="10" fill="' + CHART_COLORS.text + '" font-family="' + CHART_FONT + '">' + r.weightedAvg.toFixed(2) + '</text>';
 
             /* X label */
             var label = r.group.length > 12 ? r.group.substring(0, 10) + '..' : r.group;
-            svg += '<text x="' + (x + barW / 2) + '" y="' + (padT + chartH + 16) + '" text-anchor="middle" font-size="10" fill="#64748B" font-family="DejaVu Sans" transform="rotate(-30,' + (x + barW / 2) + ',' + (padT + chartH + 16) + ')">' + label + '</text>';
+            svg += '<text x="' + (x + barW / 2) + '" y="' + (padT + chartH + 16) + '" text-anchor="middle" font-size="10" fill="' + CHART_COLORS.textMuted + '" font-family="' + CHART_FONT + '" transform="rotate(-30,' + (x + barW / 2) + ',' + (padT + chartH + 16) + ')">' + label + '</text>';
         });
 
         svg += '</svg>';
@@ -2281,10 +2337,10 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderClassificationAnalysis() {
         var data = getActiveData();
         var headers = getActiveHeaders();
-        var descCol = findColumn(headers, 'Наименование и характеристики товаров');
-        if (descCol === -1) {
+        var descCol = findColumn(headers, COL_PRODUCT_NAME);
+        if (!descCol) {
             analysisResults.innerHTML =
-                '<div class="analysis-empty"><p>Колонка "Наименование и характеристики товаров" не найдена. Выполните маппинг колонок в обработке.</p></div>';
+                '<div class="analysis-empty"><p>Колонка "' + COL_PRODUCT_NAME + '" не найдена. Выполните маппинг колонок в обработке.</p></div>';
             return;
         }
         var descField = headers[descCol];
@@ -2364,14 +2420,14 @@ document.addEventListener('DOMContentLoaded', function () {
         categories.forEach(function (cat, idx) {
             var y = padT + barGap + idx * (barH + barGap);
             var bw = (dist[cat] / maxVal) * chartW;
-            svg += '<rect x="' + padL + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="#2563EB" rx="2"/>';
+            svg += '<rect x="' + padL + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="' + CHART_COLORS.primary + '" rx="2"/>';
 
             /* Label */
             var label = cat.length > 18 ? cat.substring(0, 16) + '..' : cat;
-            svg += '<text x="' + (padL - 6) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" font-size="11" fill="#0F172A" font-family="DejaVu Sans">' + label + '</text>';
+            svg += '<text x="' + (padL - 6) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" font-size="11" fill="' + CHART_COLORS.text + '" font-family="' + CHART_FONT + '">' + label + '</text>';
 
             /* Value */
-            svg += '<text x="' + (padL + bw + 4) + '" y="' + (y + barH / 2 + 4) + '" font-size="10" fill="#64748B" font-family="DejaVu Sans">' + dist[cat] + '</text>';
+            svg += '<text x="' + (padL + bw + 4) + '" y="' + (y + barH / 2 + 4) + '" font-size="10" fill="' + CHART_COLORS.textMuted + '" font-family="' + CHART_FONT + '">' + dist[cat] + '</text>';
         });
 
         svg += '</svg>';
@@ -2427,6 +2483,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderSVGChart(data, xField, yField, chartType) {
+        try {
         var values = [];
         data.forEach(function (row) {
             var y = Number(row[yField]);
@@ -2460,8 +2517,8 @@ document.addEventListener('DOMContentLoaded', function () {
         for (var g = 0; g <= 4; g++) {
             var gy = padT + (g / 4) * chartH;
             var gVal = yMax - (g / 4) * yRange;
-            svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (width - padR) + '" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
-            svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="#64748B" font-family="DejaVu Sans, sans-serif">' + gVal.toFixed(0) + '</text>';
+            svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (width - padR) + '" y2="' + gy + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+            svg += '<text x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="' + CHART_COLORS.textMuted + '" font-family="' + CHART_FONT + '">' + gVal.toFixed(0) + '</text>';
         }
 
         // X labels
@@ -2470,7 +2527,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var lx = scaleX(xi);
             var label = String(values[xi].x);
             if (label.length > 10) { label = label.substring(0, 10); }
-            svg += '<text x="' + lx + '" y="' + (height - 8) + '" text-anchor="middle" font-size="11" fill="#64748B" font-family="DejaVu Sans, sans-serif">' + label + '</text>';
+            svg += '<text x="' + lx + '" y="' + (height - 8) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '" font-family="' + CHART_FONT + '">' + label + '</text>';
         }
 
         if (chartType === 'bar') {
@@ -2479,11 +2536,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 var bx = scaleX(i) - barW / 2;
                 var by = scaleY(v.y);
                 var bh = padT + chartH - by;
-                svg += '<rect x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + bh + '" fill="#2563EB" rx="2"/>';
+                svg += '<rect x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + bh + '" fill="' + CHART_COLORS.primary + '" rx="2"/>';
             });
         } else if (chartType === 'scatter') {
             values.forEach(function (v, i) {
-                svg += '<circle cx="' + scaleX(i) + '" cy="' + scaleY(v.y) + '" r="4" fill="#2563EB"/>';
+                svg += '<circle cx="' + scaleX(i) + '" cy="' + scaleY(v.y) + '" r="4" fill="' + CHART_COLORS.primary + '"/>';
             });
         } else {
             // Line or Area
@@ -2491,12 +2548,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (chartType === 'area') {
                 var areaPoints = padL + ',' + (padT + chartH) + ' ' + points + ' ' + scaleX(values.length - 1) + ',' + (padT + chartH);
-                svg += '<polygon points="' + areaPoints + '" fill="#2563EB" fill-opacity="0.1"/>';
+                svg += '<polygon points="' + areaPoints + '" fill="' + CHART_COLORS.primary + '" fill-opacity="0.1"/>';
             }
-            svg += '<polyline points="' + points + '" fill="none" stroke="#2563EB" stroke-width="2"/>';
+            svg += '<polyline points="' + points + '" fill="none" stroke="' + CHART_COLORS.primary + '" stroke-width="2"/>';
 
             values.forEach(function (v, i) {
-                svg += '<circle cx="' + scaleX(i) + '" cy="' + scaleY(v.y) + '" r="3" fill="#2563EB"/>';
+                svg += '<circle cx="' + scaleX(i) + '" cy="' + scaleY(v.y) + '" r="3" fill="' + CHART_COLORS.primary + '"/>';
             });
         }
 
@@ -2504,6 +2561,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         vizChart.innerHTML =
             '<h3 class="chart-title">' + yField + ' по ' + xField + '</h3>' + svg;
+        } catch (err) {
+            vizChart.innerHTML = '<div class="chart-placeholder"><p class="chart-placeholder-text">Ошибка построения графика: ' + err.message + '</p></div>';
+            console.error('Chart error:', err);
+        }
     }
 
     // Export PNG
@@ -2518,7 +2579,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var ctx = canvas.getContext('2d');
             var img = new Image();
             img.onload = function () {
-                ctx.fillStyle = '#FFFFFF';
+                ctx.fillStyle = CHART_COLORS.bg;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 canvas.toBlob(function (blob) {
@@ -2604,7 +2665,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (data.length === 0) { return; }
 
         var hdrs = getActiveHeaders();
-        var csv = hdrs.join(';') + '\n';
+        var csv = hdrs.join(CSV_SEPARATOR) + '\n';
         data.forEach(function (row) {
             var line = hdrs.map(function (h) {
                 var val = row[h] !== undefined ? String(row[h]) : '';
@@ -2613,11 +2674,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 return val;
             });
-            csv += line.join(';') + '\n';
+            csv += line.join(CSV_SEPARATOR) + '\n';
         });
 
-        var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-        triggerDownload(blob, appState.fileName.replace(/\.[^.]+$/, '') + '_export.csv');
+        var blob = new Blob([UTF8_BOM + csv], { type: MIME_CSV });
+        triggerDownload(blob, baseFileName() + '_export.csv');
     }
 
     /* ================================
