@@ -217,7 +217,7 @@ body {
 }
 
 /* ================================
-   Dashboard — KPI Cards
+   Analysis — KPI Cards (used in Analysis module)
    ================================ */
 .kpi-grid {
     display: grid;
@@ -264,99 +264,6 @@ body {
 
 .kpi-card-delta.decline {
     color: #DC2626;
-}
-
-/* ================================
-   Dashboard — Chart
-   ================================ */
-.chart-container {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 24px;
-}
-
-.chart-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #0F172A;
-    margin-bottom: 16px;
-}
-
-.chart-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 320px;
-    background-color: #F8FAFC;
-    border: 2px dashed #E2E8F0;
-    border-radius: 6px;
-}
-
-.chart-placeholder-text {
-    font-size: 14px;
-    color: #64748B;
-}
-
-/* ================================
-   Dashboard — Recent Activity
-   ================================ */
-.recent-activity {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-}
-
-.recent-section {
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 8px;
-    padding: 24px;
-}
-
-.recent-section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #0F172A;
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid #E2E8F0;
-}
-
-.recent-list {
-    display: flex;
-    flex-direction: column;
-}
-
-.recent-list-empty {
-    font-size: 14px;
-    color: #64748B;
-    text-align: center;
-    padding: 32px 0;
-}
-
-.recent-list-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid #F1F5F9;
-}
-
-.recent-list-item:last-child {
-    border-bottom: none;
-}
-
-.recent-item-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: #0F172A;
-}
-
-.recent-item-meta {
-    font-size: 12px;
-    color: #64748B;
 }
 
 /* ================================
