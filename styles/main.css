@@ -355,6 +355,17 @@ body {
     color: var(--color-text-secondary);
 }
 
+.operations-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.operations-controls .btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
 .columns-controls {
     display: flex;
     gap: 8px;

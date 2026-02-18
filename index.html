@@ -79,6 +79,10 @@
                     <div class="processing-container">
                         <div class="processing-operations">
                             <h3 class="processing-section-title">Операции</h3>
+                            <div class="operations-controls">
+                                <button class="btn btn-secondary operations-select-all">Выбрать все</button>
+                                <button class="btn btn-secondary operations-deselect-all">Снять все</button>
+                            </div>
                             <div class="operation-list">
                                 <label class="operation-item" data-op="mapping" title="Переименовывает колонки из формата G## в читаемые русские названия и оставляет только известные колонки (32 шт.)">
                                     <input type="checkbox" class="operation-checkbox">
@@ -188,7 +192,7 @@
                             <button class="columns-toggle-btn" style="display:none">Показать все ▼</button>
                         </div>
                         <div class="processing-lookup">
-                            <h3 class="processing-section-title">Справочник</h3>
+                            <h3 class="processing-section-title" title="Загрузите файл-справочник (CSV/XLSX) для обогащения данных. Работает как ВПР (VLOOKUP): связывает строки по общему ключу (например ИНН) и добавляет дополнительные столбцы из справочника (Холдинг, Сегмент и т.д.)">Справочник</h3>
                             <div class="lookup-upload-area">
                                 <button class="btn btn-secondary lookup-upload-btn">Загрузить справочник</button>
                                 <input type="file" class="lookup-input" accept=".csv,.xlsx,.xls" aria-label="Загрузить файл справочника">

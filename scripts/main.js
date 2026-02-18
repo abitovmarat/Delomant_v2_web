@@ -612,6 +612,19 @@ document.addEventListener('DOMContentLoaded', function () {
         return ops;
     }
 
+    var opsSelectAll = document.querySelector('.operations-select-all');
+    var opsDeselectAll = document.querySelector('.operations-deselect-all');
+    if (opsSelectAll) {
+        opsSelectAll.addEventListener('click', function () {
+            document.querySelectorAll('.operation-list .operation-checkbox').forEach(function (cb) { cb.checked = true; });
+        });
+    }
+    if (opsDeselectAll) {
+        opsDeselectAll.addEventListener('click', function () {
+            document.querySelectorAll('.operation-list .operation-checkbox').forEach(function (cb) { cb.checked = false; });
+        });
+    }
+
     // Обновляем select'ы расчёта при загрузке данных
     function updateRatioSelects() {
         if (!ratioNumerator || !ratioDenominator) { return; }
