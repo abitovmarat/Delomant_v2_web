@@ -354,17 +354,42 @@
                             <h3 class="about-section-title">Delomant Analytics v2</h3>
                             <p class="about-description">
                                 Веб-приложение для анализа данных внешнеэкономической деятельности (ВЭД).
-                                Обработка таможенных деклараций, построение аналитических отчётов и визуализация торговых потоков.
+                                Загрузка и обработка таможенных деклараций, построение аналитических отчётов,
+                                визуализация торговых потоков и экспорт результатов.
                             </p>
                         </div>
 
                         <div class="about-section">
-                            <h3 class="about-section-title">Возможности</h3>
+                            <h3 class="about-section-title">Обработка данных</h3>
                             <ul class="about-features">
-                                <li><strong>Обработка данных:</strong> Маппинг колонок G##, извлечение дат, обогащение из справочника, нормализация, расчёты цен за кг</li>
-                                <li><strong>Анализ:</strong> Темп роста, статистика, тренды, сводные таблицы, CAGR, диаграммы Санки, средневзвешенные цены, классификация товаров</li>
-                                <li><strong>Визуализация:</strong> Линейные, площадные, столбчатые и точечные графики с экспортом в PNG/SVG</li>
-                                <li><strong>Отчёты:</strong> Формирование отчётов с экспортом в CSV/XLSX</li>
+                                <li><strong>Маппинг колонок:</strong> автоматический (G## в русские названия) и пользовательский</li>
+                                <li><strong>Извлечение дат:</strong> Месяц, Квартал, Год из даты декларации</li>
+                                <li><strong>Обогащение из справочника:</strong> VLOOKUP-объединение по ключевой колонке</li>
+                                <li><strong>Очистка:</strong> удаление пробелов, дубликатов, пустых строк, нормализация компаний</li>
+                                <li><strong>Нормализация:</strong> даты в ISO, числа, коды ТН ВЭД до 10 знаков</li>
+                                <li><strong>Расчёты:</strong> USD/кг стат., USD/кг факт., руб./кг, курс ЦБ РФ, пользовательское отношение</li>
+                                <li><strong>Контроль качества:</strong> удаление пустых колонок, фильтрация столбцов</li>
+                            </ul>
+                        </div>
+
+                        <div class="about-section">
+                            <h3 class="about-section-title">Анализ</h3>
+                            <ul class="about-features">
+                                <li><strong>Объёмы и стоимость:</strong> сводные таблицы по годам/кварталам, CAGR, 3 графика с YoY-ростом</li>
+                                <li><strong>Объёмы по странам:</strong> таблица с долями, горизонтальная диаграмма топ-10</li>
+                                <li><strong>Динамика цен по странам:</strong> средневзвешенная цена USD/кг, линейный график топ-10 стран</li>
+                                <li><strong>Структура импорта:</strong> диаграмма Санки Отправитель → Получатель (тонны)</li>
+                                <li><strong>Структура по изготовителям:</strong> диаграмма Санки Изготовитель → Получатель (тонны)</li>
+                                <li><strong>Поквартальная динамика цен:</strong> руб./кг и USD/кг по кварталам, линии по годам</li>
+                            </ul>
+                        </div>
+
+                        <div class="about-section">
+                            <h3 class="about-section-title">Экспорт</h3>
+                            <ul class="about-features">
+                                <li><strong>Данные:</strong> CSV, XLSX (с закреплённой шапкой и автошириной колонок)</li>
+                                <li><strong>Графики:</strong> PNG (Retina 2x)</li>
+                                <li><strong>Анализ:</strong> таблицы в XLSX/CSV, графики в PNG</li>
                             </ul>
                         </div>
 
@@ -372,7 +397,8 @@
                             <h3 class="about-section-title">Технологии</h3>
                             <p class="about-tech">
                                 <strong>Frontend:</strong> Vanilla HTML5, CSS3, JavaScript (ES5)<br>
-                                <strong>Библиотеки:</strong> SheetJS (для работы с XLSX/XLS)<br>
+                                <strong>Библиотеки:</strong> SheetJS (XLSX/XLS), JSZip (заморозка шапки)<br>
+                                <strong>Курсы валют:</strong> ЦБ РФ (предзагрузка 2020-2026 + API-фолбэк)<br>
                                 <strong>Шрифт:</strong> DejaVu Sans<br>
                                 <strong>Deployment:</strong> GitHub Pages
                             </p>
