@@ -59,6 +59,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var CHART_FONT = 'DejaVu Sans, sans-serif';
     var MIME_CSV = 'text/csv;charset=utf-8';
 
+    var CBR_API_BASE = 'https://www.cbr-xml-daily.ru';
+    var COL_CURRENCY_CODE = 'Код валюты';
+    var COL_CBR_RATE = 'Курс ЦБ РФ';
+    var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
+    var CBR_MAX_RETRY = 3;
+
+    var rateCache = {};
+
     function round2(n) { return Math.round(n * 100) / 100; }
 
     function baseFileName() {
@@ -854,6 +862,121 @@ document.addEventListener('DOMContentLoaded', function () {
         return { colName: colName, count: count };
     }
 
+    // --- Курс ЦБ РФ ---
+
+    function formatDateForCBR(isoDate) {
+        var parts = isoDate.split('-');
+        return { yyyy: parts[0], mm: parts[1], dd: parts[2] };
+    }
+
+    function fetchCBRRate(dateStr, retries) {
+        if (retries === undefined) { retries = 0; }
+        if (rateCache[dateStr]) {
+            return Promise.resolve(rateCache[dateStr]);
+        }
+
+        var p = formatDateForCBR(dateStr);
+        var url = CBR_API_BASE + '/archive/' + p.yyyy + '/' + p.mm + '/' + p.dd + '/daily_json.js';
+
+        return fetch(url)
+            .then(function (resp) {
+                if (!resp.ok) { throw new Error(resp.status); }
+                return resp.json();
+            })
+            .then(function (json) {
+                var rates = {};
+                var valute = json.Valute || {};
+                Object.keys(valute).forEach(function (key) {
+                    var cur = valute[key];
+                    rates[cur.CharCode] = round2(cur.Value / cur.Nominal);
+                });
+                rates['RUB'] = 1;
+                rateCache[dateStr] = rates;
+                return rates;
+            })
+            .catch(function () {
+                if (retries < CBR_MAX_RETRY) {
+                    var d = new Date(dateStr);
+                    d.setDate(d.getDate() - 1);
+                    var prev = d.toISOString().split('T')[0];
+                    return fetchCBRRate(prev, retries + 1);
+                }
+                return null;
+            });
+    }
+
+    function applyCBRRates(data, headers) {
+        var dateCol = findColumn(headers, COL_DATE_REG) || findColumn(headers, COL_DATE_RELEASE);
+        var currCol = findColumn(headers, COL_CURRENCY_CODE);
+        var invoiceCol = findColumn(headers, COL_INVOICE);
+
+        if (!dateCol || !currCol || !invoiceCol) {
+            return Promise.resolve({
+                count: 0, errors: 0, colNames: [],
+                error: 'Не найдены столбцы «' + COL_DATE_REG + '», «' + COL_CURRENCY_CODE + '» или «' + COL_INVOICE + '»'
+            });
+        }
+
+        // Собираем уникальные даты
+        var uniqueDates = {};
+        data.forEach(function (row) {
+            var d = parseDate(row[dateCol]);
+            if (d) {
+                var iso = d.toISOString().split('T')[0];
+                uniqueDates[iso] = true;
+            }
+        });
+        var dateList = Object.keys(uniqueDates);
+
+        // Загружаем курсы для всех дат
+        var fetchPromises = dateList.map(function (ds) {
+            return fetchCBRRate(ds);
+        });
+
+        return Promise.all(fetchPromises).then(function () {
+            var count = 0;
+            var errors = 0;
+
+            data.forEach(function (row) {
+                var d = parseDate(row[dateCol]);
+                if (!d) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
+
+                var iso = d.toISOString().split('T')[0];
+                var currency = String(row[currCol] || '').trim().toUpperCase();
+                var invoiceVal = Number(row[invoiceCol]);
+
+                if (!currency) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
+
+                // RUB — курс 1
+                if (currency === 'RUB' || currency === 'RUR') {
+                    row[COL_CBR_RATE] = 1;
+                    row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal) : '';
+                    count++;
+                    return;
+                }
+
+                var rates = rateCache[iso];
+                if (!rates || !rates[currency]) {
+                    row[COL_CBR_RATE] = '';
+                    row[COL_INVOICE_RUB_CBR] = '';
+                    errors++;
+                    return;
+                }
+
+                var rate = rates[currency];
+                row[COL_CBR_RATE] = rate;
+                row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal * rate) : '';
+                count++;
+            });
+
+            // Добавить колонки
+            if (headers.indexOf(COL_CBR_RATE) === -1) { headers.push(COL_CBR_RATE); }
+            if (headers.indexOf(COL_INVOICE_RUB_CBR) === -1) { headers.push(COL_INVOICE_RUB_CBR); }
+
+            return { count: count, errors: errors, colNames: [COL_CBR_RATE, COL_INVOICE_RUB_CBR], dates: dateList.length };
+        });
+    }
+
     function removeEmptyColumns(data, headers) {
         var emptyCols = [];
         headers.forEach(function (h) {
@@ -1177,99 +1300,124 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
-            // 6. Расчёт производных
-            if (ops.indexOf('usd-per-kg-stat') !== -1) {
-                var r1 = calcUsdPerKgStat(data, headers);
-                if (r1.colName) {
-                    if (headers.indexOf(r1.colName) === -1) { headers.push(r1.colName); }
-                    log.push('USD/кг стат.: ' + r1.count + ' значений');
-                } else {
-                    log.push('USD/кг стат.: ' + r1.error);
-                }
-            }
-            if (ops.indexOf('usd-per-kg-invoice') !== -1) {
-                var r2 = calcUsdPerKgInvoice(data, headers);
-                if (r2.colName) {
-                    if (headers.indexOf(r2.colName) === -1) { headers.push(r2.colName); }
-                    log.push('USD/кг факт.: ' + r2.count + ' значений');
-                } else {
-                    log.push('USD/кг факт.: ' + r2.error);
-                }
-            }
-            if (ops.indexOf('rur-per-kg') !== -1) {
-                var r3 = calcRurPerKg(data, headers);
-                if (r3.colName) {
-                    if (headers.indexOf(r3.colName) === -1) { headers.push(r3.colName); }
-                    log.push('RUR/кг: ' + r3.count + ' значений');
-                } else {
-                    log.push('RUR/кг: ' + r3.error);
-                }
-            }
-            if (ops.indexOf('ratio') !== -1) {
-                var numCol = ratioNumerator ? ratioNumerator.value : '';
-                var denCol = ratioDenominator ? ratioDenominator.value : '';
-                if (numCol && denCol) {
-                    var ratioResult = calcRatio(data, numCol, denCol);
-                    headers.push(ratioResult.colName);
-                    log.push('Отношение: ' + ratioResult.colName + ' (' + ratioResult.count + ' значений)');
-                } else {
-                    log.push('Отношение: не выбраны столбцы');
-                }
+            // 5.5 Курс ЦБ РФ (async)
+            var cbrPromise;
+            if (ops.indexOf('cbr-rate') !== -1) {
+                applyBtn.disabled = true;
+                applyBtn.textContent = 'Загрузка курсов ЦБ…';
+                cbrPromise = applyCBRRates(data, headers);
+            } else {
+                cbrPromise = Promise.resolve(null);
             }
 
-            // 7. Удаление пустых столбцов
-            if (ops.indexOf('empty-cols') !== -1) {
-                var emptyColResult = removeEmptyColumns(data, headers);
-                if (emptyColResult.removed.length > 0) {
-                    headers = emptyColResult.headers;
-                    log.push('Пустые столбцы: удалено ' + emptyColResult.removed.length + ' (' + emptyColResult.removed.join(', ') + ')');
-                } else {
-                    log.push('Пустые столбцы: не найдены');
+            cbrPromise.then(function (cbrResult) {
+                if (cbrResult) {
+                    if (cbrResult.error) {
+                        log.push('Курс ЦБ: ' + cbrResult.error);
+                    } else {
+                        log.push('Курс ЦБ: загружено ' + cbrResult.dates + ' дат, пересчитано ' + cbrResult.count + ' строк' +
+                            (cbrResult.errors > 0 ? ' (пропущено ' + cbrResult.errors + ')' : ''));
+                    }
                 }
-            }
 
-            // 6. Фильтрация столбцов
-            // Обновляем selectedCols с учётом маппинга и новых столбцов
-            var finalCols = [];
-            headers.forEach(function (h) {
-                // Включаем столбец если он новый (ratio) или был выбран пользователем
-                var origIdx = appState.headers.indexOf(h);
-                if (origIdx === -1) {
-                    // Новый столбец (от маппинга или расчёта) — включаем
-                    finalCols.push(h);
-                } else if (selectedCols.indexOf(appState.headers[origIdx]) !== -1) {
-                    finalCols.push(h);
+                // 6. Расчёт производных
+                if (ops.indexOf('usd-per-kg-stat') !== -1) {
+                    var r1 = calcUsdPerKgStat(data, headers);
+                    if (r1.colName) {
+                        if (headers.indexOf(r1.colName) === -1) { headers.push(r1.colName); }
+                        log.push('USD/кг стат.: ' + r1.count + ' значений');
+                    } else {
+                        log.push('USD/кг стат.: ' + r1.error);
+                    }
                 }
-            });
-            // Для маппинга: столбец мог быть переименован
-            if (ops.indexOf('mapping') !== -1) {
-                finalCols = headers.slice();
-            }
+                if (ops.indexOf('usd-per-kg-invoice') !== -1) {
+                    var r2 = calcUsdPerKgInvoice(data, headers);
+                    if (r2.colName) {
+                        if (headers.indexOf(r2.colName) === -1) { headers.push(r2.colName); }
+                        log.push('USD/кг факт.: ' + r2.count + ' значений');
+                    } else {
+                        log.push('USD/кг факт.: ' + r2.error);
+                    }
+                }
+                if (ops.indexOf('rur-per-kg') !== -1) {
+                    var r3 = calcRurPerKg(data, headers);
+                    if (r3.colName) {
+                        if (headers.indexOf(r3.colName) === -1) { headers.push(r3.colName); }
+                        log.push('RUR/кг: ' + r3.count + ' значений');
+                    } else {
+                        log.push('RUR/кг: ' + r3.error);
+                    }
+                }
+                if (ops.indexOf('ratio') !== -1) {
+                    var numCol = ratioNumerator ? ratioNumerator.value : '';
+                    var denCol = ratioDenominator ? ratioDenominator.value : '';
+                    if (numCol && denCol) {
+                        var ratioResult = calcRatio(data, numCol, denCol);
+                        headers.push(ratioResult.colName);
+                        log.push('Отношение: ' + ratioResult.colName + ' (' + ratioResult.count + ' значений)');
+                    } else {
+                        log.push('Отношение: не выбраны столбцы');
+                    }
+                }
 
-            var removedCols = headers.filter(function (h) {
-                return finalCols.indexOf(h) === -1;
-            });
-            if (removedCols.length > 0) {
-                data = data.map(function (row) {
-                    var filtered = {};
-                    finalCols.forEach(function (col) {
-                        filtered[col] = row[col];
-                    });
-                    return filtered;
+                // 7. Удаление пустых столбцов
+                if (ops.indexOf('empty-cols') !== -1) {
+                    var emptyColResult = removeEmptyColumns(data, headers);
+                    if (emptyColResult.removed.length > 0) {
+                        headers = emptyColResult.headers;
+                        log.push('Пустые столбцы: удалено ' + emptyColResult.removed.length + ' (' + emptyColResult.removed.join(', ') + ')');
+                    } else {
+                        log.push('Пустые столбцы: не найдены');
+                    }
+                }
+
+                // 8. Фильтрация столбцов
+                var finalCols = [];
+                headers.forEach(function (h) {
+                    var origIdx = appState.headers.indexOf(h);
+                    if (origIdx === -1) {
+                        finalCols.push(h);
+                    } else if (selectedCols.indexOf(appState.headers[origIdx]) !== -1) {
+                        finalCols.push(h);
+                    }
                 });
-                log.push('Столбцы: удалено ' + removedCols.length + ' (' + removedCols.join(', ') + ')');
-            }
+                if (ops.indexOf('mapping') !== -1) {
+                    finalCols = headers.slice();
+                }
 
-            appState.processedData = data;
-            appState.processedHeaders = finalCols;
-            appState.isProcessed = true;
+                var removedCols = headers.filter(function (h) {
+                    return finalCols.indexOf(h) === -1;
+                });
+                if (removedCols.length > 0) {
+                    data = data.map(function (row) {
+                        var filtered = {};
+                        finalCols.forEach(function (col) {
+                            filtered[col] = row[col];
+                        });
+                        return filtered;
+                    });
+                    log.push('Столбцы: удалено ' + removedCols.length + ' (' + removedCols.join(', ') + ')');
+                }
 
-            renderPreviewResult(data, log, finalCols);
-            updateVisualizationFields();
+                appState.processedData = data;
+                appState.processedHeaders = finalCols;
+                appState.isProcessed = true;
+
+                renderPreviewResult(data, log, finalCols);
+                updateVisualizationFields();
+            }).catch(function (err) {
+                renderProcessingMessage('Ошибка обработки: ' + err.message);
+                console.error('Processing error:', err);
+            }).then(function () {
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Применить обработку';
+            });
 
             } catch (err) {
                 renderProcessingMessage('Ошибка обработки: ' + err.message);
                 console.error('Processing error:', err);
+                applyBtn.disabled = false;
+                applyBtn.textContent = 'Применить обработку';
             }
         });
     }
