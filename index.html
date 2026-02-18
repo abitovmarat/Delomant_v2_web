@@ -31,8 +31,8 @@
                     <span class="sidebar-nav-text">Визуализация</span>
                 </a>
                 <a href="#reports" class="sidebar-nav-item">
-                    <span class="sidebar-nav-icon" aria-hidden="true">📄</span>
-                    <span class="sidebar-nav-text">Отчёты</span>
+                    <span class="sidebar-nav-icon" aria-hidden="true">📊</span>
+                    <span class="sidebar-nav-text">Презентация</span>
                 </a>
                 <a href="#about" class="sidebar-nav-item">
                     <span class="sidebar-nav-icon" aria-hidden="true">ℹ️</span>
@@ -118,9 +118,9 @@
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">Обрезать пробелы</span>
                                 </label>
-                                <label class="operation-item" data-op="lowercase" title="Приводит все текстовые значения к нижнему регистру (числовые столбцы не затрагиваются)">
+                                <label class="operation-item" data-op="normalize-companies" title="Унифицирует названия компаний: убирает точки в аббревиатурах (S.A. → SA, Co. → Co, LTD. → LTD), лишние пробелы, приводит к UPPERCASE. Работает в текстовых столбцах: Наименование отправителя, Наименование получателя, Фирма-изготовитель">
                                     <input type="checkbox" class="operation-checkbox">
-                                    <span class="operation-label">Нижний регистр (текст)</span>
+                                    <span class="operation-label">Нормализовать названия компаний</span>
                                 </label>
 
                                 <div class="operation-group-title">Нормализация</div>
@@ -227,7 +227,7 @@
                     <h2 class="module-title">Анализ</h2>
 
                     <div class="action-cards">
-                        <div class="action-card">
+                        <div class="action-card" title="Колонки: Вес нетто, кг · Статистическая стоимость, USD · Фактурная стоимость в рублях · Год · КВАРТАЛ">
                             <span class="action-card-icon">📦</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Объёмы и стоимость</h3>
@@ -235,11 +235,43 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card">
+                        <div class="action-card" title="Колонки: Страна отправления / Страна происхождения · Вес нетто, кг · Статистическая стоимость, USD">
                             <span class="action-card-icon">🌍</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Объёмы по странам</h3>
                                 <p class="action-card-description">Откуда и сколько ввозится: тыс. тонн и USD</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Страна отправления / Страна происхождения · Таможенная стоимость · Вес нетто, кг · Год">
+                            <span class="action-card-icon">💰</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Динамика цен по странам</h3>
+                                <p class="action-card-description">Таможенная стоимость, долл. США/кг по годам</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Наименование отправителя · Наименование получателя · Вес нетто, кг · Год">
+                            <span class="action-card-icon">🏭</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Структура импорта</h3>
+                                <p class="action-card-description">Отправитель → Получатель, потоки в тоннах</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Фирма-изготовитель · Наименование получателя · Вес нетто, кг · Год">
+                            <span class="action-card-icon">&#x1F3ED;</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Структура по изготовителям</h3>
+                                <p class="action-card-description">Изготовитель → Получатель, потоки в тоннах</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Таможенная стоимость · Фактурная стоимость в рублях · Вес нетто, кг · Год · КВАРТАЛ">
+                            <span class="action-card-icon">📈</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Поквартальная динамика цен</h3>
+                                <p class="action-card-description">Таможенная стоимость руб./кг и USD/кг по кварталам</p>
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
@@ -304,16 +336,12 @@
                     </div>
                 </section>
 
-                <!-- Reports Module -->
+                <!-- Presentation Module -->
                 <section id="reports" class="module module-reports">
-                    <h2 class="module-title">Отчёты</h2>
+                    <h2 class="module-title">Презентация</h2>
 
-                    <div class="reports-header">
-                        <button class="btn btn-primary">Создать отчёт</button>
-                    </div>
-
-                    <div class="reports-list">
-                        <p class="reports-list-empty">Нет доступных отчётов</p>
+                    <div class="analysis-empty" style="margin-top:24px">
+                        <p>Раздел в разработке</p>
                     </div>
                 </section>
 

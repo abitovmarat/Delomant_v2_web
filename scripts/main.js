@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_QUARTER = 'КВАРТАЛ';
     var COL_PRODUCT_NAME = 'Наименование и характеристики товаров';
     var COL_MANUFACTURER = 'Фирма-изготовитель';
+    var COL_SENDER = 'Наименование отправителя';
     var COL_RECEIVER = 'Наименование получателя';
 
     var UTF8_BOM = '\uFEFF';
@@ -724,9 +725,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var opsDeselectAll = document.querySelector('.operations-deselect-all');
     if (opsSelectAll) {
         opsSelectAll.addEventListener('click', function () {
+            var excludeOps = ['custom-mapping', 'join-lookup', 'usd-per-kg-stat', 'usd-per-kg-invoice', 'rur-per-kg', 'cbr-rate', 'ratio'];
             document.querySelectorAll('.operation-list .operation-item[data-op]').forEach(function (item) {
                 var op = item.getAttribute('data-op');
-                if (op !== 'ratio' && op !== 'custom-mapping') {
+                if (excludeOps.indexOf(op) === -1) {
                     item.querySelector('.operation-checkbox').checked = true;
                 }
             });
@@ -843,6 +845,34 @@ document.addEventListener('DOMContentLoaded', function () {
             data.forEach(function (row) {
                 if (typeof row[h] === 'string' && row[h] !== row[h].toLowerCase()) {
                     row[h] = row[h].toLowerCase();
+                    count++;
+                }
+            });
+        });
+        return count;
+    }
+
+    var COMPANY_COLUMNS = [COL_SENDER, COL_RECEIVER, COL_MANUFACTURER];
+
+    function normalizeCompanyNames(data, headers) {
+        var count = 0;
+        var targetCols = [];
+        COMPANY_COLUMNS.forEach(function (c) {
+            if (headers.indexOf(c) !== -1) { targetCols.push(c); }
+        });
+        if (targetCols.length === 0) { return 0; }
+
+        data.forEach(function (row) {
+            targetCols.forEach(function (col) {
+                var val = row[col];
+                if (typeof val !== 'string' || !val.trim()) { return; }
+                var norm = val.trim().toUpperCase()
+                    .replace(/\.\s*/g, ' ')   // S.A. → S A  → SA после trim
+                    .replace(/\s+/g, ' ')      // лишние пробелы
+                    .replace(/,\s*$/, '')       // запятая в конце
+                    .trim();
+                if (norm !== val) {
+                    row[col] = norm;
                     count++;
                 }
             });
@@ -1495,6 +1525,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 data = removeEmpty(data, headers);
                 log.push('Пустые: удалено ' + (before2 - data.length) + ' строк');
             }
+            if (ops.indexOf('normalize-companies') !== -1) {
+                var ncCount = normalizeCompanyNames(data, headers);
+                log.push('Названия компаний: нормализовано ' + ncCount + ' значений');
+            }
 
             // 5. Нормализация
             if (ops.indexOf('dates') !== -1) {
@@ -1807,6 +1841,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (analysisButtons.length > 0) {
         if (analysisButtons[0]) analysisButtons[0].addEventListener('click', function () { runAnalysis('volumes'); });
         if (analysisButtons[1]) analysisButtons[1].addEventListener('click', function () { runAnalysis('countries'); });
+        if (analysisButtons[2]) analysisButtons[2].addEventListener('click', function () { runAnalysis('priceDynamics'); });
+        if (analysisButtons[3]) analysisButtons[3].addEventListener('click', function () { runAnalysis('importStructure'); });
+        if (analysisButtons[4]) analysisButtons[4].addEventListener('click', function () { runAnalysis('manufacturerStructure'); });
+        if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('quarterlyPrices'); });
     }
 
     function runAnalysis(type) {
@@ -1825,6 +1863,28 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (type === 'countries') {
                 renderCountriesAnalysis(data, headers);
+                return;
+            }
+            if (type === 'priceDynamics') {
+                renderPriceDynamicsAnalysis(data, headers);
+                return;
+            }
+            if (type === 'importStructure') {
+                renderImportStructureAnalysis(data, headers);
+                return;
+            }
+            if (type === 'manufacturerStructure') {
+                renderImportStructureAnalysis(data, headers, null, null, {
+                    sourceCol: COL_MANUFACTURER,
+                    targetCol: COL_RECEIVER,
+                    sourceLabel: 'Изготовитель',
+                    targetLabel: 'Получатель',
+                    exportName: 'manufacturer_structure'
+                });
+                return;
+            }
+            if (type === 'quarterlyPrices') {
+                renderQuarterlyPricesAnalysis(data, headers);
                 return;
             }
 
@@ -1886,6 +1946,37 @@ document.addEventListener('DOMContentLoaded', function () {
         var yearKeys = Object.keys(byYear).sort();
         var quarterKeys = Object.keys(byQuarter).sort();
 
+        // --- Определяем неполный год (последний, если у него меньше кварталов) ---
+        var fullYears = yearKeys.slice();
+        var partialYear = null;
+        var partialLabel = '';
+        if (quarterCol && yearKeys.length >= 2) {
+            var lastY = yearKeys[yearKeys.length - 1];
+            var lastYearQuarters = quarterKeys.filter(function (k) { return byQuarter[k].year === lastY; });
+            var prevY = yearKeys[yearKeys.length - 2];
+            var prevYearQuarters = quarterKeys.filter(function (k) { return byQuarter[k].year === prevY; });
+            if (lastYearQuarters.length < prevYearQuarters.length && lastYearQuarters.length < 4) {
+                partialYear = lastY;
+                partialLabel = 'Q' + lastYearQuarters.map(function (k) { return byQuarter[k].q; }).join('-') + ' ' + lastY;
+                fullYears = yearKeys.slice(0, -1);
+            }
+        }
+
+        // --- Рассчёт CAGR ---
+        function calcCAGR(first, last, years) {
+            if (!first || first <= 0 || years <= 0) { return null; }
+            return (Math.pow(last / first, 1 / years) - 1) * 100;
+        }
+
+        var cagrYears = fullYears.length >= 2 ? fullYears.length - 1 : 0;
+        var cagrWeight = null, cagrUsd = null, cagrRub = null;
+        if (cagrYears > 0) {
+            var fy = fullYears[0], ly = fullYears[fullYears.length - 1];
+            if (weightCol) { cagrWeight = calcCAGR(byYear[fy].weight, byYear[ly].weight, cagrYears); }
+            if (statUsdCol) { cagrUsd = calcCAGR(byYear[fy].usd, byYear[ly].usd, cagrYears); }
+            if (invoiceRubCol) { cagrRub = calcCAGR(byYear[fy].rub, byYear[ly].rub, cagrYears); }
+        }
+
         // --- Таблица по годам ---
         var html = '<div class="analysis-section">';
         html += '<h3 class="analysis-section-title">По годам</h3>';
@@ -1897,12 +1988,21 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '</tr></thead><tbody>';
         yearKeys.forEach(function (y) {
             var d = byYear[y];
-            html += '<tr><td>' + y + '</td>';
+            var label = (y === partialYear) ? partialLabel : y;
+            html += '<tr><td>' + label + '</td>';
             if (weightCol) { html += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>'; }
             if (statUsdCol) { html += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>'; }
             if (invoiceRubCol) { html += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>'; }
             html += '</tr>';
         });
+        // Строка CAGR
+        if (cagrYears > 0) {
+            html += '<tr style="font-weight:600;border-top:2px solid var(--color-border)"><td>CAGR</td>';
+            if (weightCol) { html += '<td class="numeric">' + (cagrWeight !== null ? round2(cagrWeight) + '%' : '—') + '</td>'; }
+            if (statUsdCol) { html += '<td class="numeric">' + (cagrUsd !== null ? round2(cagrUsd) + '%' : '—') + '</td>'; }
+            if (invoiceRubCol) { html += '<td class="numeric">' + (cagrRub !== null ? round2(cagrRub) + '%' : '—') + '</td>'; }
+            html += '</tr>';
+        }
         html += '</tbody></table></div></div>';
 
         // --- Таблица по кварталам ---
@@ -1926,49 +2026,121 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '</tbody></table></div></div>';
         }
 
-        // --- График (столбчатый по годам) ---
-        if (yearKeys.length >= 2) {
-            var chartWidth = 700;
-            var chartHeight = 350;
-            var padding = { top: 30, right: 20, bottom: 50, left: 80 };
-            var innerW = chartWidth - padding.left - padding.right;
-            var innerH = chartHeight - padding.top - padding.bottom;
+        // --- Графики по метрикам (по 1 на каждую) ---
+        var metrics = [];
+        if (weightCol) { metrics.push({ key: 'weight', title: 'тыс. тонн', unit: 'тыс. тонн', div: 1000, cagr: cagrWeight }); }
+        if (statUsdCol) { metrics.push({ key: 'usd', title: 'млн долл. США', unit: 'млн USD', div: 1000000, cagr: cagrUsd }); }
+        if (invoiceRubCol) { metrics.push({ key: 'rub', title: 'млн руб.', unit: 'млн руб.', div: 1000000, cagr: cagrRub }); }
 
-            // Берём объём в тыс. тонн для графика
-            var values = yearKeys.map(function (y) { return round2(byYear[y].weight / 1000); });
-            var maxVal = Math.max.apply(null, values) * 1.15;
-            if (maxVal === 0) { maxVal = 1; }
-
-            var barWidth = Math.min(60, innerW / yearKeys.length * 0.6);
-            var gap = innerW / yearKeys.length;
-
+        if (yearKeys.length >= 1 && metrics.length > 0) {
             html += '<div class="analysis-section">';
-            html += '<h3 class="analysis-section-title">Объём по годам (тыс. тонн)</h3>';
-            html += '<svg class="analysis-chart" width="' + chartWidth + '" height="' + chartHeight + '" viewBox="0 0 ' + chartWidth + ' ' + chartHeight + '">';
-            html += '<style>text { font-family: ' + CHART_FONT + '; font-size: 12px; fill: ' + CHART_COLORS.text + '; }</style>';
+            html += '<h3 class="analysis-section-title">Динамика по годам</h3>';
+            html += '<div class="analysis-charts-row">';
 
-            // Ось Y — сетка
-            var yTicks = 5;
-            for (var t = 0; t <= yTicks; t++) {
-                var yVal = round2(maxVal * t / yTicks);
-                var yPos = padding.top + innerH - (innerH * t / yTicks);
-                html += '<line x1="' + padding.left + '" y1="' + yPos + '" x2="' + (chartWidth - padding.right) + '" y2="' + yPos + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
-                html += '<text x="' + (padding.left - 8) + '" y="' + (yPos + 4) + '" text-anchor="end" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(yVal) + '</text>';
-            }
+            metrics.forEach(function (m, mi) {
+                // Собираем значения: полные годы + неполный
+                var labels = [];
+                var values = [];
+                var isPartial = [];
+                fullYears.forEach(function (y) {
+                    labels.push(y);
+                    values.push(round2(byYear[y][m.key] / m.div));
+                    isPartial.push(false);
+                });
+                if (partialYear) {
+                    labels.push(partialLabel);
+                    values.push(round2(byYear[partialYear][m.key] / m.div));
+                    isPartial.push(true);
+                }
 
-            // Столбцы
-            yearKeys.forEach(function (y, i) {
-                var val = values[i];
-                var barH = (val / maxVal) * innerH;
-                var x = padding.left + gap * i + (gap - barWidth) / 2;
-                var yBar = padding.top + innerH - barH;
+                // YoY рост % между полными годами
+                var yoyGrowth = [];
+                for (var g = 1; g < fullYears.length; g++) {
+                    var prev = byYear[fullYears[g - 1]][m.key];
+                    var curr = byYear[fullYears[g]][m.key];
+                    yoyGrowth.push(prev > 0 ? round2((curr - prev) / prev * 100) : null);
+                }
 
-                html += '<rect x="' + x + '" y="' + yBar + '" width="' + barWidth + '" height="' + barH + '" fill="' + CHART_COLORS.primary + '" rx="3"/>';
-                html += '<text x="' + (x + barWidth / 2) + '" y="' + (yBar - 6) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.text + '">' + formatNumber(val) + '</text>';
-                html += '<text x="' + (x + barWidth / 2) + '" y="' + (padding.top + innerH + 20) + '" text-anchor="middle" fill="' + CHART_COLORS.textMuted + '">' + y + '</text>';
+                var colSlot = 90; // ширина слота на один столбец (столбец + отступ + место для %)
+                var pad = { top: 50, right: 20, bottom: 45, left: 20 };
+                var innerW = Math.max(labels.length * colSlot, 200);
+                var chartW = innerW + pad.left + pad.right;
+                var chartH = 280;
+                var innerH = chartH - pad.top - pad.bottom;
+
+                var maxVal = Math.max.apply(null, values) * 1.2;
+                if (maxVal === 0) { maxVal = 1; }
+
+                var gap = innerW / labels.length;
+                var barW = Math.min(52, gap * 0.55);
+
+                html += '<div class="analysis-chart-card">';
+                html += '<svg class="analysis-chart analysis-chart-metric" width="' + chartW + '" height="' + chartH + '" viewBox="0 0 ' + chartW + ' ' + chartH + '">';
+                html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+                // Заголовок метрики
+                html += '<text x="' + pad.left + '" y="18" font-size="12" font-weight="600" fill="' + CHART_COLORS.textMuted + '">' + m.title + '</text>';
+
+                // CAGR бейдж
+                if (m.cagr !== null) {
+                    var cagrText = round2(m.cagr) + '%';
+                    var cagrX = chartW - pad.right;
+                    html += '<text x="' + (cagrX - 40) + '" y="16" font-size="11" font-weight="700" fill="' + CHART_COLORS.primary + '">CAGR</text>';
+                    // Бейдж фон
+                    html += '<rect x="' + (cagrX - 40) + '" y="20" width="50" height="20" rx="10" fill="' + CHART_COLORS.primary + '" opacity="0.1"/>';
+                    html += '<text x="' + (cagrX - 15) + '" y="34" font-size="12" font-weight="700" fill="' + CHART_COLORS.primary + '" text-anchor="middle">' + cagrText + '</text>';
+                }
+
+                // Столбцы
+                labels.forEach(function (label, i) {
+                    var val = values[i];
+                    var barH = (val / maxVal) * innerH;
+                    var x = pad.left + gap * i + (gap - barW) / 2;
+                    var yBar = pad.top + innerH - barH;
+                    var fillColor = isPartial[i] ? '#93B4F0' : CHART_COLORS.primary;
+
+                    html += '<rect x="' + x + '" y="' + yBar + '" width="' + barW + '" height="' + barH + '" fill="' + fillColor + '" rx="3"/>';
+                    // Значение над столбцом
+                    html += '<text x="' + (x + barW / 2) + '" y="' + (yBar - 6) + '" text-anchor="middle" font-size="10" font-weight="600" fill="' + CHART_COLORS.text + '">' + formatNumber(val) + '</text>';
+                    // Подпись под столбцом
+                    html += '<text x="' + (x + barW / 2) + '" y="' + (pad.top + innerH + 16) + '" text-anchor="middle" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + label + '</text>';
+                });
+
+                // YoY рост % — линия и подписи между столбцами
+                if (yoyGrowth.length > 0) {
+                    var points = [];
+                    for (var gi = 0; gi < fullYears.length; gi++) {
+                        var cx = pad.left + gap * gi + gap / 2;
+                        var val = values[gi];
+                        var cy = pad.top + innerH - (val / maxVal) * innerH;
+                        points.push({ x: cx, y: cy });
+                    }
+                    // Линия роста (кривая)
+                    if (points.length >= 2) {
+                        var pathD = 'M' + points[0].x + ',' + points[0].y;
+                        for (var pi = 1; pi < points.length; pi++) {
+                            var cpx = (points[pi - 1].x + points[pi].x) / 2;
+                            pathD += ' C' + cpx + ',' + points[pi - 1].y + ' ' + cpx + ',' + points[pi].y + ' ' + points[pi].x + ',' + points[pi].y;
+                        }
+                        html += '<path d="' + pathD + '" fill="none" stroke="#C4B5FD" stroke-width="2"/>';
+                    }
+                    // Подписи % роста между столбцами
+                    for (var yi = 0; yi < yoyGrowth.length; yi++) {
+                        if (yoyGrowth[yi] === null) { continue; }
+                        var midX = (points[yi].x + points[yi + 1].x) / 2;
+                        var midY = Math.min(points[yi].y, points[yi + 1].y) - 2;
+                        var growthTxt = round2(yoyGrowth[yi]) + '%';
+                        html += '<text x="' + midX + '" y="' + midY + '" text-anchor="middle" font-size="10" fill="#8B5CF6">' + growthTxt + '</text>';
+                    }
+                }
+
+                html += '</svg>';
+                html += '</div>';
             });
 
-            html += '</svg></div>';
+            html += '</div>'; // .analysis-charts-row
+            html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать графики PNG</button>';
+            html += '</div>'; // .analysis-section
         }
 
         // --- Кнопки экспорта ---
@@ -1979,6 +2151,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         analysisResults.innerHTML = html;
 
+        // Обработчик экспорта графиков PNG (все метрики в одну картинку)
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svgs = analysisResults.querySelectorAll('.analysis-chart-metric');
+                if (svgs.length === 0) { return; }
+                exportChartsRowPNG(svgs, baseFileName() + '_volumes_charts.png');
+            });
+        }
+
         // Подготовим данные для экспорта
         var exportRows = [];
 
@@ -1986,12 +2168,21 @@ document.addEventListener('DOMContentLoaded', function () {
         exportRows.push({ 'Период': '--- По годам ---' });
         yearKeys.forEach(function (y) {
             var d = byYear[y];
-            var row = { 'Период': y };
+            var label = (y === partialYear) ? partialLabel : y;
+            var row = { 'Период': label };
             if (weightCol) { row['Объём (тыс. тонн)'] = round2(d.weight / 1000); }
             if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
             if (invoiceRubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
             exportRows.push(row);
         });
+        // CAGR в экспорт
+        if (cagrYears > 0) {
+            var cagrRow = { 'Период': 'CAGR' };
+            if (weightCol) { cagrRow['Объём (тыс. тонн)'] = cagrWeight !== null ? round2(cagrWeight) + '%' : ''; }
+            if (statUsdCol) { cagrRow['Стоимость (тыс. USD)'] = cagrUsd !== null ? round2(cagrUsd) + '%' : ''; }
+            if (invoiceRubCol) { cagrRow['Стоимость (тыс. руб.)'] = cagrRub !== null ? round2(cagrRub) + '%' : ''; }
+            exportRows.push(cagrRow);
+        }
 
         // Квартальные данные
         if (quarterKeys.length > 0) {
@@ -2041,6 +2232,69 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var blob = new Blob([UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
         triggerDownload(blob, baseFileName() + '_' + name + '.csv');
+    }
+
+    function exportChartPNG(svgEl, fileName) {
+        var svgData = new XMLSerializer().serializeToString(svgEl);
+        var canvas = document.createElement('canvas');
+        var scale = 2; // Retina
+        canvas.width = svgEl.width.baseVal.value * scale;
+        canvas.height = svgEl.height.baseVal.value * scale;
+        var ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        var img = new Image();
+        img.onload = function () {
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(function (blob) {
+                triggerDownload(blob, fileName);
+            }, 'image/png');
+        };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+    }
+
+    // Экспорт нескольких SVG в одну PNG (горизонтально)
+    function exportChartsRowPNG(svgEls, fileName) {
+        var scale = 2;
+        var gap = 20;
+        var totalW = 0;
+        var maxH = 0;
+        var svgArr = Array.prototype.slice.call(svgEls);
+        svgArr.forEach(function (svg) {
+            totalW += svg.width.baseVal.value;
+            maxH = Math.max(maxH, svg.height.baseVal.value);
+        });
+        totalW += gap * (svgArr.length - 1);
+
+        var canvas = document.createElement('canvas');
+        canvas.width = totalW * scale;
+        canvas.height = maxH * scale;
+        var ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, totalW, maxH);
+
+        var loaded = 0;
+        var images = [];
+        svgArr.forEach(function (svg, i) {
+            var data = new XMLSerializer().serializeToString(svg);
+            var img = new Image();
+            images[i] = { img: img, w: svg.width.baseVal.value };
+            img.onload = function () {
+                loaded++;
+                if (loaded === svgArr.length) {
+                    var xOff = 0;
+                    images.forEach(function (item) {
+                        ctx.drawImage(item.img, xOff, 0);
+                        xOff += item.w + gap;
+                    });
+                    canvas.toBlob(function (blob) { triggerDownload(blob, fileName); }, 'image/png');
+                }
+            };
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data);
+        });
     }
 
     // --- Анализ: Объёмы по странам ---
@@ -2119,9 +2373,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // --- Горизонтальный столбчатый график (топ-10 по весу) ---
         if (weightCol && countries.length >= 2) {
             var top = countries.slice(0, 10);
-            var chartWidth = 700;
             var barHeight = 28;
-            var labelWidth = 160;
+            var maxLabelLen = 0;
+            top.forEach(function (c) { if (c.length > maxLabelLen) { maxLabelLen = c.length; } });
+            var labelWidth = Math.max(160, maxLabelLen * 7.5 + 16);
+            var chartWidth = Math.max(700, labelWidth + 500);
             var padding = { top: 10, right: 80, bottom: 10, left: labelWidth };
             var chartHeight = padding.top + top.length * (barHeight + 8) + padding.bottom;
             var innerW = chartWidth - padding.left - padding.right;
@@ -2147,7 +2403,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 html += '<text x="' + (padding.left + bw + 6) + '" y="' + (y + barHeight / 2 + 4) + '" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(val) + ' (' + pct + '%)</text>';
             });
 
-            html += '</svg></div>';
+            html += '</svg>';
+            html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать график PNG</button>';
+            html += '</div>';
         }
 
         // --- Кнопки экспорта ---
@@ -2157,6 +2415,15 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '</div>';
 
         analysisResults.innerHTML = html;
+
+        // Обработчик экспорта графика PNG
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svg = analysisResults.querySelector('.analysis-chart');
+                if (svg) { exportChartPNG(svg, baseFileName() + '_countries_chart.png'); }
+            });
+        }
 
         // Подготовка данных для экспорта
         var exportRows = [];
@@ -2183,6 +2450,789 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
             exportAnalysisCSV(exportRows, exportHeaders, 'countries');
+        });
+    }
+
+    // --- Анализ: Динамика цен по странам ---
+    var LINE_COLORS = ['#2563EB', '#DC2626', '#16A34A', '#F59E0B', '#8B5CF6',
+                       '#EC4899', '#0891B2', '#EA580C', '#4F46E5', '#059669'];
+
+    function renderPriceDynamicsAnalysis(data, headers) {
+        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
+        var customsCol = findColumn(headers, COL_CUSTOMS);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var yearCol = findColumn(headers, COL_YEAR);
+
+        if (!countryCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «Страна отправления» или «Страна происхождения».</p></div>';
+            return;
+        }
+        if (!customsCol || !weightCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы «Таможенная стоимость» и/или «Вес нетто, кг».</p></div>';
+            return;
+        }
+        if (!yearCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «Год». Выполните обработку с извлечением дат.</p></div>';
+            return;
+        }
+
+        // Группировка: страна → год → { customs, weight }
+        var byCountryYear = {};
+        var totalWeightByCountry = {};
+        var yearsSet = {};
+
+        data.forEach(function (row) {
+            var country = String(row[countryCol] || '').trim();
+            var year = String(row[yearCol] || '').trim();
+            if (!country || !year) { return; }
+
+            var customs = Number(row[customsCol]) || 0;
+            var weight = Number(row[weightCol]) || 0;
+
+            if (!byCountryYear[country]) { byCountryYear[country] = {}; }
+            if (!byCountryYear[country][year]) { byCountryYear[country][year] = { customs: 0, weight: 0 }; }
+            byCountryYear[country][year].customs += customs;
+            byCountryYear[country][year].weight += weight;
+
+            totalWeightByCountry[country] = (totalWeightByCountry[country] || 0) + weight;
+            yearsSet[year] = true;
+        });
+
+        var years = Object.keys(yearsSet).sort();
+        // Топ-10 стран по общему весу
+        var allCountries = Object.keys(totalWeightByCountry).sort(function (a, b) {
+            return totalWeightByCountry[b] - totalWeightByCountry[a];
+        });
+        var top = allCountries.slice(0, 10);
+
+        // Рассчитываем средневзвешенную цену USD/кг
+        var priceData = {}; // { country: { year: price } }
+        top.forEach(function (c) {
+            priceData[c] = {};
+            years.forEach(function (y) {
+                var d = byCountryYear[c] && byCountryYear[c][y];
+                if (d && d.weight > 0) {
+                    priceData[c][y] = round2(d.customs / d.weight);
+                }
+            });
+        });
+
+        // --- Таблица ---
+        var html = '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">Динамика цен по странам (долл. США/кг)</h3>';
+        html += '<div class="data-table-wrapper"><table class="data-table">';
+        html += '<thead><tr><th>Страна</th>';
+        years.forEach(function (y) { html += '<th>' + y + '</th>'; });
+        html += '</tr></thead><tbody>';
+
+        top.forEach(function (c, ci) {
+            html += '<tr><td>' + c + '</td>';
+            years.forEach(function (y) {
+                var price = priceData[c][y];
+                html += '<td class="numeric">' + (price != null ? formatNumber(price) : '—') + '</td>';
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+
+        // --- Линейный график ---
+        if (years.length >= 1 && top.length >= 1) {
+            var chartW = 700;
+            var chartH = 400;
+            var pad = { top: 30, right: 30, bottom: 50, left: 70 };
+            var innerW = chartW - pad.left - pad.right;
+            var innerH = chartH - pad.top - pad.bottom;
+
+            // Находим min/max цен
+            var allPrices = [];
+            top.forEach(function (c) {
+                years.forEach(function (y) {
+                    if (priceData[c][y] != null) { allPrices.push(priceData[c][y]); }
+                });
+            });
+            var minPrice = Math.min.apply(null, allPrices);
+            var maxPrice = Math.max.apply(null, allPrices);
+            var priceRange = maxPrice - minPrice;
+            if (priceRange === 0) { priceRange = 1; }
+            var yMin = Math.max(0, minPrice - priceRange * 0.1);
+            var yMax = maxPrice + priceRange * 0.15;
+            var yRange = yMax - yMin;
+
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">Таможенная стоимость, долл. США/кг</h3>';
+            html += '<svg class="analysis-chart" width="' + chartW + '" height="' + chartH + '" viewBox="0 0 ' + chartW + ' ' + chartH + '">';
+            html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+            // Сетка Y
+            var yTicks = 5;
+            for (var t = 0; t <= yTicks; t++) {
+                var yVal = round2(yMin + yRange * t / yTicks);
+                var yPos = pad.top + innerH - (innerH * t / yTicks);
+                html += '<line x1="' + pad.left + '" y1="' + yPos + '" x2="' + (chartW - pad.right) + '" y2="' + yPos + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+                html += '<text x="' + (pad.left - 8) + '" y="' + (yPos + 4) + '" text-anchor="end" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(yVal) + '</text>';
+            }
+
+            // Подписи годов по X
+            var xStep = years.length > 1 ? innerW / (years.length - 1) : innerW / 2;
+            years.forEach(function (y, i) {
+                var x = pad.left + (years.length > 1 ? xStep * i : innerW / 2);
+                html += '<text x="' + x + '" y="' + (chartH - pad.bottom + 25) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + y + '</text>';
+            });
+
+            // Линии для каждой страны
+            top.forEach(function (c, ci) {
+                var color = LINE_COLORS[ci % LINE_COLORS.length];
+                var points = [];
+                years.forEach(function (y, yi) {
+                    var price = priceData[c][y];
+                    if (price != null) {
+                        var x = pad.left + (years.length > 1 ? xStep * yi : innerW / 2);
+                        var yp = pad.top + innerH - ((price - yMin) / yRange) * innerH;
+                        points.push({ x: x, y: yp, val: price });
+                    }
+                });
+
+                if (points.length >= 2) {
+                    // Кривая линия
+                    var pathD = 'M' + points[0].x + ',' + points[0].y;
+                    for (var pi = 1; pi < points.length; pi++) {
+                        var cpx = (points[pi - 1].x + points[pi].x) / 2;
+                        pathD += ' C' + cpx + ',' + points[pi - 1].y + ' ' + cpx + ',' + points[pi].y + ' ' + points[pi].x + ',' + points[pi].y;
+                    }
+                    html += '<path d="' + pathD + '" fill="none" stroke="' + color + '" stroke-width="2.5"/>';
+                }
+
+                // Точки и подписи значений
+                points.forEach(function (p) {
+                    html += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="' + color + '"/>';
+                    html += '<text x="' + p.x + '" y="' + (p.y - 8) + '" text-anchor="middle" font-size="9" fill="' + color + '">' + formatNumber(p.val) + '</text>';
+                });
+            });
+
+            html += '</svg>';
+
+            // Легенда
+            html += '<div class="chart-legend">';
+            top.forEach(function (c, ci) {
+                var color = LINE_COLORS[ci % LINE_COLORS.length];
+                html += '<span class="chart-legend-item"><span class="chart-legend-color" style="background:' + color + '"></span>' + c + '</span>';
+            });
+            html += '</div>';
+
+            html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать график PNG</button>';
+            html += '</div>';
+        }
+
+        // --- Кнопки экспорта ---
+        html += '<div class="processing-export" style="margin-top:20px">';
+        html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary analysis-export-csv">Скачать CSV</button>';
+        html += '</div>';
+
+        analysisResults.innerHTML = html;
+
+        // Обработчик PNG
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svg = analysisResults.querySelector('.analysis-chart');
+                if (svg) { exportChartPNG(svg, baseFileName() + '_price_dynamics.png'); }
+            });
+        }
+
+        // Данные для экспорта
+        var exportRows = [];
+        top.forEach(function (c) {
+            var row = { 'Страна': c };
+            years.forEach(function (y) {
+                row[y] = priceData[c][y] != null ? priceData[c][y] : '';
+            });
+            exportRows.push(row);
+        });
+        var exportHeaders = ['Страна'].concat(years);
+
+        analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, 'price_dynamics');
+        });
+        analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, 'price_dynamics');
+        });
+    }
+
+    // --- Анализ: Структура импорта (Sankey) ---
+    var SANKEY_COLORS = ['#2563EB', '#16A34A', '#F59E0B', '#DC2626', '#8B5CF6',
+                         '#EC4899', '#0891B2', '#EA580C', '#4F46E5', '#059669',
+                         '#64748B'];
+
+    function renderImportStructureAnalysis(data, headers, selectedYear, topN, opts) {
+        if (!topN) { topN = 15; }
+        if (!opts) { opts = {}; }
+        var sourceColName = opts.sourceCol || COL_SENDER;
+        var targetColName = opts.targetCol || COL_RECEIVER;
+        var sourceLabel = opts.sourceLabel || 'Отправитель';
+        var targetLabel = opts.targetLabel || 'Получатель';
+        var exportName = opts.exportName || 'import_structure';
+
+        var senderCol = findColumn(headers, sourceColName);
+        var receiverCol = findColumn(headers, targetColName);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var yearCol = findColumn(headers, COL_YEAR);
+
+        if (!senderCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «' + sourceColName + '».</p></div>';
+            return;
+        }
+        if (!receiverCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «' + targetColName + '».</p></div>';
+            return;
+        }
+        if (!weightCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «Вес нетто, кг».</p></div>';
+            return;
+        }
+
+        // Собираем доступные годы
+        var yearsSet = {};
+        data.forEach(function (row) {
+            if (yearCol) {
+                var y = String(row[yearCol] || '').trim();
+                if (y) { yearsSet[y] = true; }
+            }
+        });
+        var years = Object.keys(yearsSet).sort();
+
+        // Фильтруем по году
+        var filteredData = data;
+        if (selectedYear && selectedYear !== 'all' && yearCol) {
+            filteredData = data.filter(function (row) {
+                return String(row[yearCol] || '').trim() === selectedYear;
+            });
+        }
+
+        // Нормализация названий компаний
+        function normalizeCompany(name) {
+            var s = name.trim().toUpperCase();
+            // Убираем точки в аббревиатурах: S.A. → SA, Co. → Co, LTD. → LTD
+            s = s.replace(/\.\s*/g, ' ').replace(/\s+/g, ' ').trim();
+            // Убираем запятые в конце
+            s = s.replace(/,\s*$/, '');
+            return s;
+        }
+
+        // Группировка: отправитель → получатель → тонны
+        var senderTotals = {};
+        var receiverTotals = {};
+        var flows = {}; // "sender|||receiver" → weight
+
+        filteredData.forEach(function (row) {
+            var sender = normalizeCompany(String(row[senderCol] || ''));
+            var receiver = normalizeCompany(String(row[receiverCol] || ''));
+            var weight = Number(row[weightCol]) || 0;
+            if (!sender || !receiver || weight <= 0) { return; }
+
+            senderTotals[sender] = (senderTotals[sender] || 0) + weight;
+            receiverTotals[receiver] = (receiverTotals[receiver] || 0) + weight;
+
+            var fk = sender + KEY_SEPARATOR + receiver;
+            flows[fk] = (flows[fk] || 0) + weight;
+        });
+
+        // Отправители и получатели по убыванию веса
+        var sendersSorted = Object.keys(senderTotals).sort(function (a, b) { return senderTotals[b] - senderTotals[a]; });
+        var receiversSorted = Object.keys(receiverTotals).sort(function (a, b) { return receiverTotals[b] - receiverTotals[a]; });
+
+        var leftNodes, rightNodes;
+        var sankeyFlows = [];
+
+        if (topN === 'all' || topN >= sendersSorted.length) {
+            // Все
+            leftNodes = sendersSorted;
+            rightNodes = receiversSorted;
+            Object.keys(flows).forEach(function (fk) {
+                var parts = fk.split(KEY_SEPARATOR);
+                sankeyFlows.push({ source: parts[0], target: parts[1], value: flows[fk] });
+            });
+        } else {
+            // Топ-N + Прочие
+            var topS = sendersSorted.slice(0, topN);
+            var otherSW = 0;
+            var otherSSet = {};
+            sendersSorted.slice(topN).forEach(function (s) { otherSW += senderTotals[s]; otherSSet[s] = true; });
+
+            var topR = receiversSorted.slice(0, topN);
+            var otherRW = 0;
+            var otherRSet = {};
+            receiversSorted.slice(topN).forEach(function (r) { otherRW += receiverTotals[r]; otherRSet[r] = true; });
+
+            leftNodes = topS.slice();
+            if (otherSW > 0) { leftNodes.push('Прочие отпр.'); senderTotals['Прочие отпр.'] = otherSW; }
+            rightNodes = topR.slice();
+            if (otherRW > 0) { rightNodes.push('Прочие пол.'); receiverTotals['Прочие пол.'] = otherRW; }
+
+            var flowMap = {};
+            Object.keys(flows).forEach(function (fk) {
+                var parts = fk.split(KEY_SEPARATOR);
+                var s = otherSSet[parts[0]] ? 'Прочие отпр.' : parts[0];
+                var r = otherRSet[parts[1]] ? 'Прочие пол.' : parts[1];
+                var key = s + KEY_SEPARATOR + r;
+                flowMap[key] = (flowMap[key] || 0) + flows[fk];
+            });
+            leftNodes.forEach(function (s) {
+                rightNodes.forEach(function (r) {
+                    var key = s + KEY_SEPARATOR + r;
+                    if (flowMap[key] && flowMap[key] > 0) {
+                        sankeyFlows.push({ source: s, target: r, value: flowMap[key] });
+                    }
+                });
+            });
+        }
+
+        // Итого
+        var totalWeight = 0;
+        leftNodes.forEach(function (s) { totalWeight += (senderTotals[s] || 0); });
+
+        // --- HTML: селектор года + таблица + Sankey ---
+        var html = '<div class="analysis-section">';
+        html += '<div class="sankey-controls">';
+        html += '<h3 class="analysis-section-title" style="margin:0">Структура импорта: ' + sourceLabel + ' → ' + targetLabel + '</h3>';
+        if (yearCol && years.length > 0) {
+            html += '<select class="sankey-year-select">';
+            html += '<option value="all"' + (!selectedYear || selectedYear === 'all' ? ' selected' : '') + '>Все годы</option>';
+            years.forEach(function (y) {
+                html += '<option value="' + y + '"' + (selectedYear === y ? ' selected' : '') + '>' + y + '</option>';
+            });
+            html += '</select>';
+        }
+        // Селектор топ-N
+        html += '<select class="sankey-topn-select">';
+        [10, 15, 20, 'all'].forEach(function (v) {
+            var label = v === 'all' ? 'Все' : 'Топ-' + v;
+            var sel = (String(topN) === String(v)) ? ' selected' : '';
+            html += '<option value="' + v + '"' + sel + '>' + label + '</option>';
+        });
+        html += '</select>';
+        html += '</div>';
+
+        // Таблица: топ связей
+        var topFlows = sankeyFlows.slice().sort(function (a, b) { return b.value - a.value; }).slice(0, 20);
+        html += '<div class="data-table-wrapper"><table class="data-table">';
+        html += '<thead><tr><th>' + sourceLabel + '</th><th>' + targetLabel + '</th><th>Объём (тонн)</th><th>Доля, %</th></tr></thead><tbody>';
+        topFlows.forEach(function (f) {
+            var pct = totalWeight > 0 ? round2(f.value / 1000 / (totalWeight / 1000) * 100) : 0;
+            html += '<tr><td>' + f.source + '</td><td>' + f.target + '</td>';
+            html += '<td class="numeric">' + formatNumber(round2(f.value / 1000)) + '</td>';
+            html += '<td class="numeric">' + pct + '%</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+
+        // --- Sankey SVG ---
+        var svgW = 900;
+        var nodeW = 18;
+        var nodePad = 8;
+        var labelPadL = 10;
+        var labelPadR = 10;
+        var leftX = 180;
+        var rightX = svgW - 180;
+        var topPad = 20;
+
+        // Высоты узлов пропорционально весу
+        var leftTotal = 0;
+        leftNodes.forEach(function (s) { leftTotal += senderTotals[s] || 0; });
+        var rightTotal = 0;
+        rightNodes.forEach(function (r) { rightTotal += receiverTotals[r] || 0; });
+
+        var availH = Math.max(400, Math.max(leftNodes.length, rightNodes.length) * 45);
+        var svgH = availH + topPad * 2;
+
+        var leftGap = leftNodes.length > 1 ? nodePad : 0;
+        var leftUsable = availH - leftGap * (leftNodes.length - 1);
+        var rightGap = rightNodes.length > 1 ? nodePad : 0;
+        var rightUsable = availH - rightGap * (rightNodes.length - 1);
+
+        // Позиции левых узлов
+        var leftPositions = {};
+        var yOff = topPad;
+        leftNodes.forEach(function (s, i) {
+            var h = Math.max(4, (senderTotals[s] / leftTotal) * leftUsable);
+            leftPositions[s] = { y: yOff, h: h, color: SANKEY_COLORS[i % SANKEY_COLORS.length] };
+            yOff += h + leftGap;
+        });
+
+        // Позиции правых узлов
+        var rightPositions = {};
+        yOff = topPad;
+        rightNodes.forEach(function (r, i) {
+            var h = Math.max(4, (receiverTotals[r] / rightTotal) * rightUsable);
+            rightPositions[r] = { y: yOff, h: h, color: SANKEY_COLORS[i % SANKEY_COLORS.length] };
+            yOff += h + rightGap;
+        });
+
+        html += '<div class="analysis-section">';
+        html += '<svg class="analysis-chart sankey-chart" width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
+        html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+        // Рисуем потоки (кривые Безье)
+        // Сначала сортируем потоки по source порядку для красивой укладки
+        var leftFlowOffset = {};
+        leftNodes.forEach(function (s) { leftFlowOffset[s] = 0; });
+        var rightFlowOffset = {};
+        rightNodes.forEach(function (r) { rightFlowOffset[r] = 0; });
+
+        // Сортируем потоки: по левому узлу, потом по правому
+        sankeyFlows.sort(function (a, b) {
+            var ai = leftNodes.indexOf(a.source);
+            var bi = leftNodes.indexOf(b.source);
+            if (ai !== bi) { return ai - bi; }
+            return rightNodes.indexOf(a.target) - rightNodes.indexOf(b.target);
+        });
+
+        sankeyFlows.forEach(function (f) {
+            var lp = leftPositions[f.source];
+            var rp = rightPositions[f.target];
+            if (!lp || !rp) { return; }
+
+            var flowH_left = (f.value / (senderTotals[f.source] || 1)) * lp.h;
+            var flowH_right = (f.value / (receiverTotals[f.target] || 1)) * rp.h;
+
+            var y0 = lp.y + leftFlowOffset[f.source];
+            var y1 = rp.y + rightFlowOffset[f.target];
+
+            var x0 = leftX + nodeW;
+            var x1 = rightX;
+
+            var cpx = (x0 + x1) / 2;
+
+            // Путь: верхняя кривая + нижняя кривая (замкнутая область)
+            var pathD = 'M' + x0 + ',' + y0 +
+                ' C' + cpx + ',' + y0 + ' ' + cpx + ',' + y1 + ' ' + x1 + ',' + y1 +
+                ' L' + x1 + ',' + (y1 + flowH_right) +
+                ' C' + cpx + ',' + (y1 + flowH_right) + ' ' + cpx + ',' + (y0 + flowH_left) + ' ' + x0 + ',' + (y0 + flowH_left) +
+                ' Z';
+
+            html += '<path d="' + pathD + '" fill="' + lp.color + '" opacity="0.35"/>';
+
+            leftFlowOffset[f.source] += flowH_left;
+            rightFlowOffset[f.target] += flowH_right;
+        });
+
+        // Рисуем левые узлы (прямоугольники + подписи)
+        leftNodes.forEach(function (s) {
+            var p = leftPositions[s];
+            var tons = round2(senderTotals[s] / 1000);
+            html += '<rect x="' + leftX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
+            // Подпись слева
+            var labelY = p.y + p.h / 2;
+            html += '<text x="' + (leftX - labelPadL) + '" y="' + (labelY - 2) + '" text-anchor="end" font-size="11" font-weight="600" fill="' + CHART_COLORS.text + '">' + s + '</text>';
+            html += '<text x="' + (leftX - labelPadL) + '" y="' + (labelY + 12) + '" text-anchor="end" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(tons) + '</text>';
+        });
+
+        // Рисуем правые узлы
+        rightNodes.forEach(function (r) {
+            var p = rightPositions[r];
+            var tons = round2(receiverTotals[r] / 1000);
+            html += '<rect x="' + rightX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
+            // Подпись справа
+            var labelY = p.y + p.h / 2;
+            html += '<text x="' + (rightX + nodeW + labelPadR) + '" y="' + (labelY - 2) + '" font-size="11" font-weight="600" fill="' + CHART_COLORS.text + '">' + r + '</text>';
+            html += '<text x="' + (rightX + nodeW + labelPadR) + '" y="' + (labelY + 12) + '" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(tons) + '</text>';
+        });
+
+        // Заголовки колонок
+        html += '<text x="' + (leftX + nodeW / 2) + '" y="14" text-anchor="middle" font-size="12" font-weight="700" fill="' + CHART_COLORS.primary + '">' + sourceLabel + '</text>';
+        html += '<text x="' + (rightX + nodeW / 2) + '" y="14" text-anchor="middle" font-size="12" font-weight="700" fill="' + CHART_COLORS.primary + '">' + targetLabel + '</text>';
+
+        html += '</svg>';
+        html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать график PNG</button>';
+        html += '</div>';
+
+        // --- Кнопки экспорта ---
+        html += '<div class="processing-export" style="margin-top:20px">';
+        html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary analysis-export-csv">Скачать CSV</button>';
+        html += '</div>';
+
+        analysisResults.innerHTML = html;
+
+        // Получаем текущие значения селекторов для перерисовки
+        var yearSelect = analysisResults.querySelector('.sankey-year-select');
+        var topnSelect = analysisResults.querySelector('.sankey-topn-select');
+
+        function rerender() {
+            var curYear = yearSelect ? yearSelect.value : 'all';
+            var curTopN = topnSelect.value === 'all' ? 'all' : Number(topnSelect.value);
+            renderImportStructureAnalysis(data, headers, curYear, curTopN, opts);
+        }
+
+        if (yearSelect) { yearSelect.addEventListener('change', rerender); }
+        topnSelect.addEventListener('change', rerender);
+
+        // PNG
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svg = analysisResults.querySelector('.sankey-chart');
+                if (svg) { exportChartPNG(svg, baseFileName() + '_' + exportName + '.png'); }
+            });
+        }
+
+        // Данные для экспорта
+        var exportRows = [];
+        sankeyFlows.sort(function (a, b) { return b.value - a.value; }).forEach(function (f) {
+            exportRows.push({
+                [sourceLabel]: f.source,
+                [targetLabel]: f.target,
+                'Объём (тонн)': round2(f.value / 1000),
+                'Доля, %': totalWeight > 0 ? round2(f.value / totalWeight * 100) : 0
+            });
+        });
+        var exportHeaders = [sourceLabel, targetLabel, 'Объём (тонн)', 'Доля, %'];
+
+        analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, exportName);
+        });
+        analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, exportName);
+        });
+    }
+
+    // --- Анализ: Поквартальная динамика цен ---
+    var YEAR_COLORS = ['#2563EB', '#8B5CF6', '#F59E0B', '#16A34A', '#DC2626', '#EC4899', '#0891B2'];
+
+    function renderQuarterlyPricesAnalysis(data, headers) {
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var customsCol = findColumn(headers, COL_CUSTOMS);
+        var invoiceRubCol = findColumn(headers, COL_INVOICE_RUB);
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+
+        if (!weightCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «Вес нетто, кг».</p></div>';
+            return;
+        }
+        if (!customsCol && !invoiceRubCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы «Таможенная стоимость» или «Фактурная стоимость в рублях».</p></div>';
+            return;
+        }
+        if (!yearCol || !quarterCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы «Год» и «КВАРТАЛ». Выполните обработку с извлечением дат.</p></div>';
+            return;
+        }
+
+        // Группируем: год → квартал → { customs, rub, weight }
+        var byYearQuarter = {};
+        var byYear = {};
+        var yearsSet = {};
+
+        data.forEach(function (row) {
+            var year = String(row[yearCol] || '').trim();
+            var q = String(row[quarterCol] || '').trim();
+            if (!year || !q) { return; }
+
+            var weight = Number(row[weightCol]) || 0;
+            var customs = customsCol ? (Number(row[customsCol]) || 0) : 0;
+            var rub = invoiceRubCol ? (Number(row[invoiceRubCol]) || 0) : 0;
+
+            yearsSet[year] = true;
+
+            if (!byYearQuarter[year]) { byYearQuarter[year] = {}; }
+            if (!byYearQuarter[year][q]) { byYearQuarter[year][q] = { customs: 0, rub: 0, weight: 0 }; }
+            byYearQuarter[year][q].customs += customs;
+            byYearQuarter[year][q].rub += rub;
+            byYearQuarter[year][q].weight += weight;
+
+            if (!byYear[year]) { byYear[year] = { customs: 0, rub: 0, weight: 0 }; }
+            byYear[year].customs += customs;
+            byYear[year].rub += rub;
+            byYear[year].weight += weight;
+        });
+
+        var years = Object.keys(yearsSet).sort();
+        var quarters = ['1', '2', '3', '4'];
+
+        // Вычисляем средневзвешенные цены
+        // priceData[year][q] = { usd: ..., rub: ... }
+        var priceData = {};
+        var avgPrices = {}; // год → { usd, rub }
+        years.forEach(function (y) {
+            priceData[y] = {};
+            quarters.forEach(function (q) {
+                var d = byYearQuarter[y] && byYearQuarter[y][q];
+                if (d && d.weight > 0) {
+                    priceData[y][q] = {
+                        usd: customsCol ? round2(d.customs / d.weight) : null,
+                        rub: invoiceRubCol ? round2(d.rub / d.weight) : null
+                    };
+                }
+            });
+            var yd = byYear[y];
+            if (yd && yd.weight > 0) {
+                avgPrices[y] = {
+                    usd: customsCol ? round2(yd.customs / yd.weight) : null,
+                    rub: invoiceRubCol ? round2(yd.rub / yd.weight) : null
+                };
+            }
+        });
+
+        // Определяем метрики
+        var metrics = [];
+        if (invoiceRubCol) { metrics.push({ key: 'rub', title: 'Поквартальная динамика цен, руб./кг', unit: 'руб./кг' }); }
+        if (customsCol) { metrics.push({ key: 'usd', title: 'Поквартальная динамика цен, долл. США/кг', unit: 'USD/кг' }); }
+
+        var html = '';
+
+        metrics.forEach(function (m) {
+            // Собираем все значения для масштаба
+            var allVals = [];
+            years.forEach(function (y) {
+                quarters.forEach(function (q) {
+                    var pd = priceData[y][q];
+                    if (pd && pd[m.key] != null) { allVals.push(pd[m.key]); }
+                });
+            });
+            if (allVals.length === 0) { return; }
+
+            var minV = Math.min.apply(null, allVals);
+            var maxV = Math.max.apply(null, allVals);
+            var range = maxV - minV;
+            if (range === 0) { range = 1; }
+            var yMin = Math.max(0, minV - range * 0.15);
+            var yMax = maxV + range * 0.2;
+            var yRange = yMax - yMin;
+
+            var chartW = 550;
+            var chartH = 320;
+            var pad = { top: 30, right: 200, bottom: 50, left: 60 };
+            var innerW = chartW - pad.left - pad.right;
+            var innerH = chartH - pad.top - pad.bottom;
+
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">' + m.title + '</h3>';
+            html += '<svg class="analysis-chart analysis-chart-quarterly" width="' + chartW + '" height="' + chartH + '" viewBox="0 0 ' + chartW + ' ' + chartH + '">';
+            html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+            // Сетка Y
+            var yTicks = 5;
+            for (var t = 0; t <= yTicks; t++) {
+                var yVal = round2(yMin + yRange * t / yTicks);
+                var yPos = pad.top + innerH - (innerH * t / yTicks);
+                html += '<line x1="' + pad.left + '" y1="' + yPos + '" x2="' + (pad.left + innerW) + '" y2="' + yPos + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+                html += '<text x="' + (pad.left - 8) + '" y="' + (yPos + 4) + '" text-anchor="end" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(yVal) + '</text>';
+            }
+
+            // Подписи кварталов по X
+            var xStep = quarters.length > 1 ? innerW / (quarters.length - 1) : innerW / 2;
+            quarters.forEach(function (q, qi) {
+                var x = pad.left + xStep * qi;
+                html += '<text x="' + x + '" y="' + (chartH - pad.bottom + 25) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '">Q' + q + '</text>';
+            });
+
+            // Линии для каждого года
+            years.forEach(function (y, yi) {
+                var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+                var points = [];
+                quarters.forEach(function (q, qi) {
+                    var pd = priceData[y][q];
+                    if (pd && pd[m.key] != null) {
+                        var x = pad.left + xStep * qi;
+                        var yp = pad.top + innerH - ((pd[m.key] - yMin) / yRange) * innerH;
+                        points.push({ x: x, y: yp, val: pd[m.key] });
+                    }
+                });
+
+                if (points.length >= 2) {
+                    var pathD = 'M' + points[0].x + ',' + points[0].y;
+                    for (var pi = 1; pi < points.length; pi++) {
+                        pathD += ' L' + points[pi].x + ',' + points[pi].y;
+                    }
+                    html += '<path d="' + pathD + '" fill="none" stroke="' + color + '" stroke-width="2.5"/>';
+                }
+
+                // Точки и подписи
+                points.forEach(function (p) {
+                    html += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="' + color + '"/>';
+                    html += '<text x="' + p.x + '" y="' + (p.y - 10) + '" text-anchor="middle" font-size="10" font-weight="600" fill="' + color + '">' + formatNumber(p.val) + '</text>';
+                });
+            });
+
+            // Средневзвешенная цена справа
+            var rightX = pad.left + innerW + 30;
+            html += '<text x="' + (rightX + 50) + '" y="' + (pad.top - 5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + CHART_COLORS.text + '">Средневзвешенная</text>';
+            html += '<text x="' + (rightX + 50) + '" y="' + (pad.top + 10) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + CHART_COLORS.text + '">цена</text>';
+
+            years.forEach(function (y, yi) {
+                var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+                var avg = avgPrices[y] && avgPrices[y][m.key];
+                var cardY = pad.top + 25 + yi * 45;
+
+                // Год
+                html += '<text x="' + (rightX + 50) + '" y="' + cardY + '" text-anchor="middle" font-size="12" font-weight="700" fill="' + color + '">' + y + '</text>';
+                // Рамка + значение
+                html += '<rect x="' + (rightX + 10) + '" y="' + (cardY + 4) + '" width="80" height="22" rx="4" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
+                html += '<text x="' + (rightX + 50) + '" y="' + (cardY + 19) + '" text-anchor="middle" font-size="12" font-weight="600" fill="' + color + '">' + (avg != null ? formatNumber(avg) : '—') + '</text>';
+            });
+
+            html += '</svg>';
+            html += '</div>';
+        });
+
+        // Легенда
+        html += '<div class="chart-legend" style="margin-top:8px">';
+        years.forEach(function (y, yi) {
+            var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+            html += '<span class="chart-legend-item"><span class="chart-legend-color" style="background:' + color + ';height:3px;width:20px"></span>' + y + '</span>';
+        });
+        html += '</div>';
+
+        // Кнопки экспорта
+        html += '<div class="processing-export" style="margin-top:20px">';
+        html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary analysis-export-csv">Скачать CSV</button>';
+        html += '<button class="btn btn-secondary analysis-export-chart-png" style="font-size:12px">Скачать графики PNG</button>';
+        html += '</div>';
+
+        analysisResults.innerHTML = html;
+
+        // PNG — все графики
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svgs = analysisResults.querySelectorAll('.analysis-chart-quarterly');
+                if (svgs.length === 1) {
+                    exportChartPNG(svgs[0], baseFileName() + '_quarterly_prices.png');
+                } else if (svgs.length > 1) {
+                    exportChartsRowPNG(svgs, baseFileName() + '_quarterly_prices.png');
+                }
+            });
+        }
+
+        // Данные для экспорта
+        var exportRows = [];
+        years.forEach(function (y) {
+            quarters.forEach(function (q) {
+                var pd = priceData[y][q];
+                var row = { 'Год': y, 'Квартал': 'Q' + q };
+                if (customsCol) { row['USD/кг'] = pd && pd.usd != null ? pd.usd : ''; }
+                if (invoiceRubCol) { row['Руб./кг'] = pd && pd.rub != null ? pd.rub : ''; }
+                exportRows.push(row);
+            });
+            // Средневзвешенная
+            var avg = avgPrices[y];
+            var avgRow = { 'Год': y, 'Квартал': 'Средневзвешенная' };
+            if (customsCol) { avgRow['USD/кг'] = avg && avg.usd != null ? avg.usd : ''; }
+            if (invoiceRubCol) { avgRow['Руб./кг'] = avg && avg.rub != null ? avg.rub : ''; }
+            exportRows.push(avgRow);
+            exportRows.push({ 'Год': '', 'Квартал': '' });
+        });
+
+        var exportHeaders = ['Год', 'Квартал'];
+        if (customsCol) { exportHeaders.push('USD/кг'); }
+        if (invoiceRubCol) { exportHeaders.push('Руб./кг'); }
+
+        analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, 'quarterly_prices');
+        });
+        analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, 'quarterly_prices');
         });
     }
 

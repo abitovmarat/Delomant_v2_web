@@ -1082,6 +1082,64 @@ body {
     margin-bottom: 16px;
 }
 
+.analysis-charts-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.analysis-chart-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px;
+    flex: 0 0 auto;
+}
+
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--color-text);
+}
+
+.chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-legend-color {
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.sankey-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.sankey-year-select {
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+.sankey-chart {
+    max-width: 100%;
+    overflow: visible;
+}
+
 .analysis-empty {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
