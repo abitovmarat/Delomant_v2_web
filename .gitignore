@@ -4,3 +4,4 @@ node_modules/
 memory/
 *.xlsx
 *.xls
+scripts/fetch_cbr_rates.js

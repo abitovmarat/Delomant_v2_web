@@ -59,24 +59,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var CHART_FONT = 'DejaVu Sans, sans-serif';
     var MIME_CSV = 'text/csv;charset=utf-8';
 
-    var CBR_API_BASE = 'https://www.cbr-xml-daily.ru';
+    var CBR_RATES_URL = 'data/cbr_rates.json';
     var COL_CURRENCY_CODE = 'Код валюты';
     var COL_CBR_RATE = 'Курс ЦБ РФ';
     var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
-    var CBR_MAX_RETRY = 3;
 
-    var LS_RATE_CACHE_KEY = 'delomant_cbr_rates';
-    var rateCache = {};
-
-    // Загружаем кэш курсов из localStorage при старте
-    try {
-        var saved = localStorage.getItem(LS_RATE_CACHE_KEY);
-        if (saved) { rateCache = JSON.parse(saved); }
-    } catch (e) { /* ignore */ }
-
-    function saveRateCache() {
-        try { localStorage.setItem(LS_RATE_CACHE_KEY, JSON.stringify(rateCache)); } catch (e) { /* ignore */ }
-    }
+    var rateCache = null; // Загружается один раз из JSON-файла
 
     function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -890,52 +878,35 @@ document.addEventListener('DOMContentLoaded', function () {
         return { colName: colName, count: count };
     }
 
-    // --- Курс ЦБ РФ ---
+    // --- Курс ЦБ РФ (из локального JSON-файла) ---
 
-    function formatDateForCBR(isoDate) {
-        var parts = isoDate.split('-');
-        return { yyyy: parts[0], mm: parts[1], dd: parts[2] };
+    function loadRateCache() {
+        if (rateCache) { return Promise.resolve(rateCache); }
+        return fetch(CBR_RATES_URL)
+            .then(function (resp) {
+                if (!resp.ok) { throw new Error(resp.status); }
+                return resp.json();
+            })
+            .then(function (json) {
+                rateCache = json;
+                return rateCache;
+            })
+            .catch(function () {
+                rateCache = {};
+                return rateCache;
+            });
     }
 
-    function fetchCBRRate(dateStr) {
-        if (rateCache[dateStr]) {
-            return Promise.resolve(rateCache[dateStr]);
+    function findClosestRate(iso) {
+        if (rateCache[iso]) { return rateCache[iso]; }
+        // Если дата — выходной, берём предыдущий рабочий день (до 5 дней назад)
+        var d = new Date(iso);
+        for (var i = 1; i <= 5; i++) {
+            d.setDate(d.getDate() - 1);
+            var prev = d.toISOString().split('T')[0];
+            if (rateCache[prev]) { return rateCache[prev]; }
         }
-
-        // Пробуем дату и до 3 предыдущих дней (выходные)
-        function tryDate(ds, attempt) {
-            if (attempt > CBR_MAX_RETRY) { return Promise.resolve(null); }
-            if (rateCache[ds]) { return Promise.resolve(rateCache[ds]); }
-
-            var p = formatDateForCBR(ds);
-            var url = CBR_API_BASE + '/archive/' + p.yyyy + '/' + p.mm + '/' + p.dd + '/daily_json.js';
-
-            return fetch(url, { signal: AbortSignal.timeout(8000) })
-                .then(function (resp) {
-                    if (!resp.ok) { throw new Error(resp.status); }
-                    return resp.json();
-                })
-                .then(function (json) {
-                    var rates = {};
-                    var valute = json.Valute || {};
-                    Object.keys(valute).forEach(function (key) {
-                        var cur = valute[key];
-                        rates[cur.CharCode] = round2(cur.Value / cur.Nominal);
-                    });
-                    rates['RUB'] = 1;
-                    rateCache[ds] = rates;
-                    rateCache[dateStr] = rates; // Кэш и для исходной даты
-                    return rates;
-                })
-                .catch(function () {
-                    var d = new Date(ds);
-                    d.setDate(d.getDate() - 1);
-                    var prev = d.toISOString().split('T')[0];
-                    return tryDate(prev, attempt + 1);
-                });
-        }
-
-        return tryDate(dateStr, 0);
+        return null;
     }
 
     function applyCBRRates(data, headers) {
@@ -950,51 +921,22 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        // Собираем уникальные даты
-        var uniqueDates = {};
-        data.forEach(function (row) {
-            var d = parseDate(row[dateCol]);
-            if (d) {
-                var iso = d.toISOString().split('T')[0];
-                uniqueDates[iso] = true;
-            }
-        });
-        var dateList = Object.keys(uniqueDates).sort();
-
-        // Отфильтруем даты, которые уже есть в кэше
-        var uncachedDates = dateList.filter(function (ds) { return !rateCache[ds]; });
-
-        var BATCH_SIZE = 10;
-        var loaded = dateList.length - uncachedDates.length;
-        function fetchBatch(index) {
-            if (index >= uncachedDates.length) { return Promise.resolve(); }
-            var batch = uncachedDates.slice(index, index + BATCH_SIZE);
-            return Promise.all(batch.map(function (ds) { return fetchCBRRate(ds); }))
-                .then(function () {
-                    loaded += batch.length;
-                    if (applyBtn && dateList.length > 1) {
-                        applyBtn.textContent = 'Курсы ЦБ: ' + loaded + ' / ' + dateList.length;
-                    }
-                    return fetchBatch(index + BATCH_SIZE);
-                });
-        }
-
-        return fetchBatch(0).then(function () {
-            saveRateCache();
+        return loadRateCache().then(function () {
             var count = 0;
             var errors = 0;
+            var uniqueDates = {};
 
             data.forEach(function (row) {
                 var d = parseDate(row[dateCol]);
                 if (!d) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
 
                 var iso = d.toISOString().split('T')[0];
+                uniqueDates[iso] = true;
                 var currency = String(row[currCol] || '').trim().toUpperCase();
                 var invoiceVal = Number(row[invoiceCol]);
 
                 if (!currency) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
 
-                // RUB — курс 1
                 if (currency === 'RUB' || currency === 'RUR') {
                     row[COL_CBR_RATE] = 1;
                     row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal) : '';
@@ -1002,7 +944,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                var rates = rateCache[iso];
+                var rates = findClosestRate(iso);
                 if (!rates || !rates[currency]) {
                     row[COL_CBR_RATE] = '';
                     row[COL_INVOICE_RUB_CBR] = '';
@@ -1016,11 +958,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 count++;
             });
 
-            // Добавить колонки
             if (headers.indexOf(COL_CBR_RATE) === -1) { headers.push(COL_CBR_RATE); }
             if (headers.indexOf(COL_INVOICE_RUB_CBR) === -1) { headers.push(COL_INVOICE_RUB_CBR); }
 
-            return { count: count, errors: errors, colNames: [COL_CBR_RATE, COL_INVOICE_RUB_CBR], dates: dateList.length };
+            return { count: count, errors: errors, colNames: [COL_CBR_RATE, COL_INVOICE_RUB_CBR], dates: Object.keys(uniqueDates).length };
         });
     }
 
