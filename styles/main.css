@@ -963,6 +963,22 @@ body {
     margin-top: 16px;
 }
 
+.processing-download-report {
+    margin-top: 10px;
+    font-size: 12px;
+    padding: 4px 12px;
+    color: var(--color-text-muted);
+    background: none;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.processing-download-report:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+}
+
 /* ================================
    Data Table
    ================================ */
