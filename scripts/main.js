@@ -425,6 +425,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 '</label>';
         });
         columnsList.innerHTML = html;
+        columnsList.classList.remove('expanded');
+
+        if (columnsToggleBtn) {
+            setTimeout(function () {
+                if (columnsList.scrollHeight > COLUMNS_COLLAPSE_HEIGHT) {
+                    columnsToggleBtn.style.display = '';
+                    columnsToggleBtn.textContent = 'Показать все ▼';
+                } else {
+                    columnsToggleBtn.style.display = 'none';
+                }
+            }, 0);
+        }
 
         columnsList.querySelectorAll('.column-checkbox').forEach(function (cb) {
             cb.addEventListener('change', function () {

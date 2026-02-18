@@ -380,6 +380,12 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.columns-list.expanded {
+    max-height: none;
 }
 
 .columns-toggle-btn {
