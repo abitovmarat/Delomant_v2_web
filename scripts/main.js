@@ -616,7 +616,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var opsDeselectAll = document.querySelector('.operations-deselect-all');
     if (opsSelectAll) {
         opsSelectAll.addEventListener('click', function () {
-            document.querySelectorAll('.operation-list .operation-checkbox').forEach(function (cb) { cb.checked = true; });
+            document.querySelectorAll('.operation-list .operation-item[data-op]').forEach(function (item) {
+                if (item.getAttribute('data-op') !== 'ratio') {
+                    item.querySelector('.operation-checkbox').checked = true;
+                }
+            });
         });
     }
     if (opsDeselectAll) {
@@ -882,40 +886,45 @@ document.addEventListener('DOMContentLoaded', function () {
         return { yyyy: parts[0], mm: parts[1], dd: parts[2] };
     }
 
-    function fetchCBRRate(dateStr, retries) {
-        if (retries === undefined) { retries = 0; }
+    function fetchCBRRate(dateStr) {
         if (rateCache[dateStr]) {
             return Promise.resolve(rateCache[dateStr]);
         }
 
-        var p = formatDateForCBR(dateStr);
-        var url = CBR_API_BASE + '/archive/' + p.yyyy + '/' + p.mm + '/' + p.dd + '/daily_json.js';
+        // Пробуем дату и до 3 предыдущих дней (выходные)
+        function tryDate(ds, attempt) {
+            if (attempt > CBR_MAX_RETRY) { return Promise.resolve(null); }
+            if (rateCache[ds]) { return Promise.resolve(rateCache[ds]); }
 
-        return fetch(url)
-            .then(function (resp) {
-                if (!resp.ok) { throw new Error(resp.status); }
-                return resp.json();
-            })
-            .then(function (json) {
-                var rates = {};
-                var valute = json.Valute || {};
-                Object.keys(valute).forEach(function (key) {
-                    var cur = valute[key];
-                    rates[cur.CharCode] = round2(cur.Value / cur.Nominal);
-                });
-                rates['RUB'] = 1;
-                rateCache[dateStr] = rates;
-                return rates;
-            })
-            .catch(function () {
-                if (retries < CBR_MAX_RETRY) {
-                    var d = new Date(dateStr);
+            var p = formatDateForCBR(ds);
+            var url = CBR_API_BASE + '/archive/' + p.yyyy + '/' + p.mm + '/' + p.dd + '/daily_json.js';
+
+            return fetch(url, { signal: AbortSignal.timeout(8000) })
+                .then(function (resp) {
+                    if (!resp.ok) { throw new Error(resp.status); }
+                    return resp.json();
+                })
+                .then(function (json) {
+                    var rates = {};
+                    var valute = json.Valute || {};
+                    Object.keys(valute).forEach(function (key) {
+                        var cur = valute[key];
+                        rates[cur.CharCode] = round2(cur.Value / cur.Nominal);
+                    });
+                    rates['RUB'] = 1;
+                    rateCache[ds] = rates;
+                    rateCache[dateStr] = rates; // Кэш и для исходной даты
+                    return rates;
+                })
+                .catch(function () {
+                    var d = new Date(ds);
                     d.setDate(d.getDate() - 1);
                     var prev = d.toISOString().split('T')[0];
-                    return fetchCBRRate(prev, retries + 1);
-                }
-                return null;
-            });
+                    return tryDate(prev, attempt + 1);
+                });
+        }
+
+        return tryDate(dateStr, 0);
     }
 
     function applyCBRRates(data, headers) {
@@ -939,18 +948,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 uniqueDates[iso] = true;
             }
         });
-        var dateList = Object.keys(uniqueDates);
+        var dateList = Object.keys(uniqueDates).sort();
 
-        // Загружаем курсы батчами по 5, чтобы не перегружать API
-        var BATCH_SIZE = 5;
-        function fetchBatch(index) {
-            var batch = dateList.slice(index, index + BATCH_SIZE);
-            if (batch.length === 0) { return Promise.resolve(); }
-            return Promise.all(batch.map(function (ds) { return fetchCBRRate(ds); }))
-                .then(function () { return fetchBatch(index + BATCH_SIZE); });
+        // Загружаем последовательно по одному — надёжнее, не перегружаем API
+        var loaded = 0;
+        function fetchSequential(index) {
+            if (index >= dateList.length) { return Promise.resolve(); }
+            return fetchCBRRate(dateList[index]).then(function () {
+                loaded++;
+                if (applyBtn && dateList.length > 1) {
+                    applyBtn.textContent = 'Курсы ЦБ: ' + loaded + ' / ' + dateList.length;
+                }
+                return fetchSequential(index + 1);
+            });
         }
 
-        return fetchBatch(0).then(function () {
+        return fetchSequential(0).then(function () {
             var count = 0;
             var errors = 0;
 
