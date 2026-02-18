@@ -1584,9 +1584,29 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function downloadProcessedXLSX() {
         var data = appState.processedData;
+        var headers = getActiveHeaders();
         if (data.length === 0 || typeof XLSX === 'undefined') { return; }
 
-        var ws = XLSX.utils.json_to_sheet(data, { header: getActiveHeaders() });
+        var ws = XLSX.utils.json_to_sheet(data, { header: headers });
+
+        // Автоширина колонок по содержимому
+        var colWidths = headers.map(function (h, i) {
+            var maxLen = h.length;
+            var sampleSize = Math.min(data.length, 100);
+            for (var r = 0; r < sampleSize; r++) {
+                var val = data[r][h];
+                if (val != null) {
+                    var len = String(val).length;
+                    if (len > maxLen) { maxLen = len; }
+                }
+            }
+            return { wch: Math.min(maxLen + 2, 50) };
+        });
+        ws['!cols'] = colWidths;
+
+        // Закрепить первую строку (шапку)
+        ws['!freeze'] = { xSplit: "0", ySplit: "1", topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
+
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Processed');
         XLSX.writeFile(wb, baseFileName() + '_processed.xlsx');
