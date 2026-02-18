@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var MIME_CSV = 'text/csv;charset=utf-8';
 
     var CBR_RATES_URL = 'data/cbr_rates.json';
+    var CBR_API_BASE = 'https://www.cbr-xml-daily.ru';
     var COL_CURRENCY_CODE = 'Код валюты';
     var COL_CBR_RATE = 'Курс ЦБ РФ';
     var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
@@ -909,6 +910,59 @@ document.addEventListener('DOMContentLoaded', function () {
         return null;
     }
 
+    // Fallback: загрузить недостающие даты через API cbr-xml-daily.ru
+    function fetchRateFromAPI(dateStr) {
+        function tryDate(ds, attempt) {
+            if (attempt > 3) { return Promise.resolve(null); }
+            if (rateCache[ds]) { return Promise.resolve(rateCache[ds]); }
+            var parts = ds.split('-');
+            var url = CBR_API_BASE + '/archive/' + parts[0] + '/' + parts[1] + '/' + parts[2] + '/daily_json.js';
+            return fetch(url, { signal: AbortSignal.timeout(8000) })
+                .then(function (resp) {
+                    if (!resp.ok) { throw new Error(resp.status); }
+                    return resp.json();
+                })
+                .then(function (json) {
+                    var rates = {};
+                    var valute = json.Valute || {};
+                    Object.keys(valute).forEach(function (key) {
+                        var cur = valute[key];
+                        rates[cur.CharCode] = round2(cur.Value / cur.Nominal);
+                    });
+                    rates['RUB'] = 1;
+                    rateCache[ds] = rates;
+                    rateCache[dateStr] = rates;
+                    return rates;
+                })
+                .catch(function () {
+                    var d = new Date(ds);
+                    d.setDate(d.getDate() - 1);
+                    var prev = d.toISOString().split('T')[0];
+                    return tryDate(prev, attempt + 1);
+                });
+        }
+        return tryDate(dateStr, 0);
+    }
+
+    function fetchMissingRates(dateList) {
+        // Находим даты, которых нет в кэше (даже с учётом ±5 дней)
+        var missing = dateList.filter(function (iso) { return !findClosestRate(iso); });
+        if (missing.length === 0) { return Promise.resolve(0); }
+
+        // Загружаем по 3 параллельно
+        var loaded = 0;
+        function fetchBatch(index) {
+            if (index >= missing.length) { return Promise.resolve(); }
+            var batch = missing.slice(index, index + 3);
+            return Promise.all(batch.map(function (ds) { return fetchRateFromAPI(ds); }))
+                .then(function () {
+                    loaded += batch.length;
+                    return fetchBatch(index + 3);
+                });
+        }
+        return fetchBatch(0).then(function () { return missing.length; });
+    }
+
     function applyCBRRates(data, headers) {
         var dateCol = findColumn(headers, COL_DATE_REG) || findColumn(headers, COL_DATE_RELEASE);
         var currCol = findColumn(headers, COL_CURRENCY_CODE);
@@ -922,46 +976,55 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return loadRateCache().then(function () {
-            var count = 0;
-            var errors = 0;
+            // Собираем уникальные даты из данных
             var uniqueDates = {};
-
             data.forEach(function (row) {
                 var d = parseDate(row[dateCol]);
-                if (!d) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
-
-                var iso = d.toISOString().split('T')[0];
-                uniqueDates[iso] = true;
-                var currency = String(row[currCol] || '').trim().toUpperCase();
-                var invoiceVal = Number(row[invoiceCol]);
-
-                if (!currency) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
-
-                if (currency === 'RUB' || currency === 'RUR') {
-                    row[COL_CBR_RATE] = 1;
-                    row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal) : '';
-                    count++;
-                    return;
-                }
-
-                var rates = findClosestRate(iso);
-                if (!rates || !rates[currency]) {
-                    row[COL_CBR_RATE] = '';
-                    row[COL_INVOICE_RUB_CBR] = '';
-                    errors++;
-                    return;
-                }
-
-                var rate = rates[currency];
-                row[COL_CBR_RATE] = rate;
-                row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal * rate) : '';
-                count++;
+                if (d) { uniqueDates[d.toISOString().split('T')[0]] = true; }
             });
+            var dateList = Object.keys(uniqueDates).sort();
 
-            if (headers.indexOf(COL_CBR_RATE) === -1) { headers.push(COL_CBR_RATE); }
-            if (headers.indexOf(COL_INVOICE_RUB_CBR) === -1) { headers.push(COL_INVOICE_RUB_CBR); }
+            // Догружаем недостающие через API
+            return fetchMissingRates(dateList).then(function (fetched) {
+                var count = 0;
+                var errors = 0;
 
-            return { count: count, errors: errors, colNames: [COL_CBR_RATE, COL_INVOICE_RUB_CBR], dates: Object.keys(uniqueDates).length };
+                data.forEach(function (row) {
+                    var d = parseDate(row[dateCol]);
+                    if (!d) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
+
+                    var iso = d.toISOString().split('T')[0];
+                    var currency = String(row[currCol] || '').trim().toUpperCase();
+                    var invoiceVal = Number(row[invoiceCol]);
+
+                    if (!currency) { row[COL_CBR_RATE] = ''; row[COL_INVOICE_RUB_CBR] = ''; errors++; return; }
+
+                    if (currency === 'RUB' || currency === 'RUR') {
+                        row[COL_CBR_RATE] = 1;
+                        row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal) : '';
+                        count++;
+                        return;
+                    }
+
+                    var rates = findClosestRate(iso);
+                    if (!rates || !rates[currency]) {
+                        row[COL_CBR_RATE] = '';
+                        row[COL_INVOICE_RUB_CBR] = '';
+                        errors++;
+                        return;
+                    }
+
+                    var rate = rates[currency];
+                    row[COL_CBR_RATE] = rate;
+                    row[COL_INVOICE_RUB_CBR] = !isNaN(invoiceVal) ? round2(invoiceVal * rate) : '';
+                    count++;
+                });
+
+                if (headers.indexOf(COL_CBR_RATE) === -1) { headers.push(COL_CBR_RATE); }
+                if (headers.indexOf(COL_INVOICE_RUB_CBR) === -1) { headers.push(COL_INVOICE_RUB_CBR); }
+
+                return { count: count, errors: errors, colNames: [COL_CBR_RATE, COL_INVOICE_RUB_CBR], dates: dateList.length, fetched: fetched };
+            });
         });
     }
 
