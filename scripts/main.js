@@ -65,7 +65,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_CBR_RATE = 'Курс ЦБ РФ';
     var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
 
-    var rateCache = null; // Загружается один раз из JSON-файла
+    var LS_CBR_KEY = 'delomant_cbr_rates';
+    var rateCache = null; // Загружается один раз из JSON-файла или localStorage
 
     function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -879,7 +880,13 @@ document.addEventListener('DOMContentLoaded', function () {
         return { colName: colName, count: count };
     }
 
-    // --- Курс ЦБ РФ (из локального JSON-файла) ---
+    // --- Курс ЦБ РФ (из localStorage → fallback JSON-файл) ---
+
+    // Предзагрузка при старте: сначала localStorage (мгновенно), потом JSON в фоне
+    try {
+        var saved = localStorage.getItem(LS_CBR_KEY);
+        if (saved) { rateCache = JSON.parse(saved); }
+    } catch (e) { /* ignore */ }
 
     function loadRateCache() {
         if (rateCache) { return Promise.resolve(rateCache); }
@@ -890,6 +897,7 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(function (json) {
                 rateCache = json;
+                try { localStorage.setItem(LS_CBR_KEY, JSON.stringify(json)); } catch (e) { /* ignore */ }
                 return rateCache;
             })
             .catch(function () {
@@ -897,6 +905,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 return rateCache;
             });
     }
+
+    // Предзагружаем JSON в фоне при старте (если ещё нет в localStorage)
+    if (!rateCache) { loadRateCache(); }
 
     function findClosestRate(iso) {
         if (rateCache[iso]) { return rateCache[iso]; }
@@ -910,14 +921,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return null;
     }
 
-    // Fallback: загрузить недостающие даты через API cbr-xml-daily.ru
+    // API fallback для дат новее JSON-файла (максимум 5 дат)
     function fetchRateFromAPI(dateStr) {
         function tryDate(ds, attempt) {
             if (attempt > 3) { return Promise.resolve(null); }
             if (rateCache[ds]) { return Promise.resolve(rateCache[ds]); }
             var parts = ds.split('-');
             var url = CBR_API_BASE + '/archive/' + parts[0] + '/' + parts[1] + '/' + parts[2] + '/daily_json.js';
-            return fetch(url, { signal: AbortSignal.timeout(8000) })
+            return fetch(url, { signal: AbortSignal.timeout(5000) })
                 .then(function (resp) {
                     if (!resp.ok) { throw new Error(resp.status); }
                     return resp.json();
@@ -945,22 +956,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function fetchMissingRates(dateList) {
-        // Находим даты, которых нет в кэше (даже с учётом ±5 дней)
-        var missing = dateList.filter(function (iso) { return !findClosestRate(iso); });
+        // Находим последнюю дату в JSON
+        var cachedDates = Object.keys(rateCache).sort();
+        var lastCached = cachedDates.length > 0 ? cachedDates[cachedDates.length - 1] : '';
+
+        // Только даты НОВЕЕ JSON-файла (не старые пропуски)
+        var missing = dateList.filter(function (iso) {
+            return iso > lastCached && !findClosestRate(iso);
+        });
+
         if (missing.length === 0) { return Promise.resolve(0); }
 
-        // Загружаем по 3 параллельно
-        var loaded = 0;
-        function fetchBatch(index) {
-            if (index >= missing.length) { return Promise.resolve(); }
-            var batch = missing.slice(index, index + 3);
-            return Promise.all(batch.map(function (ds) { return fetchRateFromAPI(ds); }))
-                .then(function () {
-                    loaded += batch.length;
-                    return fetchBatch(index + 3);
-                });
+        // Ограничиваем до 5 дат максимум — не более чем неделя вперёд
+        missing = missing.slice(0, 5);
+        console.log('[ЦБ] Догрузка из API:', missing.length, 'новых дат:', missing.join(', '));
+
+        // Последовательно, чтобы не перегрузить
+        var idx = 0;
+        function next() {
+            if (idx >= missing.length) { return Promise.resolve(); }
+            return fetchRateFromAPI(missing[idx++]).then(next);
         }
-        return fetchBatch(0).then(function () { return missing.length; });
+        return next().then(function () { return missing.length; });
     }
 
     function applyCBRRates(data, headers) {
