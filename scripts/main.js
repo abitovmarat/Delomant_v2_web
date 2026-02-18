@@ -950,20 +950,23 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var dateList = Object.keys(uniqueDates).sort();
 
-        // Загружаем последовательно по одному — надёжнее, не перегружаем API
+        // Загружаем батчами по 3 параллельно — баланс скорости и надёжности
+        var BATCH_SIZE = 3;
         var loaded = 0;
-        function fetchSequential(index) {
+        function fetchBatch(index) {
             if (index >= dateList.length) { return Promise.resolve(); }
-            return fetchCBRRate(dateList[index]).then(function () {
-                loaded++;
-                if (applyBtn && dateList.length > 1) {
-                    applyBtn.textContent = 'Курсы ЦБ: ' + loaded + ' / ' + dateList.length;
-                }
-                return fetchSequential(index + 1);
-            });
+            var batch = dateList.slice(index, index + BATCH_SIZE);
+            return Promise.all(batch.map(function (ds) { return fetchCBRRate(ds); }))
+                .then(function () {
+                    loaded += batch.length;
+                    if (applyBtn && dateList.length > 1) {
+                        applyBtn.textContent = 'Курсы ЦБ: ' + loaded + ' / ' + dateList.length;
+                    }
+                    return fetchBatch(index + BATCH_SIZE);
+                });
         }
 
-        return fetchSequential(0).then(function () {
+        return fetchBatch(0).then(function () {
             var count = 0;
             var errors = 0;
 
