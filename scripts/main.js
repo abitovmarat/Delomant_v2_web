@@ -1590,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var ws = XLSX.utils.json_to_sheet(data, { header: headers });
 
         // Автоширина колонок по содержимому
-        var colWidths = headers.map(function (h, i) {
+        var colWidths = headers.map(function (h) {
             var maxLen = h.length;
             var sampleSize = Math.min(data.length, 100);
             for (var r = 0; r < sampleSize; r++) {
@@ -1604,12 +1604,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         ws['!cols'] = colWidths;
 
-        // Закрепить первую строку (шапку)
-        ws['!freeze'] = { xSplit: "0", ySplit: "1", topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
-
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Processed');
-        XLSX.writeFile(wb, baseFileName() + '_processed.xlsx');
+
+        // Генерируем XLSX как ArrayBuffer, затем патчим XML для freeze pane
+        var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+        try {
+            var jszip = new JSZip();
+            jszip.loadAsync(wbout).then(function (z) {
+                return z.file('xl/worksheets/sheet1.xml').async('string');
+            }).then(function (xml) {
+                // Вставляем sheetViews с freeze pane после <sheetData> нет — нужно перед <sheetData>
+                var freezeXml = '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
+                    '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
+                    '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>' +
+                    '</sheetView></sheetViews>';
+
+                if (xml.indexOf('<sheetViews') !== -1) {
+                    xml = xml.replace(/<sheetViews[^]*?<\/sheetViews>/, freezeXml);
+                } else {
+                    xml = xml.replace('<sheetData', freezeXml + '<sheetData');
+                }
+
+                var jszip2 = new JSZip();
+                return jszip2.loadAsync(wbout).then(function (z2) {
+                    z2.file('xl/worksheets/sheet1.xml', xml);
+                    return z2.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                });
+            }).then(function (blob) {
+                triggerDownload(blob, baseFileName() + '_processed.xlsx');
+            }).catch(function () {
+                // Fallback: скачать без freeze pane
+                var blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                triggerDownload(blob, baseFileName() + '_processed.xlsx');
+            });
+        } catch (e) {
+            // JSZip не доступен — скачать как есть
+            var blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            triggerDownload(blob, baseFileName() + '_processed.xlsx');
+        }
     }
 
     function updateProcessingState() {
