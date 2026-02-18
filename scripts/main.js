@@ -1966,7 +1966,76 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '</svg></div>';
         }
 
+        // --- Кнопки экспорта ---
+        html += '<div class="processing-export" style="margin-top:20px">';
+        html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary analysis-export-csv">Скачать CSV</button>';
+        html += '</div>';
+
         analysisResults.innerHTML = html;
+
+        // Подготовим данные для экспорта
+        var exportRows = [];
+
+        // Годовые данные
+        exportRows.push({ 'Период': '--- По годам ---' });
+        yearKeys.forEach(function (y) {
+            var d = byYear[y];
+            var row = { 'Период': y };
+            if (weightCol) { row['Объём (тыс. тонн)'] = round2(d.weight / 1000); }
+            if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
+            if (invoiceRubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+            exportRows.push(row);
+        });
+
+        // Квартальные данные
+        if (quarterKeys.length > 0) {
+            exportRows.push({ 'Период': '' });
+            exportRows.push({ 'Период': '--- По кварталам ---' });
+            quarterKeys.forEach(function (key) {
+                var d = byQuarter[key];
+                var row = { 'Период': key };
+                if (weightCol) { row['Объём (тыс. тонн)'] = round2(d.weight / 1000); }
+                if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
+                if (invoiceRubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+                exportRows.push(row);
+            });
+        }
+
+        var exportHeaders = ['Период'];
+        if (weightCol) { exportHeaders.push('Объём (тыс. тонн)'); }
+        if (statUsdCol) { exportHeaders.push('Стоимость (тыс. USD)'); }
+        if (invoiceRubCol) { exportHeaders.push('Стоимость (тыс. руб.)'); }
+
+        // Обработчики экспорта
+        analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, 'volumes');
+        });
+        analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, 'volumes');
+        });
+    }
+
+    // --- Общие функции экспорта анализа ---
+    function exportAnalysisXLSX(rows, headers, name) {
+        if (typeof XLSX === 'undefined') { return; }
+        var ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        ws['!cols'] = headers.map(function (h) {
+            return { wch: Math.max(h.length + 2, 15) };
+        });
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, name);
+        XLSX.writeFile(wb, baseFileName() + '_' + name + '.xlsx');
+    }
+
+    function exportAnalysisCSV(rows, headers, name) {
+        var lines = [headers.join(CSV_SEPARATOR)];
+        rows.forEach(function (row) {
+            var vals = headers.map(function (h) { return row[h] != null ? String(row[h]) : ''; });
+            lines.push(vals.join(CSV_SEPARATOR));
+        });
+        var blob = new Blob([UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+        triggerDownload(blob, baseFileName() + '_' + name + '.csv');
     }
 
     function getNumericColumns(data, headers) {
