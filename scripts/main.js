@@ -1511,8 +1511,8 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '</div>';
 
         html += '<div class="processing-export">';
-        html += '<button class="btn btn-primary processing-download-csv">Скачать CSV</button>';
-        html += '<button class="btn btn-secondary processing-download-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-primary processing-download-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary processing-download-csv">Скачать CSV</button>';
         html += '</div>';
         html += '<button class="btn btn-outline processing-download-report">Скачать отчёт об обработке</button>';
 
