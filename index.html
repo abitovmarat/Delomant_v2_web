@@ -88,6 +88,14 @@
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">Маппинг колонок (авто)</span>
                                 </label>
+                                <label class="operation-item" data-op="custom-mapping" title="Выберите колонки из загруженного файла и задайте им новые имена. Не отбрасывает остальные колонки">
+                                    <input type="checkbox" class="operation-checkbox">
+                                    <span class="operation-label">Пользовательский маппинг</span>
+                                </label>
+                                <div class="operation-sub operation-sub-custom-mapping">
+                                    <div class="custom-mapping-list"></div>
+                                    <button class="btn btn-secondary custom-mapping-add-btn">+ Добавить</button>
+                                </div>
                                 <label class="operation-item" data-op="extract-dates" title="Из колонки даты (Дата регистрации / Дата выпуска) извлекает три новых столбца: Месяц, КВАРТАЛ, Год">
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">Извлечь Месяц / Квартал / Год</span>

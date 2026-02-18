@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateProcessingState();
         renderColumnsList();
         updateRatioSelects();
+        updateCustomMappingSelects();
         updateVisualizationFields();
     }
 
@@ -566,6 +567,112 @@ document.addEventListener('DOMContentLoaded', function () {
     var ratioNumerator = document.querySelector('.ratio-numerator');
     var ratioDenominator = document.querySelector('.ratio-denominator');
 
+    // --- Пользовательский маппинг ---
+    var customMappingSub = document.querySelector('.operation-sub-custom-mapping');
+    var customMappingList = document.querySelector('.custom-mapping-list');
+    var customMappingAddBtn = document.querySelector('.custom-mapping-add-btn');
+    var LS_CUSTOM_MAPPING_KEY = 'delomant_custom_mapping';
+
+    // Показ/скрытие панели при клике на чекбокс
+    var customMappingCb = document.querySelector('[data-op="custom-mapping"] .operation-checkbox');
+    if (customMappingCb) {
+        customMappingCb.addEventListener('change', function () {
+            if (customMappingSub) {
+                customMappingSub.style.display = this.checked ? 'flex' : 'none';
+            }
+        });
+    }
+
+    function addCustomMappingRow(fromCol, toCol) {
+        if (!customMappingList) { return; }
+        var row = document.createElement('div');
+        row.className = 'custom-mapping-row';
+
+        var select = document.createElement('select');
+        var headers = appState.headers || [];
+        var html = '<option value="">Колонка</option>';
+        headers.forEach(function (h) {
+            html += '<option value="' + h + '"' + (h === fromCol ? ' selected' : '') + '>' + h + '</option>';
+        });
+        select.innerHTML = html;
+
+        var arrow = document.createElement('span');
+        arrow.className = 'custom-mapping-arrow';
+        arrow.textContent = '→';
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Новое название';
+        if (toCol) { input.value = toCol; }
+
+        var removeBtn = document.createElement('button');
+        removeBtn.className = 'custom-mapping-remove';
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', function () {
+            row.remove();
+        });
+
+        row.appendChild(select);
+        row.appendChild(arrow);
+        row.appendChild(input);
+        row.appendChild(removeBtn);
+        customMappingList.appendChild(row);
+    }
+
+    if (customMappingAddBtn) {
+        customMappingAddBtn.addEventListener('click', function () {
+            addCustomMappingRow('', '');
+        });
+    }
+
+    function updateCustomMappingSelects() {
+        if (!customMappingList) { return; }
+        var headers = appState.headers || [];
+        var rows = customMappingList.querySelectorAll('.custom-mapping-row');
+        rows.forEach(function (row) {
+            var select = row.querySelector('select');
+            var current = select.value;
+            var html = '<option value="">Колонка</option>';
+            headers.forEach(function (h) {
+                html += '<option value="' + h + '"' + (h === current ? ' selected' : '') + '>' + h + '</option>';
+            });
+            select.innerHTML = html;
+        });
+    }
+
+    function getCustomMapping() {
+        var mapping = {};
+        if (!customMappingList) { return mapping; }
+        customMappingList.querySelectorAll('.custom-mapping-row').forEach(function (row) {
+            var from = row.querySelector('select').value;
+            var to = row.querySelector('input').value.trim();
+            if (from && to) { mapping[from] = to; }
+        });
+        return mapping;
+    }
+
+    function saveCustomMapping() {
+        var mapping = getCustomMapping();
+        try { localStorage.setItem(LS_CUSTOM_MAPPING_KEY, JSON.stringify(mapping)); } catch (e) { /* ignore */ }
+    }
+
+    function loadCustomMapping() {
+        try {
+            var saved = localStorage.getItem(LS_CUSTOM_MAPPING_KEY);
+            if (saved) {
+                var mapping = JSON.parse(saved);
+                var keys = Object.keys(mapping);
+                if (keys.length > 0) {
+                    keys.forEach(function (from) {
+                        addCustomMappingRow(from, mapping[from]);
+                    });
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    loadCustomMapping();
+
     // Маппинг: G## имя из выгрузки → русское имя (точное совпадение, 32 колонки)
     var COLUMN_MAP = {
         'ND (Номер декларации)': 'Номер декларации',
@@ -618,7 +725,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (opsSelectAll) {
         opsSelectAll.addEventListener('click', function () {
             document.querySelectorAll('.operation-list .operation-item[data-op]').forEach(function (item) {
-                if (item.getAttribute('data-op') !== 'ratio') {
+                var op = item.getAttribute('data-op');
+                if (op !== 'ratio' && op !== 'custom-mapping') {
                     item.querySelector('.operation-checkbox').checked = true;
                 }
             });
@@ -685,6 +793,30 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         return { data: data, headers: newHeaders, mappings: mapped, missing: missing };
+    }
+
+    function applyCustomMapping(data, headers, mapping) {
+        var keys = Object.keys(mapping);
+        if (keys.length === 0) { return { data: data, headers: headers, count: 0 }; }
+
+        var mapped = [];
+        var newHeaders = headers.map(function (h) {
+            if (mapping[h]) {
+                mapped.push(h + ' → ' + mapping[h]);
+                return mapping[h];
+            }
+            return h;
+        });
+
+        data = data.map(function (row) {
+            var newRow = {};
+            headers.forEach(function (h, i) {
+                newRow[newHeaders[i]] = row[h];
+            });
+            return newRow;
+        });
+
+        return { data: data, headers: newHeaders, count: mapped.length, mappings: mapped };
     }
 
     function trimValues(data, headers) {
@@ -1306,6 +1438,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (mapResult.missing.length > 0) {
                     log.push('Не найдены: ' + mapResult.missing.join(', '));
                 }
+            }
+
+            // 1.5. Пользовательский маппинг
+            if (ops.indexOf('custom-mapping') !== -1) {
+                var custMap = getCustomMapping();
+                var custResult = applyCustomMapping(data, headers, custMap);
+                data = custResult.data;
+                headers = custResult.headers;
+                if (custResult.count > 0) {
+                    log.push('Пользовательский маппинг: ' + custResult.count + ' колонок (' + custResult.mappings.join(', ') + ')');
+                } else {
+                    log.push('Пользовательский маппинг: нет правил или колонки не найдены');
+                }
+                saveCustomMapping();
             }
 
             // 2. Извлечение дат

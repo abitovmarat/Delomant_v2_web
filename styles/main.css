@@ -561,6 +561,53 @@ body {
     color: var(--color-text-secondary);
 }
 
+.operation-sub-custom-mapping {
+    display: none;
+    padding: 4px 16px 8px 44px;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.custom-mapping-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.custom-mapping-row select,
+.custom-mapping-row input {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+}
+
+.custom-mapping-arrow {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.custom-mapping-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    padding: 2px 4px;
+}
+
+.custom-mapping-remove:hover {
+    color: var(--color-text);
+}
+
+.custom-mapping-add-btn {
+    align-self: flex-start;
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
 .operation-select {
     flex: 1;
     padding: 8px 12px;
