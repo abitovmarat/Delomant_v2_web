@@ -1805,14 +1805,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var analysisResults = document.querySelector('.analysis-results');
 
     if (analysisButtons.length > 0) {
-        analysisButtons[0].addEventListener('click', function () { runAnalysis('growth'); });
-        analysisButtons[1].addEventListener('click', function () { runAnalysis('statistics'); });
-        analysisButtons[2].addEventListener('click', function () { runAnalysis('trends'); });
-        if (analysisButtons[3]) analysisButtons[3].addEventListener('click', function () { runAnalysis('pivot'); });
-        if (analysisButtons[4]) analysisButtons[4].addEventListener('click', function () { runAnalysis('cagr'); });
-        if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('sankey'); });
-        if (analysisButtons[6]) analysisButtons[6].addEventListener('click', function () { runAnalysis('weighted-price'); });
-        if (analysisButtons[7]) analysisButtons[7].addEventListener('click', function () { runAnalysis('classification'); });
+        if (analysisButtons[0]) analysisButtons[0].addEventListener('click', function () { runAnalysis('volumes'); });
     }
 
     function runAnalysis(type) {
@@ -1821,40 +1814,159 @@ document.addEventListener('DOMContentLoaded', function () {
             var headers = getActiveHeaders();
             if (data.length === 0) {
                 analysisResults.innerHTML =
-                    '<div class="analysis-empty">' +
-                    '  <p>Сначала загрузите данные</p>' +
-                    '</div>';
+                    '<div class="analysis-empty"><p>Сначала загрузите данные</p></div>';
                 return;
             }
 
-            var numericCols = getNumericColumns(data, headers);
-
-            /* Config-based features (render form, attach handlers) */
-            if (type === 'pivot') { renderPivotConfig(headers, numericCols); return; }
-            if (type === 'cagr') { renderCAGRConfig(headers, numericCols); return; }
-            if (type === 'sankey') { renderSankeyConfig(headers, numericCols); return; }
-            if (type === 'weighted-price') { renderWeightedPriceConfig(headers, numericCols); return; }
-            if (type === 'classification') { renderClassificationAnalysis(); return; }
-
-            if (numericCols.length === 0) {
-                analysisResults.innerHTML =
-                    '<div class="analysis-empty">' +
-                    '  <p>Числовые столбцы не найдены</p>' +
-                    '</div>';
+            if (type === 'volumes') {
+                renderVolumesAnalysis(data, headers);
                 return;
             }
 
-            var html = '';
-            if (type === 'growth') { html = renderGrowthAnalysis(data, numericCols); }
-            if (type === 'statistics') { html = renderStatisticsAnalysis(data, numericCols); }
-            if (type === 'trends') { html = renderTrendsAnalysis(data, numericCols); }
-
-            analysisResults.innerHTML = html;
+            analysisResults.innerHTML = '';
         } catch (err) {
             analysisResults.innerHTML =
                 '<div class="analysis-empty"><p>Ошибка анализа: ' + err.message + '</p></div>';
             console.error('Analysis error:', err);
         }
+    }
+
+    // --- Анализ: Объёмы и стоимость по периодам ---
+    function renderVolumesAnalysis(data, headers) {
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var statUsdCol = findColumn(headers, COL_STAT_USD);
+        var invoiceRubCol = findColumn(headers, COL_INVOICE_RUB);
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+
+        if (!weightCol && !statUsdCol && !invoiceRubCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы веса или стоимости. Выполните обработку с маппингом.</p></div>';
+            return;
+        }
+        if (!yearCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «Год». Выполните обработку с извлечением дат.</p></div>';
+            return;
+        }
+
+        // Группируем по годам
+        var byYear = {};
+        // Группируем по год+квартал
+        var byQuarter = {};
+
+        data.forEach(function (row) {
+            var year = String(row[yearCol] || '').trim();
+            if (!year) { return; }
+
+            var weight = Number(row[weightCol]) || 0;
+            var usd = Number(row[statUsdCol]) || 0;
+            var rub = Number(row[invoiceRubCol]) || 0;
+
+            if (!byYear[year]) { byYear[year] = { weight: 0, usd: 0, rub: 0 }; }
+            byYear[year].weight += weight;
+            byYear[year].usd += usd;
+            byYear[year].rub += rub;
+
+            if (quarterCol) {
+                var q = String(row[quarterCol] || '').trim();
+                if (q) {
+                    var key = year + ' Q' + q;
+                    if (!byQuarter[key]) { byQuarter[key] = { weight: 0, usd: 0, rub: 0, year: year, q: q }; }
+                    byQuarter[key].weight += weight;
+                    byQuarter[key].usd += usd;
+                    byQuarter[key].rub += rub;
+                }
+            }
+        });
+
+        var yearKeys = Object.keys(byYear).sort();
+        var quarterKeys = Object.keys(byQuarter).sort();
+
+        // --- Таблица по годам ---
+        var html = '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">По годам</h3>';
+        html += '<div class="data-table-wrapper"><table class="data-table">';
+        html += '<thead><tr><th>Год</th>';
+        if (weightCol) { html += '<th>Объём (тыс. тонн)</th>'; }
+        if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
+        if (invoiceRubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+        html += '</tr></thead><tbody>';
+        yearKeys.forEach(function (y) {
+            var d = byYear[y];
+            html += '<tr><td>' + y + '</td>';
+            if (weightCol) { html += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>'; }
+            if (statUsdCol) { html += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>'; }
+            if (invoiceRubCol) { html += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>'; }
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+
+        // --- Таблица по кварталам ---
+        if (quarterKeys.length > 0) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">По кварталам</h3>';
+            html += '<div class="data-table-wrapper"><table class="data-table">';
+            html += '<thead><tr><th>Период</th>';
+            if (weightCol) { html += '<th>Объём (тыс. тонн)</th>'; }
+            if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
+            if (invoiceRubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+            html += '</tr></thead><tbody>';
+            quarterKeys.forEach(function (key) {
+                var d = byQuarter[key];
+                html += '<tr><td>' + key + '</td>';
+                if (weightCol) { html += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>'; }
+                if (statUsdCol) { html += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>'; }
+                if (invoiceRubCol) { html += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>'; }
+                html += '</tr>';
+            });
+            html += '</tbody></table></div></div>';
+        }
+
+        // --- График (столбчатый по годам) ---
+        if (yearKeys.length >= 2) {
+            var chartWidth = 700;
+            var chartHeight = 350;
+            var padding = { top: 30, right: 20, bottom: 50, left: 80 };
+            var innerW = chartWidth - padding.left - padding.right;
+            var innerH = chartHeight - padding.top - padding.bottom;
+
+            // Берём объём в тыс. тонн для графика
+            var values = yearKeys.map(function (y) { return round2(byYear[y].weight / 1000); });
+            var maxVal = Math.max.apply(null, values) * 1.15;
+            if (maxVal === 0) { maxVal = 1; }
+
+            var barWidth = Math.min(60, innerW / yearKeys.length * 0.6);
+            var gap = innerW / yearKeys.length;
+
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">Объём по годам (тыс. тонн)</h3>';
+            html += '<svg class="analysis-chart" width="' + chartWidth + '" height="' + chartHeight + '" viewBox="0 0 ' + chartWidth + ' ' + chartHeight + '">';
+            html += '<style>text { font-family: ' + CHART_FONT + '; font-size: 12px; fill: ' + CHART_COLORS.text + '; }</style>';
+
+            // Ось Y — сетка
+            var yTicks = 5;
+            for (var t = 0; t <= yTicks; t++) {
+                var yVal = round2(maxVal * t / yTicks);
+                var yPos = padding.top + innerH - (innerH * t / yTicks);
+                html += '<line x1="' + padding.left + '" y1="' + yPos + '" x2="' + (chartWidth - padding.right) + '" y2="' + yPos + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+                html += '<text x="' + (padding.left - 8) + '" y="' + (yPos + 4) + '" text-anchor="end" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(yVal) + '</text>';
+            }
+
+            // Столбцы
+            yearKeys.forEach(function (y, i) {
+                var val = values[i];
+                var barH = (val / maxVal) * innerH;
+                var x = padding.left + gap * i + (gap - barWidth) / 2;
+                var yBar = padding.top + innerH - barH;
+
+                html += '<rect x="' + x + '" y="' + yBar + '" width="' + barWidth + '" height="' + barH + '" fill="' + CHART_COLORS.primary + '" rx="3"/>';
+                html += '<text x="' + (x + barWidth / 2) + '" y="' + (yBar - 6) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.text + '">' + formatNumber(val) + '</text>';
+                html += '<text x="' + (x + barWidth / 2) + '" y="' + (padding.top + innerH + 20) + '" text-anchor="middle" fill="' + CHART_COLORS.textMuted + '">' + y + '</text>';
+            });
+
+            html += '</svg></div>';
+        }
+
+        analysisResults.innerHTML = html;
     }
 
     function getNumericColumns(data, headers) {
