@@ -429,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (columnsToggleBtn) {
             setTimeout(function () {
-                if (columnsList.scrollHeight > COLUMNS_COLLAPSE_HEIGHT) {
+                if (columnsList.scrollHeight > columnsList.clientHeight + 10) {
                     columnsToggleBtn.style.display = '';
                     columnsToggleBtn.textContent = 'Показать все ▼';
                 } else {
