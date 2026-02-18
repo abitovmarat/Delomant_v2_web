@@ -1031,6 +1031,7 @@ body {
    ================================ */
 .data-table-wrapper {
     overflow-x: auto;
+    max-width: calc(100vw - 240px - 80px);
 }
 
 .data-table {
