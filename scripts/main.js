@@ -941,12 +941,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var dateList = Object.keys(uniqueDates);
 
-        // Загружаем курсы для всех дат
-        var fetchPromises = dateList.map(function (ds) {
-            return fetchCBRRate(ds);
-        });
+        // Загружаем курсы батчами по 5, чтобы не перегружать API
+        var BATCH_SIZE = 5;
+        function fetchBatch(index) {
+            var batch = dateList.slice(index, index + BATCH_SIZE);
+            if (batch.length === 0) { return Promise.resolve(); }
+            return Promise.all(batch.map(function (ds) { return fetchCBRRate(ds); }))
+                .then(function () { return fetchBatch(index + BATCH_SIZE); });
+        }
 
-        return Promise.all(fetchPromises).then(function () {
+        return fetchBatch(0).then(function () {
             var count = 0;
             var errors = 0;
 
