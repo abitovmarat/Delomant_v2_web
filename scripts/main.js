@@ -975,7 +975,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        var t0 = Date.now();
         return loadRateCache().then(function () {
+            console.log('[ЦБ] JSON загружен за', Date.now() - t0, 'мс, дат в кэше:', Object.keys(rateCache).length);
             // Собираем уникальные даты из данных
             var uniqueDates = {};
             data.forEach(function (row) {
@@ -983,9 +985,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (d) { uniqueDates[d.toISOString().split('T')[0]] = true; }
             });
             var dateList = Object.keys(uniqueDates).sort();
+            console.log('[ЦБ] Уникальных дат в данных:', dateList.length);
 
             // Догружаем недостающие через API
+            var t1 = Date.now();
             return fetchMissingRates(dateList).then(function (fetched) {
+                console.log('[ЦБ] Догружено из API:', fetched, 'за', Date.now() - t1, 'мс');
                 var count = 0;
                 var errors = 0;
 
