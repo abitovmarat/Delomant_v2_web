@@ -65,7 +65,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
     var CBR_MAX_RETRY = 3;
 
+    var LS_RATE_CACHE_KEY = 'delomant_cbr_rates';
     var rateCache = {};
+
+    // Загружаем кэш курсов из localStorage при старте
+    try {
+        var saved = localStorage.getItem(LS_RATE_CACHE_KEY);
+        if (saved) { rateCache = JSON.parse(saved); }
+    } catch (e) { /* ignore */ }
+
+    function saveRateCache() {
+        try { localStorage.setItem(LS_RATE_CACHE_KEY, JSON.stringify(rateCache)); } catch (e) { /* ignore */ }
+    }
 
     function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -950,12 +961,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var dateList = Object.keys(uniqueDates).sort();
 
-        // Загружаем батчами по 3 параллельно — баланс скорости и надёжности
-        var BATCH_SIZE = 3;
-        var loaded = 0;
+        // Отфильтруем даты, которые уже есть в кэше
+        var uncachedDates = dateList.filter(function (ds) { return !rateCache[ds]; });
+
+        var BATCH_SIZE = 10;
+        var loaded = dateList.length - uncachedDates.length;
         function fetchBatch(index) {
-            if (index >= dateList.length) { return Promise.resolve(); }
-            var batch = dateList.slice(index, index + BATCH_SIZE);
+            if (index >= uncachedDates.length) { return Promise.resolve(); }
+            var batch = uncachedDates.slice(index, index + BATCH_SIZE);
             return Promise.all(batch.map(function (ds) { return fetchCBRRate(ds); }))
                 .then(function () {
                     loaded += batch.length;
@@ -967,6 +980,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return fetchBatch(0).then(function () {
+            saveRateCache();
             var count = 0;
             var errors = 0;
 
