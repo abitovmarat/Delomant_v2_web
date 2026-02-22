@@ -6090,6 +6090,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/^\d+\.\s+/gm, '')            // 1. нумерация
             .replace(/^>\s+/gm, '')                // > цитата
             .replace(/---+/g, '')                  // ---
+            .replace(/^\|.*\|$/gm, '')             // | таблица |
+            .replace(/^\s*[-|:]+\s*$/gm, '')       // |---|---| разделитель таблицы
             .replace(/\n{3,}/g, '\n\n')            // лишние переносы
             .trim();
     }
@@ -7153,7 +7155,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function addTitleSlide(slideData) {
             var sl = pres.addSlide();
-            sl.background = { color: '0F172A' };
+            sl.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: '0F172A' } });
             sl.addText(slideData.title || 'Аналитическая справка', {
                 x: 0.8, y: 2.0, w: 8.4, h: 1.0,
                 fontSize: 32, fontFace: FONT, color: 'FFFFFF', bold: true, align: 'center', valign: 'middle'
@@ -7172,17 +7174,26 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function addTextSlide(slideData) {
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Текст');
-            var bullets = ((slideData.opts && slideData.opts.bullets) || '').split('\n').filter(function(l) { return l.trim(); });
-            if (bullets.length > 0) {
-                var textRows = bullets.map(function(l) {
-                    var clean = typeof stripMarkdown === 'function' ? stripMarkdown(l) : l;
-                    return { text: clean.trim(), options: { fontSize: 14, fontFace: FONT, color: '0F172A', bullet: true, breakLine: true } };
-                });
-                sl.addText(textRows, { x: 0.3, y: 0.7, w: 9.4, h: 4.4, valign: 'top', paraSpaceAfter: 8 });
+            var rawBullets = ((slideData.opts && slideData.opts.bullets) || '');
+            var cleanAll = typeof stripMarkdown === 'function' ? stripMarkdown(rawBullets) : rawBullets;
+            var bullets = cleanAll.split('\n').filter(function(l) { return l.trim(); });
+            var LINES_PER_SLIDE = 18;
+            var pages = [];
+            for (var pi = 0; pi < Math.max(1, bullets.length); pi += LINES_PER_SLIDE) {
+                pages.push(bullets.slice(pi, pi + LINES_PER_SLIDE));
             }
-            pptxFooter(sl);
+            pages.forEach(function(pageBullets, pageIdx) {
+                var sl = pres.addSlide();
+                var pageTitle = (slideData.title || 'Текст') + (pages.length > 1 && pageIdx > 0 ? ' (продолжение)' : '');
+                pptxHeader(sl, pageTitle);
+                if (pageBullets.length > 0) {
+                    var textRows = pageBullets.map(function(l) {
+                        return { text: l.trim(), options: { fontSize: 13, fontFace: FONT, color: '0F172A', bullet: true, breakLine: true } };
+                    });
+                    sl.addText(textRows, { x: 0.3, y: 0.7, w: 9.4, h: 4.5, valign: 'top', paraSpaceAfter: 6 });
+                }
+                pptxFooter(sl);
+            });
         }
 
         function addTocSlide() {
@@ -7203,7 +7214,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function addSectionSlide(slideData) {
             var sl = pres.addSlide();
-            sl.background = { color: '1E40AF' };
+            sl.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: '1E40AF' } });
             var title = slideData.title || 'Раздел';
             if (slideData.hsFilter) title += '  (' + slideData.hsFilter + ')';
             sl.addText(title, {
@@ -7215,7 +7226,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function addContactsSlide() {
             var sl = pres.addSlide();
-            sl.background = { color: '0F172A' };
+            sl.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: '0F172A' } });
             sl.addText('Контакты', {
                 x: 0.8, y: 1.2, w: 8.4, h: 0.8,
                 fontSize: 28, fontFace: FONT, color: 'FFFFFF', bold: true, align: 'center'
@@ -7239,9 +7250,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var rubCtx = buildRubCtx(headers);
             var hasRub = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
             var yearCol = findColumn(headers, COL_YEAR);
+            var quarterCol = findColumn(headers, COL_QUARTER);
             if (!yearCol || fd.length === 0) return;
 
             var byYear = {};
+            var byYearQuarters = {};
             fd.forEach(function(row) {
                 var y = String(row[yearCol] || '').trim();
                 if (!y) return;
@@ -7249,14 +7262,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 byYear[y].weight += (Number(row[weightCol]) || 0);
                 byYear[y].usd += (Number(row[statUsdCol]) || 0);
                 byYear[y].rub += hasRub ? getRowRubValue(row, rubCtx) : 0;
+                if (quarterCol) {
+                    var q = String(row[quarterCol] || '').trim();
+                    if (q) {
+                        if (!byYearQuarters[y]) byYearQuarters[y] = {};
+                        byYearQuarters[y][q] = true;
+                    }
+                }
             });
             var years = Object.keys(byYear).sort();
             if (years.length === 0) return;
 
-            var n = years.length >= 2 ? years.length - 1 : 0;
-            var cagrW = n > 0 && weightCol ? presCalcCAGR(byYear[years[0]].weight, byYear[years[n]].weight, n) : null;
-            var cagrU = n > 0 && statUsdCol ? presCalcCAGR(byYear[years[0]].usd, byYear[years[n]].usd, n) : null;
-            var cagrR = n > 0 && hasRub ? presCalcCAGR(byYear[years[0]].rub, byYear[years[n]].rub, n) : null;
+            // Определяем неполный год: последний год с меньшим числом кварталов чем предпоследний
+            var partialYear = null;
+            if (quarterCol && years.length >= 2) {
+                var lastY = years[years.length - 1];
+                var prevY = years[years.length - 2];
+                var lastQs = byYearQuarters[lastY] ? Object.keys(byYearQuarters[lastY]).length : 0;
+                var prevQs = byYearQuarters[prevY] ? Object.keys(byYearQuarters[prevY]).length : 0;
+                if (lastQs < prevQs && lastQs < 4) partialYear = lastY;
+            }
+
+            // CAGR только по полным годам
+            var fullYears = partialYear ? years.slice(0, -1) : years;
+            var n = fullYears.length >= 2 ? fullYears.length - 1 : 0;
+            var cagrW = n > 0 && weightCol ? presCalcCAGR(byYear[fullYears[0]].weight, byYear[fullYears[n]].weight, n) : null;
+            var cagrU = n > 0 && statUsdCol ? presCalcCAGR(byYear[fullYears[0]].usd, byYear[fullYears[n]].usd, n) : null;
+            var cagrR = n > 0 && hasRub ? presCalcCAGR(byYear[fullYears[0]].rub, byYear[fullYears[n]].rub, n) : null;
             var hasComm = slideData.opts && slideData.opts.commentary;
             var tableW = hasComm ? 5.0 : 5.5;
             var chartX = hasComm ? 5.2 : 5.7;
@@ -7273,7 +7305,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var tRows = [];
             years.forEach(function(y) {
                 var d = byYear[y];
-                var row = [y];
+                var label = (y === partialYear) ? y + '*' : y;
+                var row = [label];
                 if (weightCol) row.push(formatNumber(round2(d.weight / 1000)));
                 if (statUsdCol) row.push(formatNumber(round2(d.usd / 1000)));
                 if (hasRub) row.push(formatNumber(round2(d.rub / 1000)));
@@ -7294,9 +7327,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }
             });
 
-            // Bar chart (weight)
+            // Bar chart (weight) — только полные годы + неполный если есть
             if (weightCol && years.length >= 2) {
-                var barData = [{ name: 'тонн', labels: years, values: years.map(function(y) { return round2(byYear[y].weight / 1000); }) }];
+                var barLabels = fullYears.concat(partialYear ? [partialYear + '*'] : []);
+                var barVals = (partialYear ? years : fullYears).map(function(y, i) {
+                    var lbl = (y === partialYear) ? partialYear + '*' : y;
+                    return round2(byYear[y].weight / 1000);
+                });
+                var barData = [{ name: 'тонн', labels: barLabels, values: barVals }];
                 sl.addChart(pres.charts.BAR, barData, {
                     x: chartX, y: 0.7, w: chartW, h: 2.5,
                     barDir: 'col', chartColors: ['2563EB'],
@@ -7308,10 +7346,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             pptxLine(sl, 0.3, 3.4, 9.4);
 
-            // USD chart (line) if both weight and usd
-            if (weightCol && statUsdCol && years.length >= 2) {
-                var usdPerKg = years.map(function(y) { return byYear[y].weight > 0 ? round2(byYear[y].usd / byYear[y].weight) : 0; });
-                var usdData = [{ name: 'USD/кг', labels: years, values: usdPerKg }];
+            // USD chart (line) if both weight and usd — только полные годы
+            if (weightCol && statUsdCol && fullYears.length >= 2) {
+                var usdPerKg = fullYears.map(function(y) { return byYear[y].weight > 0 ? round2(byYear[y].usd / byYear[y].weight) : 0; });
+                var usdData = [{ name: 'USD/кг', labels: fullYears, values: usdPerKg }];
                 sl.addChart(pres.charts.LINE, usdData, {
                     x: 0.3, y: 3.5, w: hasComm ? 4.5 : 5.0, h: 1.7,
                     chartColors: ['DC2626'], lineSize: 2, lineDataSymbol: 'circle', lineDataSymbolSize: 5,
