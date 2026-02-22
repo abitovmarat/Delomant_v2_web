@@ -313,6 +313,16 @@ body {
     background-color: var(--color-primary-dark);
 }
 
+.btn-apply-done {
+    background-color: #16A34A !important;
+    transition: background-color 0.2s;
+}
+
+.btn-apply-error {
+    background-color: #DC2626 !important;
+    transition: background-color 0.2s;
+}
+
 .btn-secondary {
     background-color: var(--color-bg);
     color: var(--color-text);
@@ -774,28 +784,357 @@ body {
 /* ================================
    Visualization
    ================================ */
-.visualization-container {
+/* ================================
+   Research Module
+   ================================ */
+.research-container {
     display: grid;
-    grid-template-columns: 1fr 280px;
-    gap: 24px;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    height: calc(100vh - 160px);
+    min-height: 500px;
 }
 
-.visualization-chart {
-    background-color: var(--color-surface);
+.research-settings {
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 24px;
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
 }
 
-.visualization-settings {
-    background-color: var(--color-surface);
+.research-settings .settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.research-commodity {
+    width: 100%;
+    padding: 7px 10px;
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 24px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--color-bg);
+    color: var(--color-text);
+    box-sizing: border-box;
+    resize: vertical;
+}
+
+.research-settings select,
+.research-settings input[type="text"],
+.research-settings input[type="password"] {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--color-bg);
+    color: var(--color-text);
+    box-sizing: border-box;
+}
+
+.research-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.research-ctx-item input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}
+
+/* Chat area */
+.research-chat {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.research-messages {
+    flex: 1;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 16px;
 }
+
+.research-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 85%;
+}
+
+.research-msg.user {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.research-msg.assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.research-msg-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+}
+
+.research-msg-bubble {
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.research-msg.assistant .research-msg-bubble ul {
+    margin: 6px 0 6px 18px;
+    padding: 0;
+}
+
+.research-msg.assistant .research-msg-bubble li {
+    margin-bottom: 3px;
+}
+
+.research-msg.assistant .research-msg-bubble code {
+    background: var(--color-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.research-msg.assistant .research-msg-bubble hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 8px 0;
+}
+
+.research-msg.user .research-msg-bubble {
+    background: var(--color-primary);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.research-msg.assistant .research-msg-bubble {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    border-bottom-left-radius: 4px;
+}
+
+.research-msg.assistant.loading .research-msg-bubble {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.research-msg-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.research-msg-actions button {
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+
+.research-msg-actions button:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.research-note-btn {
+    color: #2563EB !important;
+    border-color: #2563EB !important;
+}
+
+.research-note-btn:disabled {
+    color: #16A34A !important;
+    border-color: #16A34A !important;
+    cursor: default;
+}
+
+/* Панель заметок */
+.research-notes-section {
+    margin-top: 16px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 12px;
+}
+
+.research-notes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.research-notes-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.research-notes-count {
+    background: #2563EB;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+}
+
+.research-note-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+}
+
+.research-note-preview {
+    flex: 1;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.research-note-del {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.research-note-del:hover {
+    color: #DC2626;
+}
+
+.research-notes-to-slide {
+    width: 100%;
+    margin-top: 6px;
+    font-size: 12px;
+}
+
+.research-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    gap: 8px;
+}
+
+.research-empty-icon {
+    font-size: 40px;
+}
+
+.research-empty-text {
+    font-size: 14px;
+}
+
+/* Presets */
+.research-presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.research-preset-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.research-preset-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: #EFF6FF;
+}
+
+/* Input row */
+.research-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.research-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    line-height: 1.5;
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color 0.15s;
+}
+
+.research-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.research-input-row .btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+/* old visualization — keep selector stubs for compat */
+.visualization-container { display: none; }
+.visualization-chart { display: none; }
+.visualization-settings { display: none; }
 
 .settings-title {
     font-size: 16px;
@@ -1569,4 +1908,698 @@ body {
     margin-top: 8px;
     font-size: 13px;
     color: var(--color-text-muted);
+}
+
+/* ================================
+   Presentation Constructor
+   ================================ */
+
+.pres-container {
+    display: flex;
+    gap: 24px;
+    min-height: 540px;
+    margin-top: 16px;
+}
+
+.pres-sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.pres-preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+.pres-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 8px 0;
+}
+
+/* Palette */
+.pres-palette {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+}
+
+.pres-palette-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.pres-palette-item {
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-surface);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pres-palette-item:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light, #EFF6FF);
+}
+
+/* Slide list */
+.pres-slides {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    flex: 1;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.pres-slides-count {
+    font-weight: 400;
+    color: var(--color-text-muted);
+}
+
+.pres-slides-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 360px;
+}
+
+.pres-slide-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    cursor: pointer;
+    font-size: 12px;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+    user-select: none;
+}
+
+.pres-slide-card:hover {
+    background: var(--color-bg);
+}
+
+.pres-slide-card.active {
+    border-color: var(--color-primary);
+    background: #EFF6FF;
+}
+
+.pres-slide-card.drag-over {
+    border-color: var(--color-primary);
+    border-style: dashed;
+}
+
+.pres-slide-card .pres-card-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.pres-slide-card .pres-card-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pres-hs-badge {
+    font-size: 9px;
+    background: var(--color-primary);
+    color: white;
+    padding: 1px 5px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.pres-card-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.pres-card-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: var(--color-text-muted);
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.pres-card-btn:hover {
+    color: var(--color-text);
+    background: var(--color-border);
+}
+
+/* Actions */
+.pres-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pres-actions .btn {
+    flex: 1;
+}
+
+/* Preview */
+.pres-preview-slide {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+}
+
+.pres-preview-slide .pres-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+}
+
+.pres-preview-slide .pres-preview-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.pres-preview-empty {
+    color: var(--color-text-muted);
+    font-size: 14px;
+}
+
+.pres-preview-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.pres-slide-indicator {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    min-width: 60px;
+    text-align: center;
+}
+
+/* Slide internal layout (960x540 fixed for rendering) */
+.pres-slide {
+    width: 960px;
+    height: 540px;
+    position: relative;
+    background: #FFFFFF;
+    font-family: 'DejaVu Sans', sans-serif;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.pres-slide-header {
+    background: #2563EB;
+    color: #FFFFFF;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.pres-slide-logo {
+    height: 24px;
+}
+
+.pres-slide-header-text {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Inline editable hover */
+[data-editable]:hover {
+    outline: 1px dashed rgba(37, 99, 235, 0.4);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+[data-editable][contenteditable="true"] {
+    outline: 2px solid #2563EB !important;
+    outline-offset: 2px;
+    border-radius: 4px;
+    min-width: 30px;
+}
+
+.pres-slide-body {
+    padding: 20px 28px;
+    flex: 1;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #0F172A;
+}
+
+.pres-slide-footer {
+    height: 24px;
+    background: #F8FAFC;
+    border-top: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    font-size: 9px;
+    color: #64748B;
+    flex-shrink: 0;
+}
+
+/* Title slide */
+.pres-slide-title-bg {
+    background: #2563EB;
+    color: #FFFFFF;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px 48px;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.pres-slide-title-bg .pres-title-main {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 12px;
+}
+
+.pres-slide-title-bg .pres-title-sub {
+    font-size: 16px;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+.pres-slide-title-bg .pres-title-logo {
+    position: absolute;
+    top: 32px;
+    left: 48px;
+    height: 40px;
+}
+
+.pres-slide-title-bg .pres-title-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 48px;
+    right: 48px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* Section divider slide */
+.pres-slide-divider-bg {
+    background: #FFFFFF;
+    display: flex;
+    align-items: center;
+    padding: 0 60px;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.pres-slide-divider-bg .pres-divider-num {
+    font-size: 120px;
+    font-weight: 700;
+    color: #2563EB;
+    opacity: 0.15;
+    position: absolute;
+    right: 60px;
+    top: 50%;
+    transform: translateY(-50%);
+    line-height: 1;
+}
+
+.pres-slide-divider-bg .pres-divider-text {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2563EB;
+    text-transform: uppercase;
+    max-width: 600px;
+}
+
+.pres-slide-divider-bg .pres-divider-footer {
+    position: absolute;
+    bottom: 16px;
+    left: 60px;
+    font-size: 10px;
+    color: #64748B;
+}
+
+/* Slide body helpers */
+.pres-slide-body h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    color: #0F172A;
+}
+
+.pres-slide-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.pres-slide-body th {
+    background: #F8FAFC;
+    padding: 4px 6px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #E2E8F0;
+    white-space: nowrap;
+}
+
+.pres-slide-body td {
+    padding: 3px 6px;
+    border-bottom: 1px solid #F1F5F9;
+}
+
+.pres-slide-body td.numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Текстовый слайд — карточки */
+.pres-text-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 4px 0;
+}
+
+.pres-text-card {
+    padding: 8px 12px 8px 14px;
+    border-left: 3px solid #2563EB;
+    background: #F1F5F9;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #1E293B;
+}
+
+/* TOC slide */
+.pres-toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pres-toc-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dotted #E2E8F0;
+    font-size: 12px;
+}
+
+.pres-toc-list li .pres-toc-num {
+    color: var(--color-text-muted);
+    min-width: 30px;
+}
+
+/* Settings overlay */
+.pres-settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.pres-settings-panel {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    min-width: 400px;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+}
+
+.pres-settings-actions {
+    display: flex;
+    gap: 8px;
+    position: sticky;
+    bottom: 0;
+    background: var(--color-surface);
+    padding-top: 12px;
+    margin-top: auto;
+    flex-shrink: 0;
+}
+
+.pres-settings-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+}
+
+.pres-settings-form .settings-group {
+    margin-bottom: 14px;
+}
+
+.pres-settings-form .settings-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.pres-settings-form input[type="text"],
+.pres-settings-form input[type="number"],
+.pres-settings-form input[type="password"],
+.pres-settings-form select,
+.pres-settings-form textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.pres-settings-form textarea {
+    resize: vertical;
+}
+
+.pres-hint {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+}
+
+/* Commentary generation actions */
+.pres-gen-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.pres-gen-actions .btn {
+    font-size: 12px;
+    padding: 5px 14px;
+}
+
+.pres-gen-ai.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.pres-gen-ai.loading::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+    animation: pres-spin 0.6s linear infinite;
+}
+
+@keyframes pres-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Commentary block inside slide */
+.pres-slide-body-cols {
+    display: flex;
+    gap: 16px;
+    height: 100%;
+}
+
+.pres-slide-body-cols .pres-col-data {
+    flex: 3;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.pres-slide-body-cols .pres-col-comment {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-left: 14px;
+    border-left: 2px solid #E2E8F0;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.pres-col-comment .pres-comment-title {
+    font-size: 9px;
+    font-weight: 700;
+    color: #2563EB;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 3px 0;
+    flex-shrink: 0;
+}
+
+.pres-comment-card {
+    padding: 6px 10px 6px 10px;
+    border-left: 2px solid #2563EB;
+    background: #F8FAFC;
+    border-radius: 0 5px 5px 0;
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: #1E293B;
+    flex-shrink: 0;
+}
+
+/* Offscreen container */
+.pres-offscreen {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 960px;
+    height: 540px;
+    z-index: -1;
+    overflow: hidden;
+}
+
+/* Progress overlay */
+.pres-progress-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+}
+
+.pres-progress-panel {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 32px 40px;
+    text-align: center;
+    min-width: 300px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.pres-progress-text {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+}
+
+.pres-progress-bar {
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.pres-progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.pres-progress-detail {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin: 8px 0 0 0;
+}
+
+/* Contacts slide */
+.pres-contacts-bg {
+    background: #2563EB;
+    color: #FFFFFF;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px 48px;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.pres-contacts-bg .pres-contacts-title {
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 32px;
+}
+
+.pres-contacts-bg .pres-contacts-line {
+    font-size: 16px;
+    margin-bottom: 8px;
+    opacity: 0.9;
+}
+
+.pres-contacts-bg .pres-contacts-logo {
+    position: absolute;
+    top: 32px;
+    left: 48px;
+    height: 40px;
 }

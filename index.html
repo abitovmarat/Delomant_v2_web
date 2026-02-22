@@ -26,9 +26,9 @@
                     <span class="sidebar-nav-icon" aria-hidden="true">📈</span>
                     <span class="sidebar-nav-text">Анализ</span>
                 </a>
-                <a href="#visualization" class="sidebar-nav-item">
-                    <span class="sidebar-nav-icon" aria-hidden="true">📉</span>
-                    <span class="sidebar-nav-text">Визуализация</span>
+                <a href="#research" class="sidebar-nav-item">
+                    <span class="sidebar-nav-icon" aria-hidden="true">🔍</span>
+                    <span class="sidebar-nav-text">Исследование</span>
                 </a>
                 <a href="#reports" class="sidebar-nav-item">
                     <span class="sidebar-nav-icon" aria-hidden="true">📊</span>
@@ -82,6 +82,7 @@
                             <div class="operations-controls">
                                 <button class="btn btn-secondary operations-select-all">Выбрать все</button>
                                 <button class="btn btn-secondary operations-deselect-all">Снять все</button>
+                                <button class="btn btn-primary processing-apply-btn-top">Применить</button>
                             </div>
                             <div class="operation-list">
                                 <label class="operation-item" data-op="mapping" title="Переименовывает колонки из формата G## в читаемые русские названия и оставляет только известные колонки (32 шт.)">
@@ -281,58 +282,99 @@
                     </div>
                 </section>
 
-                <!-- Visualization Module -->
-                <section id="visualization" class="module module-visualization">
-                    <h2 class="module-title">Визуализация</h2>
+                <!-- Research Module -->
+                <section id="research" class="module module-research">
+                    <h2 class="module-title">Исследование</h2>
 
-                    <div class="visualization-container">
-                        <div class="visualization-chart">
-                            <div class="chart-placeholder">
-                                <p class="chart-placeholder-text">Настройте параметры для построения графика</p>
+                    <div class="research-container">
+                        <!-- Left: settings -->
+                        <aside class="research-settings">
+                            <div class="settings-group">
+                                <label class="settings-label">Провайдер</label>
+                                <select class="research-provider">
+                                    <option value="openrouter">OpenRouter</option>
+                                    <option value="ollama">Ollama (локально)</option>
+                                    <option value="lmstudio">LM Studio (локально)</option>
+                                    <option value="claude">Claude API</option>
+                                </select>
                             </div>
-                        </div>
-                        <aside class="visualization-settings">
-                            <h3 class="settings-title">Настройки</h3>
-                            <div class="settings-groups">
-                                <div class="settings-group">
-                                    <label class="settings-label">Тип графика</label>
-                                    <select class="settings-select">
-                                        <option value="line">Линейный</option>
-                                        <option value="area">Площадной</option>
-                                        <option value="bar">Столбчатый</option>
-                                        <option value="scatter">Точечный</option>
-                                    </select>
-                                </div>
-                                <div class="settings-group">
-                                    <label class="settings-label">Ось X</label>
-                                    <select class="settings-select">
-                                        <option value="">Выберите поле</option>
-                                    </select>
-                                </div>
-                                <div class="settings-group">
-                                    <label class="settings-label">Ось Y</label>
-                                    <select class="settings-select">
-                                        <option value="">Выберите поле</option>
-                                    </select>
-                                </div>
-                                <div class="settings-group">
-                                    <label class="settings-label">Агрегация</label>
-                                    <select class="settings-select">
-                                        <option value="sum">Сумма</option>
-                                        <option value="avg">Среднее</option>
-                                        <option value="count">Количество</option>
-                                        <option value="min">Минимум</option>
-                                        <option value="max">Максимум</option>
-                                    </select>
-                                </div>
+                            <div class="settings-group research-model-select-group">
+                                <label class="settings-label">Модель</label>
+                                <select class="research-model-select">
+                                    <optgroup label="С поиском в интернете">
+                                        <option value="perplexity/sonar">Perplexity Sonar (поиск)</option>
+                                        <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск)</option>
+                                    </optgroup>
+                                    <optgroup label="Бесплатные — крупные">
+                                        <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 Llama 405B</option>
+                                        <option value="openai/gpt-oss-120b:free">OpenAI OSS 120B</option>
+                                        <option value="meta-llama/llama-3.3-70b-instruct:free" selected>Llama 3.3 70B</option>
+                                        <option value="qwen/qwen3-235b-a22b-thinking-2507">Qwen3 235B Thinking</option>
+                                    </optgroup>
+                                    <optgroup label="Бесплатные — средние">
+                                        <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 24B</option>
+                                        <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
+                                        <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 0528</option>
+                                    </optgroup>
+                                    <option value="custom">Своя модель...</option>
+                                </select>
+                                <input type="text" class="research-model-custom" placeholder="Название модели" style="display:none;margin-top:6px">
                             </div>
-                            <div class="settings-actions">
-                                <button class="btn btn-primary">Построить</button>
-                                <button class="btn btn-secondary">Экспорт PNG</button>
-                                <button class="btn btn-secondary">Экспорт SVG</button>
-                                <button class="btn btn-secondary">В отчёт</button>
+                            <div class="settings-group research-url-group" style="display:none">
+                                <label class="settings-label">URL сервера</label>
+                                <input type="text" class="research-url" placeholder="http://localhost:11434">
+                            </div>
+                            <div class="settings-group">
+                                <label class="settings-label">API-ключ</label>
+                                <input type="password" class="research-apikey" placeholder="sk-...">
+                                <p class="pres-hint">Хранится только в браузере</p>
+                            </div>
+                            <div class="settings-group">
+                                <label class="settings-label">Товар / тема исследования</label>
+                                <textarea class="research-commodity" rows="3" placeholder="Например: орехи кешью, код ТН ВЭД 0801320000, импорт в Россию"></textarea>
+                                <p class="pres-hint">Нейронка будет знать какой товар анализируется</p>
+                            </div>
+                            <div class="settings-group">
+                                <label class="settings-label">Контекст данных</label>
+                                <label class="research-ctx-item">
+                                    <input type="checkbox" class="research-ctx-summary" checked>
+                                    <span>Сводка по данным</span>
+                                </label>
+                                <label class="research-ctx-item">
+                                    <input type="checkbox" class="research-ctx-countries" checked>
+                                    <span>Топ стран</span>
+                                </label>
+                                <label class="research-ctx-item">
+                                    <input type="checkbox" class="research-ctx-years" checked>
+                                    <span>Динамика по годам</span>
+                                </label>
+                            </div>
+                            <button class="btn btn-secondary research-clear-btn">Очистить чат</button>
+                            <div class="research-notes-section">
+                                <div class="research-notes-header">
+                                    <span class="research-notes-title">Заметки для отчёта</span>
+                                    <span class="research-notes-count">0</span>
+                                </div>
+                                <div class="research-notes-list"></div>
+                                <button class="btn btn-primary research-notes-to-slide" style="display:none">+ Слайд в презентацию</button>
                             </div>
                         </aside>
+
+                        <!-- Right: chat -->
+                        <div class="research-chat">
+                            <div class="research-messages"></div>
+                            <div class="research-presets">
+                                <button class="research-preset-btn">Анализ рынка</button>
+                                <button class="research-preset-btn">Тренды и прогноз</button>
+                                <button class="research-preset-btn">Ключевые игроки</button>
+                                <button class="research-preset-btn">Ценовые факторы</button>
+                                <button class="research-preset-btn">Регуляторные риски</button>
+                            </div>
+                            <div class="research-input-row">
+                                <textarea class="research-input" rows="2" placeholder="Задайте вопрос по данным или рынку..."></textarea>
+                                <button class="btn btn-primary research-send-btn">Отправить</button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -340,8 +382,143 @@
                 <section id="reports" class="module module-reports">
                     <h2 class="module-title">Презентация</h2>
 
-                    <div class="analysis-empty" style="margin-top:24px">
-                        <p>Раздел в разработке</p>
+                    <div class="pres-container">
+                        <!-- Left: Block palette + slide list -->
+                        <div class="pres-sidebar">
+                            <!-- Block palette -->
+                            <div class="pres-palette">
+                                <h3 class="pres-section-title">Блоки</h3>
+                                <div class="pres-palette-list"></div>
+                            </div>
+
+                            <!-- Slide list -->
+                            <div class="pres-slides">
+                                <h3 class="pres-section-title">Слайды <span class="pres-slides-count"></span></h3>
+                                <div class="pres-slides-list"></div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="pres-actions">
+                                <button class="btn btn-primary pres-export-pdf" disabled>Скачать PDF</button>
+                                <button class="btn btn-secondary pres-export-pptx" disabled>Скачать PPTX</button>
+                                <button class="btn btn-secondary pres-clear-btn">Очистить</button>
+                            </div>
+                        </div>
+
+                        <!-- Right: Preview area -->
+                        <div class="pres-preview">
+                            <div class="pres-preview-slide">
+                                <div class="pres-preview-empty">Добавьте блоки из палитры слева</div>
+                            </div>
+                            <div class="pres-preview-nav">
+                                <button class="btn btn-secondary pres-prev-slide" disabled>&larr;</button>
+                                <span class="pres-slide-indicator">0 / 0</span>
+                                <button class="btn btn-secondary pres-next-slide" disabled>&rarr;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Block settings overlay -->
+                    <div class="pres-settings-overlay" style="display:none">
+                        <div class="pres-settings-panel">
+                            <h3 class="pres-settings-title">Настройки блока</h3>
+                            <div class="pres-settings-form">
+                                <div class="settings-group">
+                                    <label class="settings-label">Заголовок</label>
+                                    <input type="text" class="pres-set-title" placeholder="Заголовок слайда">
+                                </div>
+                                <div class="settings-group pres-set-hs-group" style="display:none">
+                                    <label class="settings-label">Код ТН ВЭД (фильтр)</label>
+                                    <input type="text" class="pres-set-hs" placeholder="Например: 0801320000" list="pres-hs-datalist" maxlength="10">
+                                    <datalist id="pres-hs-datalist"></datalist>
+                                    <p class="pres-hint">Оставьте пустым для всех товаров</p>
+                                </div>
+                                <div class="settings-group pres-set-topn-group" style="display:none">
+                                    <label class="settings-label">TOP-N</label>
+                                    <input type="number" class="pres-set-topn" min="3" max="20" value="10">
+                                </div>
+                                <div class="settings-group pres-set-year-group" style="display:none">
+                                    <label class="settings-label">Год (для Санки)</label>
+                                    <select class="pres-set-year"><option value="">Последний</option></select>
+                                </div>
+                                <div class="settings-group pres-set-subtitle-group" style="display:none">
+                                    <label class="settings-label">Подзаголовок</label>
+                                    <input type="text" class="pres-set-subtitle" placeholder="Подзаголовок">
+                                </div>
+                                <div class="settings-group pres-set-bullets-group" style="display:none">
+                                    <label class="settings-label">Текст (каждый абзац с новой строки)</label>
+                                    <textarea class="pres-set-bullets" rows="6" placeholder="Первый пункт&#10;Второй пункт&#10;Третий пункт"></textarea>
+                                </div>
+                                <div class="settings-group pres-set-commentary-group" style="display:none">
+                                    <label class="settings-label">Комментарий</label>
+                                    <textarea class="pres-set-commentary" rows="5" placeholder="Аналитический текст для слайда"></textarea>
+                                    <div class="pres-gen-actions">
+                                        <button class="btn btn-secondary pres-gen-template">Шаблон</button>
+                                        <button class="btn btn-secondary pres-gen-ai">AI генерация</button>
+                                    </div>
+                                </div>
+                                <div class="settings-group pres-set-provider-group" style="display:none">
+                                    <label class="settings-label">AI-провайдер</label>
+                                    <select class="pres-set-provider">
+                                        <option value="openrouter">OpenRouter (бесплатные модели)</option>
+                                        <option value="ollama">Ollama (локально)</option>
+                                        <option value="lmstudio">LM Studio (локально)</option>
+                                        <option value="claude">Claude API (платный)</option>
+                                    </select>
+                                </div>
+                                <div class="settings-group pres-set-model-group" style="display:none">
+                                    <label class="settings-label">Модель</label>
+                                    <select class="pres-set-model-select" style="display:none">
+                                        <optgroup label="С поиском в интернете">
+                                            <option value="perplexity/sonar">Perplexity Sonar (поиск, платный)</option>
+                                            <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск, платный)</option>
+                                        </optgroup>
+                                        <optgroup label="Бесплатные — крупные">
+                                            <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 Llama 405B</option>
+                                            <option value="openai/gpt-oss-120b:free">OpenAI OSS 120B</option>
+                                            <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
+                                            <option value="qwen/qwen3-coder:free">Qwen3 Coder 480B</option>
+                                            <option value="qwen/qwen3-235b-a22b-thinking-2507">Qwen3 235B Thinking</option>
+                                        </optgroup>
+                                        <optgroup label="Бесплатные — средние">
+                                            <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 24B</option>
+                                            <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
+                                            <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 0528</option>
+                                            <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 80B</option>
+                                            <option value="upstage/solar-pro-3:free">Solar Pro 3</option>
+                                        </optgroup>
+                                        <option value="custom">Своя модель...</option>
+                                    </select>
+                                    <input type="text" class="pres-set-model-custom" placeholder="Название модели" style="display:none;margin-top:6px">
+                                </div>
+                                <div class="settings-group pres-set-apikey-group" style="display:none">
+                                    <label class="settings-label">API-ключ</label>
+                                    <input type="password" class="pres-set-apikey" placeholder="sk-...">
+                                    <p class="pres-hint">Ключ хранится только в браузере</p>
+                                </div>
+                                <div class="settings-group pres-set-aiurl-group" style="display:none">
+                                    <label class="settings-label">URL сервера</label>
+                                    <input type="text" class="pres-set-aiurl" placeholder="http://localhost:11434">
+                                    <p class="pres-hint">Адрес локального сервера</p>
+                                </div>
+                            </div>
+                            <div class="pres-settings-actions">
+                                <button class="btn btn-primary pres-settings-save">Применить</button>
+                                <button class="btn btn-secondary pres-settings-cancel">Отмена</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Offscreen container for PDF rendering -->
+                    <div class="pres-offscreen" aria-hidden="true"></div>
+
+                    <!-- PDF progress overlay -->
+                    <div class="pres-progress-overlay" style="display:none">
+                        <div class="pres-progress-panel">
+                            <p class="pres-progress-text">Генерация PDF...</p>
+                            <div class="pres-progress-bar"><div class="pres-progress-fill"></div></div>
+                            <p class="pres-progress-detail">0 / 0</p>
+                        </div>
                     </div>
                 </section>
 
@@ -447,6 +624,9 @@
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
