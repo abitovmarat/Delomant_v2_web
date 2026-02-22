@@ -6717,16 +6717,20 @@ document.addEventListener('DOMContentLoaded', function () {
             if (type === 'price-dynamics' && statUsdCol && weightCol) {
                 var prices = [];
                 var byCY = {};
+                // Только топ-N стран — как в реальном рендерере графика
+                var topCountriesSet = {};
+                sorted.slice(0, topN).forEach(function(c) { topCountriesSet[c] = true; });
                 data.forEach(function (row) {
                     var c = String(row[countryCol] || '').trim();
                     var y = String(row[yearCol] || '').trim();
-                    if (!c || !y) return;
+                    if (!c || !y || !topCountriesSet[c]) return;
                     var k = c + '|' + y;
                     if (!byCY[k]) byCY[k] = { u: 0, w: 0 };
                     byCY[k].u += (Number(row[statUsdCol]) || 0);
                     byCY[k].w += (Number(row[weightCol]) || 0);
                 });
-                Object.keys(byCY).forEach(function (k) { var d = byCY[k]; if (d.w > 0) prices.push(round2(d.u / d.w)); });
+                // Порог: группа страна×год должна иметь вес >= 100 кг (исключить аномалии)
+                Object.keys(byCY).forEach(function (k) { var d = byCY[k]; if (d.w >= 100) prices.push(round2(d.u / d.w)); });
                 if (prices.length > 0) {
                     m.priceMin = round2(Math.min.apply(null, prices));
                     m.priceMax = round2(Math.max.apply(null, prices));
