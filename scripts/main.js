@@ -6428,51 +6428,88 @@ document.addEventListener('DOMContentLoaded', function () {
         var cagrU = n > 0 && statUsdCol ? presCalcCAGR(byYear[years[0]].usd, byYear[years[n]].usd, n) : null;
         var cagrR = n > 0 && hasRub ? presCalcCAGR(byYear[years[0]].rub, byYear[years[n]].rub, n) : null;
 
-        // Table
-        var body = '<table>';
-        body += '<thead><tr><th>\u0413\u043e\u0434</th>';
-        if (weightCol) body += '<th>\u0442\u043e\u043d\u043d</th>';
-        if (statUsdCol) body += '<th>\u0442\u044b\u0441. USD</th>';
-        if (hasRub) body += '<th>\u0442\u044b\u0441. \u0440\u0443\u0431.</th>';
-        body += '</tr></thead><tbody>';
-        years.forEach(function (y) {
-            var d = byYear[y];
-            body += '<tr><td>' + y + '</td>';
-            if (weightCol) body += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>';
-            if (statUsdCol) body += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>';
-            if (hasRub) body += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>';
-            body += '</tr>';
-        });
-        // CAGR row
-        if (n > 0) {
-            body += '<tr style="font-weight:700;border-top:2px solid #CBD5E1"><td>CAGR</td>';
-            if (weightCol) body += '<td class="numeric">' + (cagrW !== null ? round2(cagrW) + '%' : '\u2014') + '</td>';
-            if (statUsdCol) body += '<td class="numeric">' + (cagrU !== null ? round2(cagrU) + '%' : '\u2014') + '</td>';
-            if (hasRub) body += '<td class="numeric">' + (cagrR !== null ? round2(cagrR) + '%' : '\u2014') + '</td>';
-            body += '</tr>';
-        }
-        body += '</tbody></table>';
+        // SVG: таблица + бар-чарт в одном SVG
+        var cols = ['\u0413\u043e\u0434'];
+        if (weightCol) cols.push('\u0442\u044b\u0441. \u0442\u043e\u043d\u043d');
+        if (statUsdCol) cols.push('\u0442\u044b\u0441. USD');
+        if (hasRub) cols.push('\u0442\u044b\u0441. \u0440\u0443\u0431.');
+        var nCols = cols.length;
+        var svgW = 880;
+        var rowH = 24, headH = 28;
+        var dataRows = years.length + (n > 0 ? 1 : 0); // +CAGR
+        var tblH = headH + dataRows * rowH + 4;
+        var colW0 = 60, colWRest = Math.floor((svgW - colW0) / (nCols - 1));
+        // Bar chart under table
+        var barH = weightCol && years.length >= 2 ? 140 : 0;
+        var totalSvgH = tblH + (barH > 0 ? barH + 16 : 0);
 
-        // Bar chart (weight in tons)
-        if (weightCol && years.length >= 2) {
-            var vals = years.map(function (y) { return round2(byYear[y].weight / 1000); });
-            var maxV = Math.max.apply(null, vals);
-            if (maxV > 0) {
-                var cW = 880, cH = 160, barW = Math.min(60, Math.floor((cW - 40) / years.length) - 8);
-                body += '<svg width="' + cW + '" height="' + cH + '" style="margin-top:8px">';
-                body += '<style>text{font-family:DejaVu Sans,sans-serif}</style>';
-                years.forEach(function (y, i) {
-                    var v = vals[i];
-                    var bh = Math.max(2, (v / maxV) * (cH - 40));
-                    var x = 30 + i * (barW + 8);
-                    var by = cH - 20 - bh;
-                    body += '<rect x="' + x + '" y="' + by + '" width="' + barW + '" height="' + bh + '" fill="#2563EB" rx="2"/>';
-                    body += '<text x="' + (x + barW / 2) + '" y="' + (by - 4) + '" text-anchor="middle" font-size="9" fill="#0F172A">' + formatNumber(v) + '</text>';
-                    body += '<text x="' + (x + barW / 2) + '" y="' + (cH - 6) + '" text-anchor="middle" font-size="9" fill="#64748B">' + y + '</text>';
-                });
-                body += '</svg>';
-            }
+        var body = '<svg width="' + svgW + '" height="' + totalSvgH + '" viewBox="0 0 ' + svgW + ' ' + totalSvgH + '">';
+        body += '<style>text{font-family:DejaVu Sans,sans-serif;font-size:12px}</style>';
+
+        // Header row
+        body += '<rect x="0" y="0" width="' + svgW + '" height="' + headH + '" fill="#1E3A5F" rx="4"/>';
+        cols.forEach(function(c, ci) {
+            var x = ci === 0 ? colW0 / 2 : colW0 + colWRest * (ci - 1) + colWRest / 2;
+            body += '<text x="' + x + '" y="' + (headH / 2 + 5) + '" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="12">' + c + '</text>';
+        });
+
+        // Data rows
+        var rowVals = years.map(function(y) {
+            var d = byYear[y];
+            var cells = [y];
+            if (weightCol) cells.push(formatNumber(round2(d.weight / 1000)));
+            if (statUsdCol) cells.push(formatNumber(round2(d.usd / 1000)));
+            if (hasRub) cells.push(formatNumber(round2(d.rub / 1000)));
+            return cells;
+        });
+        if (n > 0) {
+            var cagrRow = ['CAGR'];
+            if (weightCol) cagrRow.push(cagrW !== null ? round2(cagrW) + '%' : '\u2014');
+            if (statUsdCol) cagrRow.push(cagrU !== null ? round2(cagrU) + '%' : '\u2014');
+            if (hasRub) cagrRow.push(cagrR !== null ? round2(cagrR) + '%' : '\u2014');
+            rowVals.push(cagrRow);
         }
+        rowVals.forEach(function(cells, ri) {
+            var ry = headH + ri * rowH;
+            var isCagr = n > 0 && ri === rowVals.length - 1;
+            var bg = isCagr ? '#EFF6FF' : (ri % 2 === 0 ? '#F8FAFC' : '#FFFFFF');
+            body += '<rect x="0" y="' + ry + '" width="' + svgW + '" height="' + rowH + '" fill="' + bg + '"/>';
+            if (isCagr) body += '<line x1="0" y1="' + ry + '" x2="' + svgW + '" y2="' + ry + '" stroke="#CBD5E1" stroke-width="1.5"/>';
+            cells.forEach(function(cell, ci) {
+                var anchor = ci === 0 ? 'start' : 'end';
+                var x = ci === 0 ? 6 : colW0 + colWRest * (ci - 1) + colWRest - 6;
+                var fw = (isCagr || ci === 0) ? '700' : '400';
+                var fill = isCagr ? '#2563EB' : '#0F172A';
+                body += '<text x="' + x + '" y="' + (ry + rowH / 2 + 5) + '" text-anchor="' + anchor + '" fill="' + fill + '" font-weight="' + fw + '" font-size="12">' + cell + '</text>';
+            });
+            // bottom border
+            body += '<line x1="0" y1="' + (ry + rowH) + '" x2="' + svgW + '" y2="' + (ry + rowH) + '" stroke="#E2E8F0" stroke-width="0.5"/>';
+        });
+        // Table border
+        body += '<rect x="0" y="0" width="' + svgW + '" height="' + tblH + '" fill="none" stroke="#CBD5E1" stroke-width="1" rx="4"/>';
+
+        // Bar chart
+        if (barH > 0) {
+            var vals = years.map(function(y) { return round2(byYear[y].weight / 1000); });
+            var maxV = Math.max.apply(null, vals) || 1;
+            var barTop = tblH + 16;
+            var bPad = { l: 8, r: 8, b: 28, t: 20 };
+            var bInnerW = svgW - bPad.l - bPad.r;
+            var bInnerH = barH - bPad.t - bPad.b;
+            var slot = bInnerW / years.length;
+            var bW = Math.min(60, slot * 0.6);
+            years.forEach(function(y, i) {
+                var v = vals[i];
+                var bh = Math.max(2, (v / maxV) * bInnerH);
+                var bx = bPad.l + slot * i + (slot - bW) / 2;
+                var by2 = barTop + bPad.t + bInnerH - bh;
+                body += '<rect x="' + bx + '" y="' + by2 + '" width="' + bW + '" height="' + bh + '" fill="#2563EB" rx="2"/>';
+                body += '<text x="' + (bx + bW / 2) + '" y="' + (by2 - 4) + '" text-anchor="middle" font-size="10" fill="#0F172A">' + formatNumber(v) + '</text>';
+                body += '<text x="' + (bx + bW / 2) + '" y="' + (barTop + bPad.t + bInnerH + 16) + '" text-anchor="middle" font-size="10" fill="#64748B">' + y + '</text>';
+            });
+        }
+
+        body += '</svg>';
 
         return slideWrapper(slide.title || '\u041e\u0431\u044a\u0451\u043c\u044b \u0438 \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c', body, { commentary: slide.opts && slide.opts.commentary });
     }
@@ -6507,34 +6544,69 @@ document.addEventListener('DOMContentLoaded', function () {
         years.forEach(function (y) { totalByYear[y] = 0; countries.forEach(function (c) { totalByYear[y] += (byCountryYear[c] && byCountryYear[c][y]) || 0; }); });
         var grandTotal = countries.reduce(function (s, c) { return s + totalByCountry[c]; }, 0);
 
-        var body = '<table>';
-        body += '<thead><tr><th>\u0442\u043e\u043d\u043d</th>';
-        years.forEach(function (y) { body += '<th>' + y + '</th>'; });
-        body += '</tr></thead><tbody>';
-        countries.forEach(function (c) {
-            body += '<tr><td>' + c + '</td>';
-            years.forEach(function (y) {
-                var v = (byCountryYear[c] && byCountryYear[c][y]) || 0;
-                body += '<td class="numeric">' + formatNumber(Math.round(v)) + '</td>';
-            });
-            body += '</tr>';
+        // SVG-таблица: страна + по годам
+        var svgW = 880;
+        var rowH = 22, headH = 28;
+        var leader = countries[0];
+        var extraRows = 1 + (leader ? 1 : 0); // ИТОГО + Доля лидера
+        var totalRows = countries.length + extraRows;
+        var col0W = Math.min(220, Math.max(120, svgW * 0.28));
+        var colYW = Math.floor((svgW - col0W) / years.length);
+        var tblH = headH + totalRows * rowH + 4;
+
+        var body = '<svg width="' + svgW + '" height="' + tblH + '" viewBox="0 0 ' + svgW + ' ' + tblH + '">';
+        body += '<style>text{font-family:DejaVu Sans,sans-serif;font-size:11px}</style>';
+
+        // Header
+        body += '<rect x="0" y="0" width="' + svgW + '" height="' + headH + '" fill="#1E3A5F" rx="4"/>';
+        body += '<text x="6" y="' + (headH / 2 + 5) + '" fill="#FFFFFF" font-weight="700" font-size="11">\u0421\u0442\u0440\u0430\u043d\u0430 (\u0442\u043e\u043d\u043d)</text>';
+        years.forEach(function(y, yi) {
+            var x = col0W + colYW * yi + colYW / 2;
+            body += '<text x="' + x + '" y="' + (headH / 2 + 5) + '" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="11">' + y + '</text>';
         });
-        // Total row
-        body += '<tr style="font-weight:700;border-top:2px solid #CBD5E1"><td>\u0412\u0421\u0415\u0413\u041e</td>';
-        years.forEach(function (y) { body += '<td class="numeric">' + formatNumber(Math.round(totalByYear[y])) + '</td>'; });
-        body += '</tr>';
-        // Leader share
-        if (countries.length > 0) {
-            var leader = countries[0];
-            body += '<tr><td>\u0414\u043e\u043b\u044f ' + leader + ', %</td>';
-            years.forEach(function (y) {
+
+        // Country rows
+        countries.forEach(function(c, ri) {
+            var ry = headH + ri * rowH;
+            var bg = ri % 2 === 0 ? '#F8FAFC' : '#FFFFFF';
+            body += '<rect x="0" y="' + ry + '" width="' + svgW + '" height="' + rowH + '" fill="' + bg + '"/>';
+            var label = c.length > 28 ? c.slice(0, 27) + '\u2026' : c;
+            body += '<text x="6" y="' + (ry + rowH / 2 + 4) + '" fill="#0F172A" font-size="11">' + label + '</text>';
+            years.forEach(function(y, yi) {
+                var v = (byCountryYear[c] && byCountryYear[c][y]) || 0;
+                var x = col0W + colYW * yi + colYW - 6;
+                body += '<text x="' + x + '" y="' + (ry + rowH / 2 + 4) + '" text-anchor="end" fill="#0F172A" font-size="11">' + formatNumber(Math.round(v)) + '</text>';
+            });
+            body += '<line x1="0" y1="' + (ry + rowH) + '" x2="' + svgW + '" y2="' + (ry + rowH) + '" stroke="#E2E8F0" stroke-width="0.5"/>';
+        });
+
+        // ИТОГО row
+        var totRy = headH + countries.length * rowH;
+        body += '<rect x="0" y="' + totRy + '" width="' + svgW + '" height="' + rowH + '" fill="#EFF6FF"/>';
+        body += '<line x1="0" y1="' + totRy + '" x2="' + svgW + '" y2="' + totRy + '" stroke="#CBD5E1" stroke-width="1.5"/>';
+        body += '<text x="6" y="' + (totRy + rowH / 2 + 4) + '" fill="#2563EB" font-weight="700" font-size="11">\u0418\u0422\u041e\u0413\u041e</text>';
+        years.forEach(function(y, yi) {
+            var x = col0W + colYW * yi + colYW - 6;
+            body += '<text x="' + x + '" y="' + (totRy + rowH / 2 + 4) + '" text-anchor="end" fill="#2563EB" font-weight="700" font-size="11">' + formatNumber(Math.round(totalByYear[y])) + '</text>';
+        });
+
+        // Доля лидера
+        if (leader) {
+            var shareRy = totRy + rowH;
+            body += '<rect x="0" y="' + shareRy + '" width="' + svgW + '" height="' + rowH + '" fill="#F8FAFC"/>';
+            var shareLabel = ('\u0414\u043e\u043b\u044f ' + leader + ', %');
+            if (shareLabel.length > 35) shareLabel = shareLabel.slice(0, 34) + '\u2026';
+            body += '<text x="6" y="' + (shareRy + rowH / 2 + 4) + '" fill="#64748B" font-size="11">' + shareLabel + '</text>';
+            years.forEach(function(y, yi) {
                 var total = totalByYear[y];
                 var lv = (byCountryYear[leader] && byCountryYear[leader][y]) || 0;
-                body += '<td class="numeric">' + (total > 0 ? round2(lv / total * 100) + '%' : '\u2014') + '</td>';
+                var val = total > 0 ? round2(lv / total * 100) + '%' : '\u2014';
+                var x = col0W + colYW * yi + colYW - 6;
+                body += '<text x="' + x + '" y="' + (shareRy + rowH / 2 + 4) + '" text-anchor="end" fill="#64748B" font-size="11">' + val + '</text>';
             });
-            body += '</tr>';
         }
-        body += '</tbody></table>';
+        body += '<rect x="0" y="0" width="' + svgW + '" height="' + tblH + '" fill="none" stroke="#CBD5E1" stroke-width="1" rx="4"/>';
+        body += '</svg>';
 
         return slideWrapper(slide.title || '\u041e\u0431\u044a\u0451\u043c\u044b \u043f\u043e \u0441\u0442\u0440\u0430\u043d\u0430\u043c', body, { commentary: slide.opts && slide.opts.commentary });
     }
