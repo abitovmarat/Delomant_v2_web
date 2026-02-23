@@ -368,21 +368,35 @@ document.addEventListener('DOMContentLoaded', function () {
             descCol = findColumn(headers, descCandidates[d]);
             if (descCol) break;
         }
-        // Фоллбэк: ищем по подстрокам в заголовках (G31_1, «описание», «товар»)
+        // Фоллбэк: ищем по подстрокам в заголовках (G31, G31_1, «описание», «товар»)
         if (!descCol) {
             for (var h2 = 0; h2 < headers.length; h2++) {
-                if (/G31_1|описание.*товар|характеристик.*товар/i.test(headers[h2])) {
+                if (/G31|описание.*товар|характеристик.*товар|наименование.*товар/i.test(headers[h2])) {
                     descCol = headers[h2]; break;
                 }
             }
         }
         if (descCol) {
-            for (var j = 0; j < Math.min(rows.length, 50); j++) {
-                var desc = String(rows[j][descCol] || '').trim();
-                if (desc.length > 3) {
-                    parts.push(desc.slice(0, 150));
-                    break;
+            // Собираем описания, группируем по первым 25 символам, берём наиболее частый вариант
+            var rootCounts = {};   // первые 25 символов → суммарный счётчик
+            var rootExample = {};  // первые 25 символов → самый частый полный вариант (до 120 символов)
+            var fullCounts = {};   // полный вариант → счётчик
+            var descSample = Math.min(rows.length, 400);
+            for (var j = 0; j < descSample; j++) {
+                var desc = String(rows[j][descCol] || '').trim().toUpperCase().replace(/\s+/g, ' ');
+                if (desc.length < 4) continue;
+                var full = desc.slice(0, 120);
+                fullCounts[full] = (fullCounts[full] || 0) + 1;
+                var root = desc.slice(0, 25);
+                rootCounts[root] = (rootCounts[root] || 0) + 1;
+                if (!rootExample[root] || fullCounts[full] > fullCounts[rootExample[root]]) {
+                    rootExample[root] = full;
                 }
+            }
+            // Находим самый частый «корень» описания
+            var topRoot = Object.keys(rootCounts).sort(function(a, b) { return rootCounts[b] - rootCounts[a]; })[0];
+            if (topRoot && rootExample[topRoot]) {
+                parts.push(rootExample[topRoot]);
             }
         }
 
