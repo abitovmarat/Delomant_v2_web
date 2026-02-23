@@ -7438,7 +7438,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return renderSlideSvgs(slideData, fd, headers).then(function(pngs) {
                 var sl = pres.addSlide();
                 pptxHeader(sl, slideData.title || '');
-                var hasComm = \!\!(slideData.opts && slideData.opts.commentary);
+                var hasComm = !!(slideData.opts && slideData.opts.commentary);
                 var maxW = hasComm ? 7.0 : 9.4;
 
                 if (pngs.length === 0) {
