@@ -2675,6 +2675,54 @@ document.addEventListener('DOMContentLoaded', function () {
         img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
     }
 
+    // SVG-элемент → PNG dataUrl (Promise)
+    function svgElementToDataUrl(svgEl) {
+        return new Promise(function(resolve, reject) {
+            var vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+            var w = (vb && vb.width) || parseFloat(svgEl.getAttribute('width')) || 800;
+            var h = (vb && vb.height) || parseFloat(svgEl.getAttribute('height')) || 400;
+            var scale = 2;
+            var svgData = new XMLSerializer().serializeToString(svgEl);
+            var dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+            var img = new Image();
+            img.onload = function() {
+                var canvas = document.createElement('canvas');
+                canvas.width = w * scale;
+                canvas.height = h * scale;
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve({ dataUrl: canvas.toDataURL('image/png'), w: w, h: h });
+            };
+            img.onerror = function() { reject(new Error('SVG render failed')); };
+            img.src = dataUrl;
+        });
+    }
+
+    // Рендерит HTML слайда в невидимый div, извлекает SVG-графики, конвертирует в PNG
+    // Возвращает Promise<Array<{dataUrl, w, h}>>
+    function renderSlideSvgs(slide, data, headers) {
+        return new Promise(function(resolve) {
+            var html = renderPresSlideByType(slide, data, headers);
+            var tmp = document.createElement('div');
+            tmp.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:960px;visibility:hidden';
+            document.body.appendChild(tmp);
+            tmp.innerHTML = html;
+            setTimeout(function() {
+                var svgs = Array.prototype.slice.call(tmp.querySelectorAll('svg'));
+                if (svgs.length === 0) {
+                    document.body.removeChild(tmp);
+                    resolve([]);
+                    return;
+                }
+                Promise.all(svgs.map(svgElementToDataUrl))
+                    .then(function(pngs) { document.body.removeChild(tmp); resolve(pngs); })
+                    .catch(function() { document.body.removeChild(tmp); resolve([]); });
+            }, 150);
+        });
+    }
+
     // Экспорт нескольких SVG в одну PNG (горизонтально)
     function exportChartsRowPNG(svgEls, fileName) {
         var scale = 2;
@@ -6993,6 +7041,78 @@ document.addEventListener('DOMContentLoaded', function () {
         progressFill.style.width = '0%';
         progressDetail.textContent = '0 / ' + total;
 
+        var PDF_ANALYTICS = ['volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
+        // PDF page dimensions in points at 10px/mm: 297mm × 210mm
+        var PDF_W = 2970, PDF_H = 2100;
+
+        function pdfAddPageCanvas(canvas) {
+            var imgData = canvas.toDataURL('image/jpeg', 0.92);
+            if (slideIndex > 0) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+        }
+
+        function pdfDrawAnalyticsPage(title, pngs) {
+            var canvas = document.createElement('canvas');
+            canvas.width = PDF_W; canvas.height = PDF_H;
+            var ctx = canvas.getContext('2d');
+
+            // Белый фон
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, PDF_W, PDF_H);
+
+            // Синяя шапка
+            ctx.fillStyle = '#2563EB';
+            ctx.fillRect(0, 0, PDF_W, 185);
+
+            // Заголовок в шапке
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 52px Arial';
+            ctx.fillText(title || '', 80, 130);
+
+            // Чарты
+            if (pngs.length === 0) {
+                ctx.fillStyle = '#94A3B8';
+                ctx.font = '40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Нет данных', PDF_W / 2, PDF_H / 2);
+                ctx.textAlign = 'left';
+            } else {
+                var padding = 60;
+                var areaY = 200, areaH = PDF_H - 280;
+                var areaW = PDF_W - padding * 2;
+
+                if (pngs.length === 1) {
+                    var img = new Image();
+                    img.src = pngs[0].dataUrl;
+                    var aspect = pngs[0].w / pngs[0].h;
+                    var drawW = areaW, drawH = drawW / aspect;
+                    if (drawH > areaH) { drawH = areaH; drawW = drawH * aspect; }
+                    var drawX = padding + (areaW - drawW) / 2;
+                    ctx.drawImage(img, drawX, areaY, drawW, drawH);
+                } else {
+                    var colW2 = (areaW - padding) / 2;
+                    pngs.forEach(function(png, i) {
+                        var img2 = new Image();
+                        img2.src = png.dataUrl;
+                        var aspect2 = png.w / png.h;
+                        var dW = colW2, dH = dW / aspect2;
+                        if (dH > areaH) { dH = areaH; dW = dH * aspect2; }
+                        ctx.drawImage(img2, padding + i * (colW2 + padding), areaY, dW, dH);
+                    });
+                }
+            }
+
+            // Футер
+            ctx.fillStyle = '#94A3B8';
+            ctx.font = '28px Arial';
+            ctx.fillText('delomant.ru', 80, PDF_H - 40);
+            ctx.textAlign = 'right';
+            ctx.fillText(String(new Date().getFullYear()), PDF_W - 80, PDF_H - 40);
+            ctx.textAlign = 'left';
+
+            return canvas;
+        }
+
         function renderNext() {
             if (slideIndex >= total) {
                 pdf.save(baseFileName() + '_presentation.pdf');
@@ -7003,8 +7123,77 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var slide = presState.slides[slideIndex];
             var filteredData = filterDataByHS(data, headers, slide.hsFilter);
-            var slideHTML = renderPresSlideByType(slide, filteredData, headers);
 
+            if (PDF_ANALYTICS.indexOf(slide.type) !== -1) {
+                // Аналитический слайд: SVG → PNG → Canvas → PDF
+                renderSlideSvgs(slide, filteredData, headers).then(function(pngs) {
+                    // Нужно чтобы Image объекты загрузились перед drawImage
+                    var loadPromises = pngs.map(function(png) {
+                        return new Promise(function(res) {
+                            var img = new Image();
+                            img.onload = function() { png._img = img; res(); };
+                            img.onerror = res;
+                            img.src = png.dataUrl;
+                        });
+                    });
+                    Promise.all(loadPromises).then(function() {
+                        var canvas = document.createElement('canvas');
+                        canvas.width = PDF_W; canvas.height = PDF_H;
+                        var ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, PDF_W, PDF_H);
+                        ctx.fillStyle = '#2563EB';
+                        ctx.fillRect(0, 0, PDF_W, 185);
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.font = 'bold 52px Arial';
+                        ctx.fillText(slide.title || '', 80, 130);
+
+                        var padding = 60;
+                        var areaY = 200, areaH = PDF_H - 280;
+                        var areaW = PDF_W - padding * 2;
+
+                        if (pngs.length === 0) {
+                            ctx.fillStyle = '#94A3B8';
+                            ctx.font = '40px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('Нет данных', PDF_W / 2, PDF_H / 2);
+                            ctx.textAlign = 'left';
+                        } else if (pngs.length === 1 && pngs[0]._img) {
+                            var aspect = pngs[0].w / pngs[0].h;
+                            var drawW = areaW, drawH = drawW / aspect;
+                            if (drawH > areaH) { drawH = areaH; drawW = drawH * aspect; }
+                            var drawX = padding + (areaW - drawW) / 2;
+                            ctx.drawImage(pngs[0]._img, drawX, areaY, drawW, drawH);
+                        } else {
+                            var colW2 = (areaW - padding) / pngs.length;
+                            pngs.forEach(function(png, i) {
+                                if (!png._img) return;
+                                var aspect2 = png.w / png.h;
+                                var dW = colW2, dH = dW / aspect2;
+                                if (dH > areaH) { dH = areaH; dW = dH * aspect2; }
+                                ctx.drawImage(png._img, padding + i * (colW2 + padding / 2), areaY, dW, dH);
+                            });
+                        }
+
+                        ctx.fillStyle = '#94A3B8';
+                        ctx.font = '28px Arial';
+                        ctx.fillText('delomant.ru', 80, PDF_H - 40);
+                        ctx.textAlign = 'right';
+                        ctx.fillText(String(new Date().getFullYear()), PDF_W - 80, PDF_H - 40);
+                        ctx.textAlign = 'left';
+
+                        pdfAddPageCanvas(canvas);
+                        slideIndex++;
+                        progressFill.style.width = Math.round(slideIndex / total * 100) + '%';
+                        progressDetail.textContent = slideIndex + ' / ' + total;
+                        renderNext();
+                    });
+                });
+                return;
+            }
+
+            // Простые слайды — html2canvas
+            var slideHTML = renderPresSlideByType(slide, filteredData, headers);
             offscreen.innerHTML = slideHTML;
 
             setTimeout(function () {
@@ -7018,10 +7207,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     width: 960,
                     height: 540
                 }).then(function (canvas) {
-                    var imgData = canvas.toDataURL('image/jpeg', 0.92);
-                    if (slideIndex > 0) pdf.addPage();
-                    pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
-
+                    pdfAddPageCanvas(canvas);
                     slideIndex++;
                     progressFill.style.width = Math.round(slideIndex / total * 100) + '%';
                     progressDetail.textContent = slideIndex + ' / ' + total;
@@ -7245,402 +7431,32 @@ document.addEventListener('DOMContentLoaded', function () {
             sl.addText('delomant.ru', { x: 0.8, y: 4.8, w: 8.4, h: 0.4, fontSize: 12, fontFace: FONT, color: '64748B', align: 'center' });
         }
 
-        // --- Нативные аналитические слайды ---
+        // --- Аналитические слайды: SVG → PNG через Canvas ---
 
-        function addVolumesSlide(slideData) {
+        function addAnalyticsSlide(slideData) {
             var fd = filterDataByHS(data, headers, slideData.hsFilter);
-            var weightCol = findColumn(headers, COL_WEIGHT);
-            var statUsdCol = findColumn(headers, COL_STAT_USD);
-            var rubCtx = buildRubCtx(headers);
-            var hasRub = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
-            var yearCol = findColumn(headers, COL_YEAR);
-            var quarterCol = findColumn(headers, COL_QUARTER);
-            if (!yearCol || fd.length === 0) return;
+            return renderSlideSvgs(slideData, fd, headers).then(function(pngs) {
+                var sl = pres.addSlide();
+                pptxHeader(sl, slideData.title || '');
+                var hasComm = \!\!(slideData.opts && slideData.opts.commentary);
+                var maxW = hasComm ? 7.0 : 9.4;
 
-            var byYear = {};
-            var byYearQuarters = {};
-            fd.forEach(function(row) {
-                var y = String(row[yearCol] || '').trim();
-                if (!y) return;
-                if (!byYear[y]) byYear[y] = { weight: 0, usd: 0, rub: 0 };
-                byYear[y].weight += (Number(row[weightCol]) || 0);
-                byYear[y].usd += (Number(row[statUsdCol]) || 0);
-                byYear[y].rub += hasRub ? getRowRubValue(row, rubCtx) : 0;
-                if (quarterCol) {
-                    var q = String(row[quarterCol] || '').trim();
-                    if (q) {
-                        if (!byYearQuarters[y]) byYearQuarters[y] = {};
-                        byYearQuarters[y][q] = true;
-                    }
-                }
-            });
-            var years = Object.keys(byYear).sort();
-            if (years.length === 0) return;
-
-            // Определяем неполный год: последний год с меньшим числом кварталов чем предпоследний
-            var partialYear = null;
-            if (quarterCol && years.length >= 2) {
-                var lastY = years[years.length - 1];
-                var prevY = years[years.length - 2];
-                var lastQs = byYearQuarters[lastY] ? Object.keys(byYearQuarters[lastY]).length : 0;
-                var prevQs = byYearQuarters[prevY] ? Object.keys(byYearQuarters[prevY]).length : 0;
-                if (lastQs < prevQs && lastQs < 4) partialYear = lastY;
-            }
-
-            // CAGR только по полным годам
-            var fullYears = partialYear ? years.slice(0, -1) : years;
-            var n = fullYears.length >= 2 ? fullYears.length - 1 : 0;
-            var cagrW = n > 0 && weightCol ? presCalcCAGR(byYear[fullYears[0]].weight, byYear[fullYears[n]].weight, n) : null;
-            var cagrU = n > 0 && statUsdCol ? presCalcCAGR(byYear[fullYears[0]].usd, byYear[fullYears[n]].usd, n) : null;
-            var cagrR = n > 0 && hasRub ? presCalcCAGR(byYear[fullYears[0]].rub, byYear[fullYears[n]].rub, n) : null;
-            var hasComm = slideData.opts && slideData.opts.commentary;
-            var tableW = hasComm ? 5.0 : 5.5;
-            var chartX = hasComm ? 5.2 : 5.7;
-            var chartW = hasComm ? 2.5 : 4.0;
-
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Объёмы и стоимость');
-
-            // Table
-            var hdr = ['Год'];
-            if (weightCol) hdr.push('тонн');
-            if (statUsdCol) hdr.push('тыс. USD');
-            if (hasRub) hdr.push('тыс. руб.');
-            var tRows = [];
-            years.forEach(function(y) {
-                var d = byYear[y];
-                var label = (y === partialYear) ? y + '*' : y;
-                var row = [label];
-                if (weightCol) row.push(formatNumber(round2(d.weight / 1000)));
-                if (statUsdCol) row.push(formatNumber(round2(d.usd / 1000)));
-                if (hasRub) row.push(formatNumber(round2(d.rub / 1000)));
-                tRows.push(row);
-            });
-            if (n > 0) {
-                var cagrRow = [{ text: 'CAGR', options: { bold: true, fill: { color: 'EFF6FF' } } }];
-                if (weightCol) cagrRow.push({ text: cagrW !== null ? round2(cagrW) + '%' : '\u2014', options: { bold: true, fill: { color: 'EFF6FF' } } });
-                if (statUsdCol) cagrRow.push({ text: cagrU !== null ? round2(cagrU) + '%' : '\u2014', options: { bold: true, fill: { color: 'EFF6FF' } } });
-                if (hasRub) cagrRow.push({ text: cagrR !== null ? round2(cagrR) + '%' : '\u2014', options: { bold: true, fill: { color: 'EFF6FF' } } });
-                tRows.push(cagrRow);
-            }
-            var colW = [];
-            var cw = tableW / hdr.length;
-            for (var ci = 0; ci < hdr.length; ci++) colW.push(ci === 0 ? cw * 0.7 : cw * 1.1);
-            sl.addTable(pptxTableRows(hdr, tRows), {
-                x: 0.3, y: 0.7, w: tableW, colW: colW, rowH: 0.3,
-                border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }
-            });
-
-            // Bar chart (weight) — только полные годы + неполный если есть
-            if (weightCol && years.length >= 2) {
-                var barLabels = fullYears.concat(partialYear ? [partialYear + '*'] : []);
-                var barVals = (partialYear ? years : fullYears).map(function(y, i) {
-                    var lbl = (y === partialYear) ? partialYear + '*' : y;
-                    return round2(byYear[y].weight / 1000);
-                });
-                var barData = [{ name: 'тонн', labels: barLabels, values: barVals }];
-                sl.addChart(pres.charts.BAR, barData, {
-                    x: chartX, y: 0.7, w: chartW, h: 2.5,
-                    barDir: 'col', chartColors: ['2563EB'],
-                    showValue: true, dataLabelFontSize: 8, dataLabelPosition: 'outEnd',
-                    catAxisLabelFontSize: 8, valAxisHidden: true, showLegend: false,
-                    valAxisLabelFormatCode: '#,##0'
-                });
-            }
-
-            pptxLine(sl, 0.3, 3.4, 9.4);
-
-            // USD chart (line) if both weight and usd — только полные годы
-            if (weightCol && statUsdCol && fullYears.length >= 2) {
-                var usdPerKg = fullYears.map(function(y) { return byYear[y].weight > 0 ? round2(byYear[y].usd / byYear[y].weight) : 0; });
-                var usdData = [{ name: 'USD/кг', labels: fullYears, values: usdPerKg }];
-                sl.addChart(pres.charts.LINE, usdData, {
-                    x: 0.3, y: 3.5, w: hasComm ? 4.5 : 5.0, h: 1.7,
-                    chartColors: ['DC2626'], lineSize: 2, lineDataSymbol: 'circle', lineDataSymbolSize: 5,
-                    showValue: true, dataLabelFontSize: 8,
-                    catAxisLabelFontSize: 8, valAxisLabelFontSize: 8,
-                    showLegend: false, valAxisLabelFormatCode: '0.00'
-                });
-            }
-
-            // Commentary
-            if (hasComm) {
-                pptxCommentary(sl, slideData.opts.commentary, 7.8, 0.7, 2.0, 4.5);
-            }
-            pptxFooter(sl);
-        }
-
-        function addCountriesSlide(slideData) {
-            var fd = filterDataByHS(data, headers, slideData.hsFilter);
-            var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
-            var weightCol = findColumn(headers, COL_WEIGHT);
-            var yearCol = findColumn(headers, COL_YEAR);
-            if (!countryCol || !weightCol || !yearCol || fd.length === 0) return;
-
-            var topN = slideData.topN || 10;
-            var byCountryYear = {};
-            var totalByCountry = {};
-            fd.forEach(function(row) {
-                var c = String(row[countryCol] || '').trim();
-                var y = String(row[yearCol] || '').trim();
-                if (!c || !y) return;
-                var v = Number(row[weightCol]) || 0;
-                if (!byCountryYear[c]) byCountryYear[c] = {};
-                byCountryYear[c][y] = (byCountryYear[c][y] || 0) + v;
-                totalByCountry[c] = (totalByCountry[c] || 0) + v;
-            });
-            var countries = Object.keys(totalByCountry).sort(function(a, b) { return totalByCountry[b] - totalByCountry[a]; }).slice(0, topN);
-            var yearsArr = [];
-            fd.forEach(function(row) { var y = String(row[yearCol] || '').trim(); if (y && yearsArr.indexOf(y) === -1) yearsArr.push(y); });
-            yearsArr.sort();
-            if (countries.length === 0) return;
-
-            var totalByYear = {};
-            yearsArr.forEach(function(y) { totalByYear[y] = 0; countries.forEach(function(c) { totalByYear[y] += (byCountryYear[c] && byCountryYear[c][y]) || 0; }); });
-            var grandTotal = countries.reduce(function(s, c) { return s + totalByCountry[c]; }, 0);
-
-            var hasComm = slideData.opts && slideData.opts.commentary;
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Объёмы по странам');
-
-            // Table
-            var hdr = ['тонн'].concat(yearsArr).concat(['Всего', 'Доля, %']);
-            var tRows = [];
-            countries.forEach(function(c) {
-                var row = [c];
-                yearsArr.forEach(function(y) { row.push(formatNumber(Math.round(((byCountryYear[c] && byCountryYear[c][y]) || 0) / 1000))); });
-                row.push(formatNumber(Math.round(totalByCountry[c] / 1000)));
-                row.push(grandTotal > 0 ? round2(totalByCountry[c] / grandTotal * 100) + '%' : '—');
-                tRows.push(row);
-            });
-            // ВСЕГО
-            var totalRow = [{ text: 'ВСЕГО', options: { bold: true, fill: { color: 'EFF6FF' } } }];
-            yearsArr.forEach(function(y) { totalRow.push({ text: formatNumber(Math.round(totalByYear[y] / 1000)), options: { bold: true, fill: { color: 'EFF6FF' } } }); });
-            totalRow.push({ text: formatNumber(Math.round(grandTotal / 1000)), options: { bold: true, fill: { color: 'EFF6FF' } } });
-            totalRow.push({ text: '100%', options: { bold: true, fill: { color: 'EFF6FF' } } });
-            tRows.push(totalRow);
-
-            var tblW = hasComm ? 7.2 : 9.4;
-            var nCols = hdr.length;
-            var colWArr = [1.4];
-            for (var j = 1; j < nCols; j++) colWArr.push((tblW - 1.4) / (nCols - 1));
-            sl.addTable(pptxTableRows(hdr, tRows, { fontSize: 8 }), {
-                x: 0.3, y: 0.7, w: tblW, colW: colWArr, rowH: 0.25,
-                border: { type: 'solid', pt: 0.5, color: 'E2E8F0' },
-                autoPage: true, autoPageRepeatHeader: true, autoPageHeaderRows: 1
-            });
-
-            // Horizontal bar chart
-            var barH = Math.min(2.2, countries.length * 0.22 + 0.3);
-            var barLabels = countries.slice().reverse();
-            var barVals = barLabels.map(function(c) { return round2(totalByCountry[c] / 1000); });
-            sl.addChart(pres.charts.BAR, [{ name: 'тонн', labels: barLabels, values: barVals }], {
-                x: 0.3, y: 5.625 - barH - 0.5, w: hasComm ? 7.2 : 9.4, h: barH,
-                barDir: 'bar', chartColors: ['2563EB'],
-                showValue: true, dataLabelFontSize: 7, dataLabelPosition: 'outEnd',
-                catAxisLabelFontSize: 7, valAxisHidden: true, showLegend: false,
-                valAxisLabelFormatCode: '#,##0'
-            });
-
-            if (hasComm) pptxCommentary(sl, slideData.opts.commentary, 7.7, 0.7, 2.1, 4.5);
-            pptxFooter(sl);
-        }
-
-        function addPriceDynamicsSlide(slideData) {
-            var fd = filterDataByHS(data, headers, slideData.hsFilter);
-            var statUsdCol = findColumn(headers, COL_STAT_USD);
-            var weightCol = findColumn(headers, COL_WEIGHT);
-            var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
-            var yearCol = findColumn(headers, COL_YEAR);
-            if (!statUsdCol || !weightCol || !countryCol || !yearCol || fd.length === 0) return;
-
-            var topN = slideData.topN || 10;
-            var byCY = {};
-            var totalW = {};
-            fd.forEach(function(row) {
-                var c = String(row[countryCol] || '').trim();
-                var y = String(row[yearCol] || '').trim();
-                if (!c || !y) return;
-                var w = Number(row[weightCol]) || 0;
-                var u = Number(row[statUsdCol]) || 0;
-                var k = c + '|' + y;
-                if (!byCY[k]) byCY[k] = { usd: 0, weight: 0 };
-                byCY[k].usd += u; byCY[k].weight += w;
-                totalW[c] = (totalW[c] || 0) + w;
-            });
-            var countries = Object.keys(totalW).sort(function(a, b) { return totalW[b] - totalW[a]; }).slice(0, topN);
-            var yearsSet = {};
-            fd.forEach(function(row) { var y = String(row[yearCol] || '').trim(); if (y) yearsSet[y] = true; });
-            var years = Object.keys(yearsSet).sort();
-            if (countries.length === 0 || years.length === 0) return;
-
-            var hasComm = slideData.opts && slideData.opts.commentary;
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Динамика цен по странам, USD/кг');
-
-            var chartSeries = [];
-            countries.forEach(function(c) {
-                var vals = years.map(function(y) {
-                    var d = byCY[c + '|' + y];
-                    return (d && d.weight > 0) ? round2(d.usd / d.weight) : null;
-                });
-                chartSeries.push({ name: c.length > 20 ? c.substring(0, 18) + '..' : c, labels: years, values: vals });
-            });
-
-            sl.addChart(pres.charts.LINE, chartSeries, {
-                x: 0.3, y: 0.7, w: hasComm ? 7.0 : 9.4, h: 4.5,
-                chartColors: PPTX_COLORS.slice(0, countries.length),
-                lineSize: 2, lineDataSymbol: 'circle', lineDataSymbolSize: 5,
-                showLegend: true, legendPos: 'b', legendFontSize: 8,
-                catAxisLabelFontSize: 9, valAxisLabelFontSize: 9,
-                valAxisLabelFormatCode: '0.00',
-                showValue: false
-            });
-
-            if (hasComm) pptxCommentary(sl, slideData.opts.commentary, 7.7, 0.7, 2.1, 4.5);
-            pptxFooter(sl);
-        }
-
-        function addQuarterlyPricesSlide(slideData) {
-            var fd = filterDataByHS(data, headers, slideData.hsFilter);
-            var weightCol = findColumn(headers, COL_WEIGHT);
-            var statUsdCol = findColumn(headers, COL_STAT_USD);
-            var rubCtx = buildRubCtx(headers);
-            var hasRub = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
-            var yearCol = findColumn(headers, COL_YEAR);
-            var quarterCol = findColumn(headers, COL_QUARTER);
-            if (!weightCol || (!statUsdCol && !hasRub) || !yearCol || !quarterCol || fd.length === 0) return;
-
-            var byYQ = {};
-            var yearsSet = {};
-            fd.forEach(function(row) {
-                var y = String(row[yearCol] || '').trim();
-                var q = String(row[quarterCol] || '').trim();
-                if (!y || !q) return;
-                yearsSet[y] = true;
-                var k = y + '|' + q;
-                if (!byYQ[k]) byYQ[k] = { usd: 0, rub: 0, weight: 0 };
-                byYQ[k].weight += (Number(row[weightCol]) || 0);
-                byYQ[k].usd += statUsdCol ? (Number(row[statUsdCol]) || 0) : 0;
-                byYQ[k].rub += hasRub ? getRowRubValue(row, rubCtx) : 0;
-            });
-            var years = Object.keys(yearsSet).sort();
-            var quarters = ['1', '2', '3', '4'];
-            var qLabels = ['Q1', 'Q2', 'Q3', 'Q4'];
-
-            var hasComm = slideData.opts && slideData.opts.commentary;
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Поквартальная динамика цен');
-
-            var metrics = [];
-            if (hasRub) metrics.push({ key: 'rub', title: 'руб./кг' });
-            if (statUsdCol) metrics.push({ key: 'usd', title: 'USD/кг' });
-
-            var chartAreaW = hasComm ? 7.0 : 9.4;
-            var singleW = metrics.length === 1 ? chartAreaW : (chartAreaW / 2 - 0.1);
-            metrics.forEach(function(m, mi) {
-                var series = [];
-                years.forEach(function(y) {
-                    var vals = quarters.map(function(q) {
-                        var d = byYQ[y + '|' + q];
-                        if (d && d.weight > 0) {
-                            return round2(m.key === 'usd' ? d.usd / d.weight : d.rub / d.weight);
-                        }
-                        return null;
+                if (pngs.length === 0) {
+                    sl.addText('Нет данных', { x: 0.3, y: 2.0, w: maxW, h: 1, fontSize: 14, fontFace: FONT, color: '94A3B8', align: 'center' });
+                } else if (pngs.length === 1) {
+                    var aspect = pngs[0].w / pngs[0].h;
+                    var imgH = Math.min(maxW / aspect, 4.5);
+                    sl.addImage({ data: pngs[0].dataUrl, x: 0.3, y: 0.65, w: maxW, h: imgH });
+                } else {
+                    var colW = (maxW - 0.2) / 2;
+                    pngs.forEach(function(png, i) {
+                        var aspect = png.w / png.h;
+                        var imgH = Math.min(colW / aspect, 4.5);
+                        sl.addImage({ data: png.dataUrl, x: 0.3 + i * (colW + 0.2), y: 0.65, w: colW, h: imgH });
                     });
-                    series.push({ name: y, labels: qLabels, values: vals });
-                });
-                var xPos = 0.3 + mi * (singleW + 0.2);
-                sl.addText(m.title, {
-                    x: xPos, y: 0.65, w: singleW, h: 0.3,
-                    fontSize: 11, fontFace: FONT, color: '0F172A', bold: true, align: 'center'
-                });
-                sl.addChart(pres.charts.LINE, series, {
-                    x: xPos, y: 0.95, w: singleW, h: 3.8,
-                    chartColors: PPTX_YEAR_COLORS.slice(0, years.length),
-                    lineSize: 2, lineDataSymbol: 'circle', lineDataSymbolSize: 5,
-                    showLegend: true, legendPos: 'b', legendFontSize: 8,
-                    catAxisLabelFontSize: 9, valAxisLabelFontSize: 8,
-                    valAxisLabelFormatCode: m.key === 'usd' ? '0.00' : '#,##0',
-                    showValue: false
-                });
-            });
-
-            if (hasComm) pptxCommentary(sl, slideData.opts.commentary, 7.7, 0.7, 2.1, 4.5);
-            pptxFooter(sl);
-        }
-
-        function addSankeySlide(slideData, srcColName) {
-            var fd = filterDataByHS(data, headers, slideData.hsFilter);
-            var srcCol = findColumn(headers, srcColName);
-            var tgtCol = findColumn(headers, COL_RECEIVER);
-            var valCol = findColumn(headers, COL_WEIGHT);
-            var yearCol = findColumn(headers, COL_YEAR);
-            if (!srcCol || !tgtCol || !valCol || fd.length === 0) return false;
-
-            var filtered = fd;
-            if (slideData.year && yearCol) {
-                filtered = fd.filter(function(row) { return String(row[yearCol] || '').trim() === slideData.year; });
-            } else if (yearCol) {
-                var maxY = '';
-                fd.forEach(function(row) { var y = String(row[yearCol] || '').trim(); if (y > maxY) maxY = y; });
-                if (maxY) filtered = fd.filter(function(row) { return String(row[yearCol] || '').trim() === maxY; });
-            }
-
-            var topN = slideData.topN || 10;
-            var sankeyData = buildSankeyData(filtered, srcCol, tgtCol, valCol, topN);
-            if (sankeyData.flows.length === 0) return false;
-
-            var hasComm = slideData.opts && slideData.opts.commentary;
-            var sl = pres.addSlide();
-            pptxHeader(sl, slideData.title || 'Структура потоков');
-
-            // Table with flows
-            var flowHdr = [srcColName === COL_SENDER ? 'Отправитель' : 'Изготовитель', 'Получатель', 'тонн'];
-            var flowRows = sankeyData.flows.sort(function(a, b) { return b.value - a.value; }).slice(0, 15).map(function(f) {
-                var sName = f.source.length > 22 ? f.source.substring(0, 20) + '..' : f.source;
-                var tName = f.target.length > 22 ? f.target.substring(0, 20) + '..' : f.target;
-                return [sName, tName, formatNumber(Math.round(f.value / 1000))];
-            });
-            var tblW = hasComm ? 7.0 : 9.4;
-            sl.addTable(pptxTableRows(flowHdr, flowRows, { fontSize: 8 }), {
-                x: 0.3, y: 0.7, w: tblW, colW: [tblW * 0.38, tblW * 0.38, tblW * 0.24], rowH: 0.22,
-                border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }
-            });
-
-            // Horizontal bar chart — top sources
-            var srcNames = sankeyData.sources.map(function(s) { return s.name.length > 18 ? s.name.substring(0, 16) + '..' : s.name; }).reverse();
-            var srcVals = sankeyData.sources.map(function(s) { return round2(s.total / 1000); }).reverse();
-            if (srcNames.length >= 2) {
-                var bH = Math.min(2.0, srcNames.length * 0.2 + 0.3);
-                sl.addChart(pres.charts.BAR, [{ name: 'тонн', labels: srcNames, values: srcVals }], {
-                    x: 0.3, y: 5.625 - bH - 0.4, w: tblW, h: bH,
-                    barDir: 'bar', chartColors: ['2563EB'],
-                    showValue: true, dataLabelFontSize: 7, dataLabelPosition: 'outEnd',
-                    catAxisLabelFontSize: 7, valAxisHidden: true, showLegend: false
-                });
-            }
-
-            if (hasComm) pptxCommentary(sl, slideData.opts.commentary, 7.7, 0.7, 2.1, 4.5);
-            pptxFooter(sl);
-            return true;
-        }
-
-        // --- Рендер Sankey в JPEG (fallback) ---
-        function renderSlideToJpeg(slide) {
-            return new Promise(function(resolve) {
-                var filteredData = filterDataByHS(data, headers, slide.hsFilter);
-                var html = renderPresSlideByType(slide, filteredData, headers);
-                offscreen.innerHTML = html;
-                setTimeout(function() {
-                    var el = offscreen.querySelector('.pres-slide');
-                    if (!el) { offscreen.innerHTML = ''; resolve(null); return; }
-                    window.html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#FFFFFF', width: 960, height: 540 })
-                        .then(function(canvas) {
-                            offscreen.innerHTML = '';
-                            resolve(canvas.toDataURL('image/jpeg', 0.92));
-                        }).catch(function() { offscreen.innerHTML = ''; resolve(null); });
-                }, 200);
+                }
+                if (hasComm) pptxCommentary(sl, slideData.opts.commentary, 7.5, 0.65, 2.3, 4.5);
+                pptxFooter(sl);
             });
         }
 
@@ -7671,6 +7487,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var isSimple = SIMPLE_TYPES.indexOf(slideData.type) !== -1;
 
+            var ANALYTICS_TYPES = ['volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
+
             if (isSimple) {
                 if (slideData.type === 'title') addTitleSlide(slideData);
                 else if (slideData.type === 'toc') addTocSlide();
@@ -7679,63 +7497,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 else addTextSlide(slideData);
                 slideIndex++;
                 setTimeout(processNext, 0);
-            } else if (slideData.type === 'volumes') {
-                addVolumesSlide(slideData);
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else if (slideData.type === 'countries') {
-                addCountriesSlide(slideData);
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else if (slideData.type === 'price-dynamics') {
-                addPriceDynamicsSlide(slideData);
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else if (slideData.type === 'quarterly-prices') {
-                addQuarterlyPricesSlide(slideData);
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else if (slideData.type === 'sankey-sender') {
-                var ok = addSankeySlide(slideData, COL_SENDER);
-                if (!ok) {
-                    // Fallback to JPEG
-                    renderSlideToJpeg(slideData).then(function(jpegDataUrl) {
-                        var sl = pres.addSlide();
-                        if (jpegDataUrl) sl.addImage({ data: jpegDataUrl, x: 0, y: 0, w: 10, h: 5.625 });
-                        pptxHeader(sl, slideData.title || 'Структура: Отправитель → Получатель');
-                        pptxFooter(sl);
-                        slideIndex++;
-                        processNext();
-                    });
-                    return;
-                }
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else if (slideData.type === 'sankey-manufacturer') {
-                var ok2 = addSankeySlide(slideData, COL_MANUFACTURER);
-                if (!ok2) {
-                    renderSlideToJpeg(slideData).then(function(jpegDataUrl) {
-                        var sl = pres.addSlide();
-                        if (jpegDataUrl) sl.addImage({ data: jpegDataUrl, x: 0, y: 0, w: 10, h: 5.625 });
-                        pptxHeader(sl, slideData.title || 'Структура: Изготовитель → Получатель');
-                        pptxFooter(sl);
-                        slideIndex++;
-                        processNext();
-                    });
-                    return;
-                }
-                slideIndex++;
-                setTimeout(processNext, 0);
-            } else {
-                // Unknown type — fallback to JPEG
-                renderSlideToJpeg(slideData).then(function(jpegDataUrl) {
-                    var sl = pres.addSlide();
-                    if (jpegDataUrl) sl.addImage({ data: jpegDataUrl, x: 0, y: 0, w: 10, h: 5.625 });
-                    pptxHeader(sl, slideData.title || '');
-                    pptxFooter(sl);
+            } else if (ANALYTICS_TYPES.indexOf(slideData.type) !== -1) {
+                addAnalyticsSlide(slideData).then(function() {
                     slideIndex++;
                     processNext();
                 });
+            } else {
+                // Неизвестный тип — пропускаем
+                slideIndex++;
+                setTimeout(processNext, 0);
             }
         }
 
