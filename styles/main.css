@@ -728,6 +728,22 @@ body {
     margin-bottom: 24px;
 }
 
+.upload-append-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
+}
+
+.upload-append-input { display: none; }
+
+.upload-append-hint {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
 .upload-area {
     display: flex;
     align-items: center;

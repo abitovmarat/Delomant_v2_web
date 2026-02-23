@@ -195,6 +195,111 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- Добавление файла (append) ---
+    var appendRow = document.querySelector('.upload-append-row');
+    var appendBtn = document.querySelector('.upload-append-btn');
+    var appendInput = document.querySelector('.upload-append-input');
+
+    if (appendBtn && appendInput) {
+        appendBtn.addEventListener('click', function () { appendInput.click(); });
+        appendInput.addEventListener('change', function () {
+            if (this.files.length > 0) { appendFile(this.files[0]); this.value = ''; }
+        });
+    }
+
+    function appendFile(file) {
+        if (!appState.rawData || appState.rawData.length === 0) {
+            handleFile(file);
+            return;
+        }
+        var ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xls') {
+            alert('Поддерживаются только CSV, XLS, XLSX');
+            return;
+        }
+        showLoading(file.name);
+        var done = function(parsed) {
+            hideLoading();
+            if (!parsed || parsed.rows.length === 0) {
+                alert('Файл пуст или имеет неверный формат');
+                return;
+            }
+            // Проверяем совместимость заголовков
+            var existingHeaders = appState.headers;
+            var newHeaders = parsed.headers;
+            var missing = existingHeaders.filter(function(h) { return newHeaders.indexOf(h) === -1; });
+            var extra = newHeaders.filter(function(h) { return existingHeaders.indexOf(h) === -1; });
+            var warn = '';
+            if (missing.length > 0) warn += 'Отсутствуют столбцы: ' + missing.slice(0, 5).join(', ') + (missing.length > 5 ? '...' : '') + '\n';
+            if (extra.length > 0) warn += 'Новые столбцы (будут добавлены): ' + extra.slice(0, 5).join(', ') + (extra.length > 5 ? '...' : '') + '\n';
+            if (warn && !confirm('Структура файлов отличается:\n' + warn + '\nПродолжить?')) return;
+
+            // Объединяем: добавляем новые заголовки
+            extra.forEach(function(h) { existingHeaders.push(h); });
+            // Нормализуем новые строки (заполняем пустые значения для отсутствующих столбцов)
+            parsed.rows.forEach(function(row) {
+                existingHeaders.forEach(function(h) { if (!(h in row)) row[h] = ''; });
+            });
+            // Нормализуем старые строки (заполняем новые столбцы)
+            if (extra.length > 0) {
+                appState.rawData.forEach(function(row) {
+                    extra.forEach(function(h) { if (!(h in row)) row[h] = ''; });
+                });
+            }
+
+            appState.rawData = appState.rawData.concat(parsed.rows);
+            appState.fileName = appState.fileName + ' + ' + file.name;
+            appState.processedData = [];
+            appState.isProcessed = false;
+
+            renderFileCardAppend();
+            updateProcessingState();
+            renderColumnsList();
+            updateRatioSelects();
+            updateCustomMappingSelects();
+            updateVisualizationFields();
+            autoFillResearchCommodity(appState.rawData, appState.headers);
+        };
+
+        if (ext === 'csv') {
+            var reader = new FileReader();
+            reader.onload = function(e) { done(parseCSV(e.target.result)); };
+            reader.onerror = function() { hideLoading(); alert('Не удалось прочитать файл'); };
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var wb = XLSX.read(e.target.result, { type: 'array' });
+                    var sheet = wb.Sheets[wb.SheetNames[0]];
+                    var json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                    done(json.length > 0 ? { headers: Object.keys(json[0]), rows: json } : null);
+                } catch(err) { hideLoading(); alert('Ошибка чтения файла: ' + err.message); }
+            };
+            reader.onerror = function() { hideLoading(); alert('Не удалось прочитать файл'); };
+            reader.readAsArrayBuffer(file);
+        }
+    }
+
+    function renderFileCardAppend() {
+        var dateRange = detectDateRange(appState.rawData, appState.headers);
+        fileList.innerHTML =
+            '<div class="file-card file-card-success">' +
+            '  <span class="file-card-icon">✅</span>' +
+            '  <div class="file-card-body">' +
+            '    <h4 class="file-card-name">' + appState.fileName + '</h4>' +
+            '    <p class="file-card-meta">' +
+            '      Строк: ' + formatNumber(appState.rawData.length) +
+            '  &nbsp;|&nbsp; Столбцов: ' + appState.headers.length +
+            (dateRange ? '  &nbsp;|&nbsp; Период: ' + dateRange : '') +
+            '    </p>' +
+            '  </div>' +
+            '  <span class="file-card-status">Объединено</span>' +
+            '</div>';
+        uploadTitle.textContent = appState.fileName;
+        uploadDesc.textContent = formatNumber(appState.rawData.length) + ' строк загружено';
+    }
+
     function showLoading(fileName) {
         uploadArea.classList.add('loading');
         uploadTitle.textContent = fileName;
@@ -453,6 +558,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         uploadTitle.textContent = file.name;
         uploadDesc.textContent = formatNumber(parsed.rows.length) + ' строк загружено';
+        if (appendRow) appendRow.style.display = '';
     }
 
     function detectDateRange(rows, headers) {
