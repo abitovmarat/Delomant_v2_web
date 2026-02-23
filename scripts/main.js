@@ -501,8 +501,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // Находим самый частый «корень» описания, берём первые 3 слова
             var topRoot = Object.keys(rootCounts).sort(function(a, b) { return rootCounts[b] - rootCounts[a]; })[0];
             if (topRoot && rootExample[topRoot]) {
-                var words = rootExample[topRoot].split(' ');
-                parts.push(words.slice(0, 3).join(' '));
+                var full = rootExample[topRoot];
+                var commaIdx = full.indexOf(',');
+                parts.push(commaIdx > 0 ? full.slice(0, commaIdx) : full.slice(0, 40));
             }
         }
 
