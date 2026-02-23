@@ -3166,9 +3166,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Подписи годов по X
-            var xStep = years.length > 1 ? innerW / (years.length - 1) : innerW / 2;
+            var xPadPDA = innerW * 0.06;
+            var plotWPDA = innerW - xPadPDA * 2;
+            var xStep = years.length > 1 ? plotWPDA / (years.length - 1) : plotWPDA / 2;
             years.forEach(function (y, i) {
-                var x = pad.left + (years.length > 1 ? xStep * i : innerW / 2);
+                var x = pad.left + xPadPDA + (years.length > 1 ? xStep * i : plotWPDA / 2);
                 html += '<text x="' + x + '" y="' + (chartH - pad.bottom + 25) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + y + '</text>';
             });
 
@@ -3179,7 +3181,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 years.forEach(function (y, yi) {
                     var price = priceData[c][y];
                     if (price != null) {
-                        var x = pad.left + (years.length > 1 ? xStep * yi : innerW / 2);
+                        var x = pad.left + xPadPDA + (years.length > 1 ? xStep * yi : plotWPDA / 2);
                         var yp = pad.top + innerH - ((price - yMin) / yRange) * innerH;
                         points.push({ x: x, y: yp, val: price });
                     }
