@@ -498,10 +498,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     rootExample[root] = full;
                 }
             }
-            // Находим самый частый «корень» описания
+            // Находим самый частый «корень» описания, берём первые 3 слова
             var topRoot = Object.keys(rootCounts).sort(function(a, b) { return rootCounts[b] - rootCounts[a]; })[0];
             if (topRoot && rootExample[topRoot]) {
-                parts.push(rootExample[topRoot]);
+                var words = rootExample[topRoot].split(' ');
+                parts.push(words.slice(0, 3).join(' '));
             }
         }
 
