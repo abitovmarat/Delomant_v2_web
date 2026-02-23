@@ -6614,7 +6614,10 @@ document.addEventListener('DOMContentLoaded', function () {
             var cW = 420, cH = 200, pad = { top: 16, right: 120, bottom: 24, left: 50 };
             var innerW = cW - pad.left - pad.right;
             var innerH = cH - pad.top - pad.bottom;
-            var xStep = 3 > 0 ? innerW / 3 : innerW;
+            // Горизонтальный отступ внутри области для Q1 и Q4 — равный с обоих сторон
+            var xPad = innerW * 0.08;
+            var plotW = innerW - xPad * 2;
+            var xStep = plotW / 3;
 
             body += '<div style="display:inline-block;vertical-align:top;margin-right:12px">';
             body += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">' + m.title + '</div>';
@@ -6629,7 +6632,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 body += '<text x="' + (pad.left - 4) + '" y="' + (yPos + 3) + '" text-anchor="end" font-size="7" fill="#64748B">' + formatNumber(yVal) + '</text>';
             }
             quarters.forEach(function (q, qi) {
-                body += '<text x="' + (pad.left + xStep * qi) + '" y="' + (cH - 6) + '" text-anchor="middle" font-size="8" fill="#64748B">Q' + q + '</text>';
+                body += '<text x="' + (pad.left + xPad + xStep * qi) + '" y="' + (cH - 6) + '" text-anchor="middle" font-size="8" fill="#64748B">Q' + q + '</text>';
             });
 
             years.forEach(function (y, yi) {
@@ -6639,7 +6642,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     var d = byYQ[y + '|' + q];
                     if (d && d.weight > 0) {
                         var v = m.key === 'usd' ? d.usd / d.weight : d.rub / d.weight;
-                        pts.push({ x: pad.left + xStep * qi, y: pad.top + innerH - ((round2(v) - yMin) / yRange) * innerH });
+                        pts.push({ x: pad.left + xPad + xStep * qi, y: pad.top + innerH - ((round2(v) - yMin) / yRange) * innerH });
                     }
                 });
                 if (pts.length >= 2) {
