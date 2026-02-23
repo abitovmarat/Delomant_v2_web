@@ -3714,9 +3714,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Подписи кварталов по X
-            var xStep = quarters.length > 1 ? innerW / (quarters.length - 1) : innerW / 2;
+            var xPadQ = innerW * 0.08;
+            var plotWQ = innerW - xPadQ * 2;
+            var xStep = quarters.length > 1 ? plotWQ / (quarters.length - 1) : plotWQ / 2;
             quarters.forEach(function (q, qi) {
-                var x = pad.left + xStep * qi;
+                var x = pad.left + xPadQ + xStep * qi;
                 html += '<text x="' + x + '" y="' + (chartH - pad.bottom + 25) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '">Q' + q + '</text>';
             });
 
@@ -3727,7 +3729,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 quarters.forEach(function (q, qi) {
                     var pd = priceData[y][q];
                     if (pd && pd[m.key] != null) {
-                        var x = pad.left + xStep * qi;
+                        var x = pad.left + xPadQ + xStep * qi;
                         var yp = pad.top + innerH - ((pd[m.key] - yMin) / yRange) * innerH;
                         points.push({ x: x, y: yp, val: pd[m.key] });
                     }
