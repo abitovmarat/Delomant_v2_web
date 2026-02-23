@@ -6173,7 +6173,10 @@ document.addEventListener('DOMContentLoaded', function () {
             el.addEventListener('dblclick', function (e) {
                 e.stopPropagation();
                 if (el.contentEditable === 'true') return;
+                // Очищаем placeholder-текст для новой пустой строки
+                if (el.getAttribute('data-editable') === 'bullet-new') el.textContent = '';
                 el.contentEditable = 'true';
+                el.style.color = '#0F172A';
                 el.style.outline = '2px solid #2563EB';
                 el.style.outlineOffset = '2px';
                 el.style.borderRadius = '4px';
@@ -6202,6 +6205,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     } else if (field === 'subtitle') {
                         if (!s.opts) s.opts = {};
                         s.opts.subtitle = value;
+                    } else if (field === 'bullet-new') {
+                        if (!s.opts) s.opts = {};
+                        if (value) {
+                            s.opts.bullets = value;
+                            previewPresSlide(presState.activeIndex);
+                        }
                     } else if (field.indexOf('bullet-') === 0) {
                         var bi = parseInt(field.split('-')[1]);
                         if (!s.opts) s.opts = {};
@@ -6347,7 +6356,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             body += '</div>';
         } else {
-            body += '<p style="color:#64748B">Двойной клик чтобы добавить текст</p>';
+            body += '<p class="pres-text-empty" data-editable="bullet-new" style="color:#64748B;cursor:pointer" title="Двойной клик — редактировать">Двойной клик чтобы добавить текст</p>';
         }
         return slideWrapper(slide.title || 'Текст', body, {});
     }
