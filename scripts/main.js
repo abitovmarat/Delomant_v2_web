@@ -6459,7 +6459,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var cW = 580, cH = 360, pad = { top: 20, right: 200, bottom: 30, left: 50 };
         var innerW = cW - pad.left - pad.right;
         var innerH = cH - pad.top - pad.bottom;
-        var xStep = years.length > 1 ? innerW / (years.length - 1) : innerW / 2;
+        var xPadPD = innerW * 0.06;
+        var plotWPD = innerW - xPadPD * 2;
+        var xStep = years.length > 1 ? plotWPD / (years.length - 1) : plotWPD / 2;
 
         var body = '<svg width="' + cW + '" height="' + cH + '" viewBox="0 0 ' + cW + ' ' + cH + '">';
         body += '<style>text{font-family:DejaVu Sans,sans-serif}</style>';
@@ -6473,7 +6475,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // X labels
         years.forEach(function (y, i) {
-            body += '<text x="' + (pad.left + xStep * i) + '" y="' + (cH - 8) + '" text-anchor="middle" font-size="8" fill="#64748B">' + y + '</text>';
+            body += '<text x="' + (pad.left + xPadPD + xStep * i) + '" y="' + (cH - 8) + '" text-anchor="middle" font-size="8" fill="#64748B">' + y + '</text>';
         });
 
         // Lines
@@ -6482,7 +6484,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var pts = [];
             years.forEach(function (y, yi) {
                 if (priceData[c][y] != null) {
-                    pts.push({ x: pad.left + xStep * yi, y: pad.top + innerH - ((priceData[c][y] - yMin) / yRange) * innerH });
+                    pts.push({ x: pad.left + xPadPD + xStep * yi, y: pad.top + innerH - ((priceData[c][y] - yMin) / yRange) * innerH });
                 }
             });
             if (pts.length >= 2) {
