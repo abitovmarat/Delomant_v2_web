@@ -5261,8 +5261,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateResearchProviderUI(pKey) {
         var isLocal = pKey === 'ollama' || pKey === 'lmstudio';
         var isClaude = pKey === 'claude';
+        var isOpenAI = pKey === 'openai';
         researchUrlGroup.style.display = isLocal ? '' : 'none';
-        document.querySelector('.research-model-select-group').style.display = isClaude ? 'none' : '';
+        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI) ? 'none' : '';
         if (isLocal) {
             researchModelSel.style.display = 'none';
             researchModelCst.style.display = '';
@@ -5286,6 +5287,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function getResearchModel() {
         var pKey = researchProvider.value;
         if (pKey === 'claude') return 'claude-sonnet-4-20250514';
+        if (pKey === 'openai') return 'gpt-4o-mini';
         if (pKey === 'ollama' || pKey === 'lmstudio') {
             return researchModelCst.value.trim() || (pKey === 'ollama' ? 'qwen3:8b' : 'local-model');
         }
@@ -5582,7 +5584,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var apiKey = researchApiKey.value.trim() || localStorage.getItem(LS_RESEARCH_APIKEY) || '';
         var model = getResearchModel();
 
-        if ((pKey === 'openrouter' || pKey === 'claude') && !apiKey) {
+        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai') && !apiKey) {
             alert('Введите API-ключ в панели настроек слева');
             researchApiKey.focus();
             return;
@@ -6899,6 +6901,14 @@ document.addEventListener('DOMContentLoaded', function () {
             model: 'local-model',
             needsKey: false,
             needsUrl: true,
+            format: 'openai'
+        },
+        openai: {
+            url: 'https://api.openai.com/v1/chat/completions',
+            model: 'gpt-4o-mini',
+            needsKey: true,
+            needsUrl: false,
+            keyPlaceholder: 'sk-...',
             format: 'openai'
         },
         claude: {

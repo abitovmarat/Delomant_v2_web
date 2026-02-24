@@ -298,6 +298,7 @@
                                 <label class="settings-label">Провайдер</label>
                                 <select class="research-provider">
                                     <option value="openrouter">OpenRouter</option>
+                                    <option value="openai">OpenAI (ChatGPT)</option>
                                     <option value="ollama">Ollama (локально)</option>
                                     <option value="lmstudio">LM Studio (локально)</option>
                                     <option value="claude">Claude API</option>
@@ -306,6 +307,11 @@
                             <div class="settings-group research-model-select-group">
                                 <label class="settings-label">Модель</label>
                                 <select class="research-model-select">
+                                    <optgroup label="OpenAI">
+                                        <option value="gpt-4o-mini">GPT-4o mini (быстрый, дешёвый)</option>
+                                        <option value="gpt-4o">GPT-4o</option>
+                                        <option value="gpt-4.1-mini">GPT-4.1 mini</option>
+                                    </optgroup>
                                     <optgroup label="С поиском в интернете">
                                         <option value="perplexity/sonar">Perplexity Sonar (поиск)</option>
                                         <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск)</option>
@@ -466,6 +472,7 @@
                                     <label class="settings-label">AI-провайдер</label>
                                     <select class="pres-set-provider">
                                         <option value="openrouter">OpenRouter (бесплатные модели)</option>
+                                        <option value="openai">OpenAI (ChatGPT)</option>
                                         <option value="ollama">Ollama (локально)</option>
                                         <option value="lmstudio">LM Studio (локально)</option>
                                         <option value="claude">Claude API (платный)</option>
@@ -474,6 +481,11 @@
                                 <div class="settings-group pres-set-model-group" style="display:none">
                                     <label class="settings-label">Модель</label>
                                     <select class="pres-set-model-select" style="display:none">
+                                        <optgroup label="OpenAI">
+                                            <option value="gpt-4o-mini">GPT-4o mini (быстрый, дешёвый)</option>
+                                            <option value="gpt-4o">GPT-4o</option>
+                                            <option value="gpt-4.1-mini">GPT-4.1 mini</option>
+                                        </optgroup>
                                         <optgroup label="С поиском в интернете">
                                             <option value="perplexity/sonar">Perplexity Sonar (поиск, платный)</option>
                                             <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск, платный)</option>
