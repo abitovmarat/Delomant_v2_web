@@ -5264,7 +5264,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var isOpenAI = pKey === 'openai';
         var isGroq = pKey === 'groq';
         researchUrlGroup.style.display = isLocal ? '' : 'none';
-        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI || isGroq) ? 'none' : '';
+        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI) ? 'none' : '';
         if (isLocal) {
             researchModelSel.style.display = 'none';
             researchModelCst.style.display = '';
@@ -5289,7 +5289,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var pKey = researchProvider.value;
         if (pKey === 'claude') return 'claude-sonnet-4-20250514';
         if (pKey === 'openai') return 'gpt-4o-mini';
-        if (pKey === 'groq') return 'llama-3.3-70b-versatile';
+        if (pKey === 'groq') return researchModelSel.value !== 'custom' ? researchModelSel.value : (researchModelCst.value.trim() || 'llama-3.3-70b-versatile');
         if (pKey === 'ollama' || pKey === 'lmstudio') {
             return researchModelCst.value.trim() || (pKey === 'ollama' ? 'qwen3:8b' : 'local-model');
         }
