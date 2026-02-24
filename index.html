@@ -537,13 +537,14 @@
                             <p class="about-description">
                                 Веб-приложение для анализа данных внешнеэкономической деятельности (ВЭД).
                                 Загрузка и обработка таможенных деклараций, построение аналитических отчётов,
-                                визуализация торговых потоков и экспорт результатов.
+                                визуализация торговых потоков, генерация презентаций и ИИ-исследование товарных рынков.
                             </p>
                         </div>
 
                         <div class="about-section">
                             <h3 class="about-section-title">Обработка данных</h3>
                             <ul class="about-features">
+                                <li><strong>Загрузка:</strong> один или несколько файлов CSV/XLSX/XLS с объединением строк</li>
                                 <li><strong>Маппинг колонок:</strong> автоматический (G## в русские названия) и пользовательский</li>
                                 <li><strong>Извлечение дат:</strong> Месяц, Квартал, Год из даты декларации</li>
                                 <li><strong>Обогащение из справочника:</strong> VLOOKUP-объединение по ключевой колонке</li>
@@ -567,11 +568,33 @@
                         </div>
 
                         <div class="about-section">
+                            <h3 class="about-section-title">Презентация</h3>
+                            <ul class="about-features">
+                                <li><strong>Конструктор слайдов:</strong> перетаскивание, редактирование заголовков и текста</li>
+                                <li><strong>Типы слайдов:</strong> титул, содержание, разделитель, текст, аналитика (6 типов), итоги, контакты</li>
+                                <li><strong>Фильтрация по ТН ВЭД:</strong> каждый аналитический слайд работает со своим срезом данных</li>
+                                <li><strong>Экспорт PPTX:</strong> графики из вкладки Анализ вставляются как изображения</li>
+                                <li><strong>Экспорт PDF:</strong> многостраничный документ с теми же слайдами</li>
+                            </ul>
+                        </div>
+
+                        <div class="about-section">
+                            <h3 class="about-section-title">ИИ-исследование</h3>
+                            <ul class="about-features">
+                                <li><strong>Чат с данными:</strong> задавайте вопросы по загруженным таможенным данным</li>
+                                <li><strong>Контекст:</strong> сводка, топ стран и динамика по годам передаются в запрос автоматически</li>
+                                <li><strong>Генерация слайдов:</strong> ИИ формирует аналитические выводы и добавляет их в презентацию</li>
+                                <li><strong>API-ключ:</strong> используется ваш собственный ключ Claude API, хранится только в браузере</li>
+                            </ul>
+                        </div>
+
+                        <div class="about-section">
                             <h3 class="about-section-title">Экспорт</h3>
                             <ul class="about-features">
-                                <li><strong>Данные:</strong> CSV, XLSX (с закреплённой шапкой и автошириной колонок)</li>
-                                <li><strong>Графики:</strong> PNG (Retina 2x)</li>
-                                <li><strong>Анализ:</strong> таблицы в XLSX/CSV, графики в PNG</li>
+                                <li><strong>Данные:</strong> CSV, XLSX (закреплённая шапка, автоширина колонок)</li>
+                                <li><strong>Графики анализа:</strong> PNG (Retina 2x)</li>
+                                <li><strong>Аналитические таблицы:</strong> XLSX, CSV</li>
+                                <li><strong>Презентация:</strong> PPTX (PowerPoint), PDF</li>
                             </ul>
                         </div>
 
@@ -579,8 +602,8 @@
                             <h3 class="about-section-title">Технологии</h3>
                             <p class="about-tech">
                                 <strong>Frontend:</strong> Vanilla HTML5, CSS3, JavaScript (ES5)<br>
-                                <strong>Библиотеки:</strong> SheetJS (XLSX/XLS), JSZip (заморозка шапки)<br>
-                                <strong>Курсы валют:</strong> ЦБ РФ (предзагрузка 2020-2026 + API-фолбэк)<br>
+                                <strong>Библиотеки:</strong> SheetJS (XLSX/XLS), JSZip, PptxGenJS, jsPDF<br>
+                                <strong>Курсы валют:</strong> ЦБ РФ (предзагрузка 2020–2026 + API-фолбэк)<br>
                                 <strong>Шрифт:</strong> DejaVu Sans<br>
                                 <strong>Deployment:</strong> GitHub Pages
                             </p>
