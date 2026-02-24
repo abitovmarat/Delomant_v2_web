@@ -5262,8 +5262,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var isLocal = pKey === 'ollama' || pKey === 'lmstudio';
         var isClaude = pKey === 'claude';
         var isOpenAI = pKey === 'openai';
+        var isGroq = pKey === 'groq';
         researchUrlGroup.style.display = isLocal ? '' : 'none';
-        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI) ? 'none' : '';
+        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI || isGroq) ? 'none' : '';
         if (isLocal) {
             researchModelSel.style.display = 'none';
             researchModelCst.style.display = '';
@@ -5288,6 +5289,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var pKey = researchProvider.value;
         if (pKey === 'claude') return 'claude-sonnet-4-20250514';
         if (pKey === 'openai') return 'gpt-4o-mini';
+        if (pKey === 'groq') return 'llama-3.3-70b-versatile';
         if (pKey === 'ollama' || pKey === 'lmstudio') {
             return researchModelCst.value.trim() || (pKey === 'ollama' ? 'qwen3:8b' : 'local-model');
         }
@@ -5584,7 +5586,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var apiKey = researchApiKey.value.trim() || localStorage.getItem(LS_RESEARCH_APIKEY) || '';
         var model = getResearchModel();
 
-        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai') && !apiKey) {
+        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai' || pKey === 'groq') && !apiKey) {
             alert('Введите API-ключ в панели настроек слева');
             researchApiKey.focus();
             return;
@@ -6909,6 +6911,14 @@ document.addEventListener('DOMContentLoaded', function () {
             needsKey: true,
             needsUrl: false,
             keyPlaceholder: 'sk-...',
+            format: 'openai'
+        },
+        groq: {
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            model: 'llama-3.3-70b-versatile',
+            needsKey: true,
+            needsUrl: false,
+            keyPlaceholder: 'gsk_...',
             format: 'openai'
         },
         claude: {
