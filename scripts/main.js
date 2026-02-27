@@ -1385,6 +1385,44 @@ document.addEventListener('DOMContentLoaded', function () {
         return count;
     }
 
+    // Нормализация страны происхождения:
+    // если "Страна происхождения" пустая или "ПРОЧИЕ/НЕУСТАНОВЛЕННЫЕ" —
+    // заполнить из "Код страны отправления" (формат "EC - ЭКВАДОР" → "ЭКВАДОР")
+    // или из "Код торгующей страны"
+    function normalizeCountryOrigin(data, headers) {
+        var originCol = findColumn(headers, 'Страна происхождения');
+        var dispatchCol = findColumn(headers, 'Код страны отправления');
+        var tradingCol = findColumn(headers, 'Код торгующей страны');
+        if (!originCol) { return 0; }
+        if (!dispatchCol && !tradingCol) { return 0; }
+
+        var count = 0;
+        var EMPTY_VALS = ['', 'ПРОЧИЕ/НЕУСТАНОВЛЕННЫЕ СТРАНЫ', 'ПРОЧИЕ', 'РАЗНЫЕ', '0'];
+
+        data.forEach(function (row) {
+            var origin = String(row[originCol] || '').trim().toUpperCase();
+            if (EMPTY_VALS.indexOf(origin) === -1) { return; } // уже заполнено
+
+            // Пытаемся взять из Код страны отправления, затем из Торгующей страны
+            var source = null;
+            if (dispatchCol) { source = String(row[dispatchCol] || '').trim(); }
+            if (!source && tradingCol) { source = String(row[tradingCol] || '').trim(); }
+            if (!source) { return; }
+
+            // Формат "EC - ЭКВАДОР" → берём часть после " - "
+            var dashIdx = source.indexOf(' - ');
+            var name = dashIdx !== -1 ? source.slice(dashIdx + 3).trim() : source;
+
+            // Не подставляем "РАЗНЫЕ", "00 - РАЗНЫЕ" и т.п.
+            var nameLower = name.toUpperCase();
+            if (EMPTY_VALS.indexOf(nameLower) !== -1 || nameLower === 'РАЗНЫЕ') { return; }
+
+            row[originCol] = name;
+            count++;
+        });
+        return count;
+    }
+
     function removeDuplicates(data) {
         var seen = {};
         return data.filter(function (row) {
@@ -2071,6 +2109,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (ops.indexOf('normalize-companies') !== -1) {
                 var ncCount = normalizeCompanyNames(data, headers);
                 log.push('Названия компаний: нормализовано ' + ncCount + ' значений');
+            }
+            if (ops.indexOf('normalize-country') !== -1) {
+                var ncoCount = normalizeCountryOrigin(data, headers);
+                log.push('Страна происхождения: заполнено ' + ncoCount + ' пустых значений');
             }
 
             // 5. Нормализация
@@ -3018,7 +3060,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var chartIdx = 0;
         var allExportBlocks = [];
 
-        // Хелпер: строит таблицу «страна × год» (тонны) + строки ВСЕГО и Доля лидера
+        // Хелпер: строит таблицу «страна × год» (кг) + строки ВСЕГО и Доля лидера
         function buildPivotTable(countryCol, metric, metricLabel, unit, divisor) {
             // Группировка: страна → год → value
             var byCountryYear = {};
@@ -3143,16 +3185,16 @@ document.addEventListener('DOMContentLoaded', function () {
             var padding = { top: 10, right: 80, bottom: 10, left: labelWidth };
             var ch = padding.top + top.length * (barHeight + 8) + padding.bottom;
             var innerW = cw - padding.left - padding.right;
-            var maxVal = byCountry[top[0]] / 1000;
+            var maxVal = byCountry[top[0]];
             if (maxVal === 0) { maxVal = 1; }
 
             var h = '<div class="analysis-section">';
-            h += '<h3 class="analysis-section-title">Топ-10 по объёму (' + countryCol + ', тонн)</h3>';
+            h += '<h3 class="analysis-section-title">Топ-10 по объёму (' + countryCol + ', кг)</h3>';
             h += '<svg class="analysis-chart" data-chart-idx="' + cIdx + '" width="' + cw + '" height="' + ch + '" viewBox="0 0 ' + cw + ' ' + ch + '">';
             h += '<style>text { font-family: ' + CHART_FONT + '; font-size: 12px; fill: ' + CHART_COLORS.text + '; }</style>';
 
             top.forEach(function (c, i) {
-                var val = round2(byCountry[c] / 1000);
+                var val = Math.round(byCountry[c]);
                 var pct = totalWeight > 0 ? round2(byCountry[c] / totalWeight * 100) : 0;
                 var bw = (val / maxVal) * innerW;
                 var y = padding.top + i * (barHeight + 8);
@@ -3168,11 +3210,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         countryCols.forEach(function (countryCol) {
-            // Таблица тонны (страна × год)
+            // Таблица кг (страна × год)
             if (weightCol) {
-                var wBlock = buildPivotTable(countryCol, weightCol, 'Структура импорта, тонны', 'тонн', 1);
+                var wBlock = buildPivotTable(countryCol, weightCol, 'Структура импорта, кг', 'кг', 1);
                 html += wBlock.html;
-                allExportBlocks.push({ label: countryCol + ' — тонны', rows: wBlock.exportRows });
+                allExportBlocks.push({ label: countryCol + ' — кг', rows: wBlock.exportRows });
             }
 
             // Таблица тыс. USD (страна × год)
@@ -6639,7 +6681,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Header
         body += '<rect x="0" y="0" width="' + svgW + '" height="' + headH + '" fill="#1E3A5F" rx="4"/>';
-        body += '<text x="6" y="' + (headH / 2 + 5) + '" fill="#FFFFFF" font-weight="700" font-size="11">\u0421\u0442\u0440\u0430\u043d\u0430 (\u0442\u043e\u043d\u043d)</text>';
+        body += '<text x="6" y="' + (headH / 2 + 5) + '" fill="#FFFFFF" font-weight="700" font-size="11">\u0421\u0442\u0440\u0430\u043d\u0430 (\u043a\u0433)</text>';
         years.forEach(function(y, yi) {
             var x = col0W + colYW * yi + colYW / 2;
             body += '<text x="' + x + '" y="' + (headH / 2 + 5) + '" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="11">' + y + '</text>';
