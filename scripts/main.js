@@ -2469,6 +2469,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var rubCol = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
         var yearCol = findColumn(headers, COL_YEAR);
         var quarterCol = findColumn(headers, COL_QUARTER);
+        var monthCol = findColumn(headers, COL_MONTH);
 
         if (!weightCol && !statUsdCol && !rubCol) {
             analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы веса или стоимости. Выполните обработку с маппингом.</p></div>';
@@ -2483,6 +2484,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var byYear = {};
         // Группируем по год+квартал
         var byQuarter = {};
+        // Группируем по год+месяц
+        var byMonth = {};
+        var MONTH_ORDER = { 'Январь':1,'Февраль':2,'Март':3,'Апрель':4,'Май':5,'Июнь':6,'Июль':7,'Август':8,'Сентябрь':9,'Октябрь':10,'Ноябрь':11,'Декабрь':12 };
 
         data.forEach(function (row) {
             var year = String(row[yearCol] || '').trim();
@@ -2505,6 +2509,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     byQuarter[key].weight += weight;
                     byQuarter[key].usd += usd;
                     byQuarter[key].rub += rub;
+                }
+            }
+
+            if (monthCol) {
+                var mon = String(row[monthCol] || '').trim();
+                if (mon) {
+                    var mkey = year + '_' + String(MONTH_ORDER[mon] || 0).padStart(2, '0') + '_' + mon;
+                    if (!byMonth[mkey]) { byMonth[mkey] = { weight: 0, usd: 0, rub: 0, year: year, mon: mon }; }
+                    byMonth[mkey].weight += weight;
+                    byMonth[mkey].usd += usd;
+                    byMonth[mkey].rub += rub;
                 }
             }
         });
@@ -2584,6 +2599,29 @@ document.addEventListener('DOMContentLoaded', function () {
             quarterKeys.forEach(function (key) {
                 var d = byQuarter[key];
                 html += '<tr><td>' + key + '</td>';
+                if (weightCol) { html += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>'; }
+                if (statUsdCol) { html += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>'; }
+                if (rubCol) { html += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>'; }
+                html += '</tr>';
+            });
+            html += '</tbody></table></div></div>';
+        }
+
+        // --- Таблица по месяцам ---
+        var monthKeys = Object.keys(byMonth).sort();
+        if (monthKeys.length > 0) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">По месяцам</h3>';
+            html += '<div class="data-table-wrapper"><table class="data-table">';
+            html += '<thead><tr><th>Период</th>';
+            if (weightCol) { html += '<th>Объём (тонн)</th>'; }
+            if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
+            if (rubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+            html += '</tr></thead><tbody>';
+            monthKeys.forEach(function (key) {
+                var d = byMonth[key];
+                var label = d.mon + ' ' + d.year;
+                html += '<tr><td>' + label + '</td>';
                 if (weightCol) { html += '<td class="numeric">' + formatNumber(round2(d.weight / 1000)) + '</td>'; }
                 if (statUsdCol) { html += '<td class="numeric">' + formatNumber(round2(d.usd / 1000)) + '</td>'; }
                 if (rubCol) { html += '<td class="numeric">' + formatNumber(round2(d.rub / 1000)) + '</td>'; }
@@ -2757,6 +2795,20 @@ document.addEventListener('DOMContentLoaded', function () {
             quarterKeys.forEach(function (key) {
                 var d = byQuarter[key];
                 var row = { 'Период': key };
+                if (weightCol) { row['Объём (тонн)'] = round2(d.weight / 1000); }
+                if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
+                if (rubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+                exportRows.push(row);
+            });
+        }
+
+        // Месячные данные
+        if (monthKeys.length > 0) {
+            exportRows.push({ 'Период': '' });
+            exportRows.push({ 'Период': '--- По месяцам ---' });
+            monthKeys.forEach(function (key) {
+                var d = byMonth[key];
+                var row = { 'Период': d.mon + ' ' + d.year };
                 if (weightCol) { row['Объём (тонн)'] = round2(d.weight / 1000); }
                 if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
                 if (rubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
