@@ -2388,10 +2388,34 @@ document.addEventListener('DOMContentLoaded', function () {
         if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('quarterlyPrices'); });
     }
 
+    // --- Фильтр по направлению ИМ/ЭК ---
+    var analysisDirectionFilter = '';
+
+    document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            analysisDirectionFilter = btn.getAttribute('data-dir');
+        });
+    });
+
+    function getFilteredAnalysisData() {
+        var data = getActiveData();
+        var headers = getActiveHeaders();
+        if (!analysisDirectionFilter) return { data: data, headers: headers };
+        var dirCol = findColumn(headers, COL_DIRECTION);
+        if (!dirCol) return { data: data, headers: headers };
+        var filtered = data.filter(function (row) {
+            return String(row[dirCol] || '').trim().toUpperCase() === analysisDirectionFilter;
+        });
+        return { data: filtered, headers: headers };
+    }
+
     function runAnalysis(type) {
         try {
-            var data = getActiveData();
-            var headers = getActiveHeaders();
+            var fd = getFilteredAnalysisData();
+            var data = fd.data;
+            var headers = fd.headers;
             if (data.length === 0) {
                 analysisResults.innerHTML =
                     '<div class="analysis-empty"><p>Сначала загрузите данные</p></div>';
