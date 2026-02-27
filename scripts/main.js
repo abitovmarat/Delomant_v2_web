@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var CBR_API_BASE = 'https://www.cbr-xml-daily.ru';
     var COL_CURRENCY_CODE = 'Код валюты';
     var COL_CBR_RATE = 'Курс ЦБ РФ';
-    var COL_INVOICE_RUB_CBR = 'Фактурная стоимость в рублях (ЦБ)';
+    var COL_INVOICE_RUB_CBR = 'Таможенная стоимость в рублях (ЦБ)';
 
     var LS_CBR_KEY = 'delomant_cbr_rates';
     var rateCache = null; // Загружается один раз из JSON-файла или localStorage
@@ -1492,11 +1492,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function calcUsdPerKgInvoice(data, headers) {
-        var valueCol = findColumn(headers, COL_INVOICE);
+        var valueCol = findColumn(headers, COL_CUSTOMS);
         var weightCol = findColumn(headers, COL_WEIGHT);
-        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_INVOICE + '» или «' + COL_WEIGHT + '»' }; }
+        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_CUSTOMS + '» или «' + COL_WEIGHT + '»' }; }
 
-        var colName = 'USD за КГ фактурная';
+        var colName = 'USD за КГ таможенная';
         var count = 0;
         data.forEach(function (row) {
             var v = Number(row[valueCol]);
@@ -1512,9 +1512,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function calcRurPerKg(data, headers) {
-        var valueCol = findColumn(headers, COL_INVOICE_RUB);
+        var valueCol = findColumn(headers, COL_CUSTOMS);
         var weightCol = findColumn(headers, COL_WEIGHT);
-        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_INVOICE_RUB + '» или «' + COL_WEIGHT + '»' }; }
+        if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_CUSTOMS + '» или «' + COL_WEIGHT + '»' }; }
 
         var colName = 'RUR за КГ';
         var count = 0;
@@ -1651,12 +1651,12 @@ document.addEventListener('DOMContentLoaded', function () {
     function applyCBRRates(data, headers) {
         var dateCol = findColumn(headers, COL_DATE_REG) || findColumn(headers, COL_DATE_RELEASE);
         var currCol = findColumn(headers, COL_CURRENCY_CODE);
-        var invoiceCol = findColumn(headers, COL_INVOICE);
+        var invoiceCol = findColumn(headers, COL_CUSTOMS);
 
         if (!dateCol || !currCol || !invoiceCol) {
             return Promise.resolve({
                 count: 0, errors: 0, colNames: [],
-                error: 'Не найдены столбцы «' + COL_DATE_REG + '», «' + COL_CURRENCY_CODE + '» или «' + COL_INVOICE + '»'
+                error: 'Не найдены столбцы «' + COL_DATE_REG + '», «' + COL_CURRENCY_CODE + '» или «' + COL_CUSTOMS + '»'
             });
         }
 
