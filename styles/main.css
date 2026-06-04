@@ -379,6 +379,7 @@ body {
 .columns-controls {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .columns-controls .btn {
@@ -574,6 +575,47 @@ body {
     padding: 4px 16px 8px 44px;
     flex-direction: column;
     gap: 6px;
+}
+
+.operation-sub-company-dict {
+    padding: 4px 16px 8px 44px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.company-dict-status {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.company-dict-autosave {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.company-dict-autosave input {
+    width: 14px;
+    height: 14px;
+}
+
+.company-dict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.company-dict-actions .btn {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+.company-dict-import-input {
+    display: none;
 }
 
 .custom-mapping-row {
@@ -1091,6 +1133,40 @@ body {
     font-size: 14px;
 }
 
+/* Master */
+.research-master {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: #F8FAFC;
+}
+
+.research-master-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.research-master-subtitle {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+}
+
+.research-master-btn {
+    flex-shrink: 0;
+}
+
+.research-master-btn.loading {
+    opacity: 0.75;
+    cursor: wait;
+}
+
 /* Presets */
 .research-presets {
     display: flex;
@@ -1360,6 +1436,7 @@ body {
 .processing-export {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
     margin-top: 16px;
 }
 

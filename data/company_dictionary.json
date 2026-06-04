@@ -1,0 +1,22 @@
+[
+  {
+    "raw_pattern": "ООО\"ПОЛЛYКС\"",
+    "canonical_name": "ПОЛЛУКС, ООО"
+  },
+  {
+    "raw_pattern": "ООО\"ПОЛЛУКС\"",
+    "canonical_name": "ПОЛЛУКС, ООО"
+  },
+  {
+    "raw_pattern": "CAMIMEX JOINT STOCK COMPANY (CAMIMEX CORP)",
+    "canonical_name": "CAMIMEX CORP, JSC"
+  },
+  {
+    "raw_pattern": "MINH QUI SEAFOOD CO., LTD",
+    "canonical_name": "MINH QUI SEAFOOD, CO., LTD"
+  },
+  {
+    "raw_pattern": "РЫБОЛОВЕЦКАЯ АРТЕЛЬ(КОЛХОЗ) ИМ.50 ЛЕТ ОКТЯБРЯ",
+    "canonical_name": "РЫБОЛОВЕЦКАЯ АРТЕЛЬ"
+  }
+]

@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_WEIGHT = 'Вес нетто, кг';
     var COL_STAT_USD = 'Статистическая стоимость, USD';
     var COL_INVOICE = 'Фактурная стоимость';
-    var COL_INVOICE_RUB = 'Фактурная стоимость в рублях';
+    var COL_INVOICE_RUB = 'Фактурная стоимость (нац. вал.)';
     var COL_CUSTOMS = 'Таможенная стоимость';
     var COL_INN = 'ИНН получателя';
     var COL_HS_CODE = 'Код товара по ТН ВЭД';
@@ -41,6 +41,26 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_SENDER = 'Наименование отправителя';
     var COL_RECEIVER = 'Наименование получателя';
     var COL_DIRECTION = 'Направление перемещения';
+    var BRIEF_PROCESSING_COLUMNS = [
+        [COL_DATE_REG],
+        [COL_SENDER],
+        ['Адрес отправителя'],
+        [COL_INN],
+        [COL_RECEIVER],
+        ['Адрес получателя'],
+        ['Наименование контрактодержателя'],
+        ['Страна отправления'],
+        [COL_PRODUCT_NAME],
+        [COL_MANUFACTURER],
+        [COL_HS_CODE],
+        ['Условие поставки'],
+        ['Пункт поставки товара'],
+        [COL_WEIGHT],
+        [COL_INVOICE_RUB],
+        [COL_STAT_USD],
+        [COL_CUSTOMS],
+        ['Таможенная стоимость USD за КГ', 'USD за КГ', 'USD за КГ таможенная', 'USD за КГ статистическая']
+    ];
 
     var UTF8_BOM = '\uFEFF';
     var CSV_SEPARATOR = ';';
@@ -65,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var CBR_API_BASE = 'https://www.cbr-xml-daily.ru';
     var COL_CURRENCY_CODE = 'Код валюты';
     var COL_CBR_RATE = 'Курс ЦБ РФ';
-    var COL_INVOICE_RUB_CBR = 'Таможенная стоимость в рублях (ЦБ)';
+    var COL_INVOICE_RUB_CBR = 'Таможенная стоимость (нац. вал., ЦБ)';
 
     var LS_CBR_KEY = 'delomant_cbr_rates';
     var rateCache = null; // Загружается один раз из JSON-файла или localStorage
@@ -594,6 +614,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var columnsHint = document.querySelector('.columns-hint');
     var columnsSelectAll = document.querySelector('.columns-select-all');
     var columnsDeselectAll = document.querySelector('.columns-deselect-all');
+    var columnsBriefBtn = document.querySelector('.columns-brief-btn');
     var columnsToggleBtn = document.querySelector('.columns-toggle-btn');
 
     function renderColumnsList() {
@@ -664,6 +685,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 cb.checked = false;
                 cb.closest('.column-chip').classList.add('unchecked');
             });
+        });
+    }
+
+    function getBriefColumnMatches(headers) {
+        var selected = [];
+        BRIEF_PROCESSING_COLUMNS.forEach(function (aliases) {
+            aliases.forEach(function (alias) {
+                if (headers.indexOf(alias) !== -1 && selected.indexOf(alias) === -1) {
+                    selected.push(alias);
+                }
+            });
+        });
+        return selected;
+    }
+
+    function applyColumnsSelection(cols) {
+        if (!columnsList) { return; }
+        columnsList.querySelectorAll('.column-checkbox').forEach(function (cb) {
+            var selected = cols.indexOf(cb.value) !== -1;
+            cb.checked = selected;
+            cb.closest('.column-chip').classList.toggle('unchecked', !selected);
+        });
+    }
+
+    if (columnsBriefBtn) {
+        columnsBriefBtn.addEventListener('click', function () {
+            applyColumnsSelection(getBriefColumnMatches(appState.headers));
         });
     }
 
@@ -793,6 +841,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var customMappingList = document.querySelector('.custom-mapping-list');
     var customMappingAddBtn = document.querySelector('.custom-mapping-add-btn');
     var LS_CUSTOM_MAPPING_KEY = 'delomant_custom_mapping';
+    var companyDictStatus = document.querySelector('.company-dict-status');
+    var companyDictAutosave = document.querySelector('.company-dict-autosave-checkbox');
+    var companyDictCollectBtn = document.querySelector('.company-dict-collect-btn');
+    var companyDictImportBtn = document.querySelector('.company-dict-import-btn');
+    var companyDictExportBtn = document.querySelector('.company-dict-export-btn');
+    var companyDictClearBtn = document.querySelector('.company-dict-clear-btn');
+    var companyDictImportInput = document.querySelector('.company-dict-import-input');
+    var LS_COMPANY_DICTIONARY_KEY = 'delomant_company_dictionary';
+    var LS_COMPANY_DICTIONARY_AUTOSAVE = 'delomant_company_dictionary_autosave';
+    var COMPANY_DICTIONARY_URL = 'data/company_dictionary.json';
+    var companyDictionary = {};
+    var companyDictionaryLastAdded = 0;
 
     // Показ/скрытие панели при клике на чекбокс
     var customMappingCb = document.querySelector('[data-op="custom-mapping"] .operation-checkbox');
@@ -934,12 +994,9 @@ document.addEventListener('DOMContentLoaded', function () {
         '012 Основной таможенный режим': 'Таможенный режим',
         'Наименование основного таможенного режима': 'Наименование таможенного режима',
         'G24 (характер сделки)': 'Характер сделки',
-        'G36 (Преференции, особ.уплаты)': 'Преференции',
-        'G36 (преференции, особенности уплаты платежей)': 'Преференции',
         'G37 (Процедура)': 'Процедура',
         'G37 (код таможенной процедуры)': 'Процедура',
         '37 Процедура': 'Процедура',
-        '36 Преференции': 'Преференции',
         'G37_1 (Код предшествующего таможенного режима)': 'Код предшествующего режима',
         'Предшествующий таможенный режим': 'Предшествующий таможенный режим',
         'G37_2 (Код особенности перемещения декларируемых товаров)': 'Код особенности перемещения',
@@ -1089,7 +1146,7 @@ document.addEventListener('DOMContentLoaded', function () {
         'G202 (Условие поставки)': 'Условие поставки',
         'G202 (Краткий букв код условия поставки)': 'Условие поставки',
         '202 Условие поставки': 'Условие поставки',
-        'Условие поставки': 'Условие поставки (расшифровка)',
+        'Условие поставки': 'Условие поставки',
         'G2021 (Пункт поставки товара)': 'Пункт поставки товара',
         'G2021 (пункт поставки товара)': 'Пункт поставки товара',
         '2021 Пункт поставки товара': 'Пункт поставки товара',
@@ -1139,7 +1196,7 @@ document.addEventListener('DOMContentLoaded', function () {
         'G42 (Фактурная стоимость)': 'Фактурная стоимость',
         'G42 (Фактурная стоимость товара)': 'Фактурная стоимость',
         '42 Фактурная стоимость': 'Фактурная стоимость',
-        'G42RUB (Фактурная стоимость в рублях)': 'Фактурная стоимость в рублях',
+        'G42RUB (Фактурная стоимость в рублях)': 'Фактурная стоимость (нац. вал.)',
         'G43 (Признак КТС)': 'Признак КТС',
         'G43 (Признак корректировки таможенной стоимости)': 'Признак КТС',
         '43 Признак корректировки таможенной стоимости (КТС)': 'Признак КТС',
@@ -1158,6 +1215,82 @@ document.addEventListener('DOMContentLoaded', function () {
         'USD/KG Статистическая стоимость, USD/Вес НЕТТО, кг': 'USD за КГ',
         'FIRM (Доп.информация о контрактодержателе (Росстат))': 'Доп. информация Росстат',
         // --- Источник 4: русские названия без G-кодов ---
+        'Учёт в статистике': 'STAT',
+        'Учет в статистике': 'STAT',
+        'Номер декларации': 'Номер декларации',
+        'Таможня оформления': 'Код таможни',
+        'Дата ДТ': 'Дата регистрации',
+        'Порядковый № ДТ': 'Номер бланка',
+        'Особенности декларирования': 'Тип ГТД',
+        'Отправитель': 'Наименование отправителя',
+        'Адрес отправителя': 'Адрес отправителя',
+        'Страна отправителя': 'Код страны отправителя',
+        'ОКАТО отправителя': 'ОКАТО отправителя',
+        'КПП отправителя': 'КПП отправителя',
+        'Листов ДТ': 'Кол-во ТД',
+        'Товаров всего': 'Всего наименований товаров',
+        'Мест товара': 'Кол-во мест',
+        'Получатель': 'Наименование получателя',
+        'Адрес получателя': 'Адрес получателя',
+        'Страна получателя': 'Код страны получателя',
+        'ОКАТО получателя': 'ОКАТО получателя',
+        'КПП получателя': 'КПП получателя',
+        'ИНН контрактодержателя': 'ИНН контрактодержателя',
+        'Контрактодержатель': 'Наименование контрактодержателя',
+        'Адрес контрактодержателя': 'Адрес контрактодержателя',
+        'Страна контрактодержателя': 'Код страны контрактодержателя',
+        'ОКАТО контрактодержателя': 'ОКАТО контрактодержателя',
+        'КПП контрактодержателя': 'КПП контрактодержателя',
+        'Торгующая страна': 'Код торгующей страны',
+        'Общая таможенная стоимость': 'Общая таможенная стоимость по ГТД',
+        'ИНН декларанта': 'ИНН декларанта',
+        'Декларант': 'Наименование декларанта',
+        'Адрес декларанта': 'Адрес декларанта',
+        'Страна декларанта': 'Код страны декларанта',
+        'ОКАТО декларанта': 'Код ОКАТО декларанта',
+        'КПП декларанта': 'КПП декларанта',
+        'Кол-во транспорта': 'Кол-во транспортных средств',
+        'Контейнер': 'Контейнерные перевозки',
+        'Валюта контракта': 'Код валюты',
+        'Общая фактурная стоимость': 'Общая фактурная стоимость по ГТД',
+        'Фактурная стоимость, RUB': 'Фактурная стоимость (нац. вал.)',
+        'Курс валюты': 'Курс валюты',
+        'Характер сделки': 'Характер сделки',
+        'Транспорт на границе': 'Вид транспорта на границе',
+        'Паспорт сделки': 'Банковские реквизиты',
+        'Таможня на границе': 'Код таможни на границе',
+        'Тип информации': 'Тип информации',
+        'Регион': 'Район склада',
+        'Населённый пункт': 'Город склада',
+        'Населенный пункт': 'Город склада',
+        'Адрес склада': 'Улица склада',
+        'Таможня склада': 'Код таможенного органа',
+        'Описание товара': 'Наименование и характеристики товаров',
+        'Производитель': 'Фирма-изготовитель',
+        'Кол-во мест': 'Кол-во грузовых мест',
+        'Кол-во контейнеров': 'Кол-во контейнеров',
+        'Доп. количество': 'Кол-во в доп. ед.',
+        'Доп. единица': 'Наименование доп. ед.',
+        'Доп. количество 2': 'Кол-во во 2-й ед.',
+        'Доп. единица 2': 'Наименование 2-й ед.',
+        'Номер товара': 'Номер товара по ГТД',
+        'Код товара ТН ВЭД': 'Код товара по ТН ВЭД',
+        'Код страны происхождения': 'Код страны происхождения',
+        'Вес брутто, кг': 'Вес брутто, кг',
+        'Вес нетто, кг': 'Вес нетто, кг',
+        'Квота': 'Квота',
+        'Единица квоты': 'Код доп. ед. изм.',
+        'Признак КТС': 'Признак КТС',
+        'Метод тамож. стоимости': 'Метод определения ТС',
+        'Стат. стоимость, USD': 'Статистическая стоимость, USD',
+        'Код завершения оформления': 'Код завершения оформления',
+        'Таможенные платежи, USD': 'Таможенные платежи, USD',
+        'Таможенные платежи, RUB': 'Таможенные платежи, RUB',
+        'Стат. стоимость / нетто, USD/кг': 'USD за КГ',
+        'Свидетельство брокера': 'Номер свидетельства брокера',
+        'ИНН брокера': 'ИНН брокера',
+        'ФИО заполнившего ДТ': 'ФИО заполнителя',
+        'ИНН инспектора': 'ИНН инспектора',
         'Изготовитель': 'Фирма-изготовитель',
         'Описание и характеристика товара': 'Наименование и характеристики товаров',
         'Код валюты цены договора': 'Код валюты',
@@ -1188,7 +1321,6 @@ document.addEventListener('DOMContentLoaded', function () {
         'Вес брутто': 'Вес брутто, кг',
         'Статистическая стоимость': 'Статистическая стоимость, USD',
         'Товарный знак': 'Товарный знак',
-        'Преференции': 'Преференции',
         'Процедура': 'Процедура',
         'Фактурная стоимость': 'Фактурная стоимость',
         'Таможенная стоимость': 'Таможенная стоимость',
@@ -1266,21 +1398,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Pipeline функции ---
 
+    function normalizeMapHeaderName(name) {
+        return String(name || '')
+            .replace(/\s*\[гр\.\s*\d+\]\s*$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     function autoMapColumns(data, headers) {
         var mapped = [];
         var missing = [];
         var newHeaders = [];
+        var normalizedHeaders = {};
 
-        // Для каждой записи в COLUMN_MAP ищем точное совпадение в headers
+        headers.forEach(function (h) {
+            var normalized = normalizeMapHeaderName(h);
+            if (normalized && !normalizedHeaders[normalized]) {
+                normalizedHeaders[normalized] = h;
+            }
+        });
+
+        // Для каждой записи в COLUMN_MAP ищем точное совпадение или вариант без суффикса "[гр. N]".
         var mapKeys = Object.keys(COLUMN_MAP);
         var usedStd = {}; // дедупликация: не добавлять одно stdName дважды
         mapKeys.forEach(function (origName) {
             var stdName = COLUMN_MAP[origName];
-            if (headers.indexOf(origName) !== -1) {
+            var headerName = headers.indexOf(origName) !== -1 ? origName : normalizedHeaders[origName];
+            if (headerName) {
                 if (!usedStd[stdName]) {
-                    mapped.push(origName + ' → ' + stdName);
+                    mapped.push(headerName + ' → ' + stdName);
                     newHeaders.push(stdName);
-                    usedStd[stdName] = origName;
+                    usedStd[stdName] = headerName;
                 }
             }
         });
@@ -1357,33 +1505,492 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var COMPANY_COLUMNS = [COL_SENDER, COL_RECEIVER, COL_MANUFACTURER];
+    var COMPANY_COLUMN_HINTS = [
+        'Наименование отправителя',
+        'Наименование получателя',
+        'Наименование контрактодержателя',
+        'Фирма-изготовитель',
+        'Изготовитель',
+        'Производитель',
+        'Отправитель',
+        'Получатель',
+        'Контрагент',
+        'Компания',
+        'Company',
+        'Sender',
+        'Receiver',
+        'Manufacturer',
+        'Supplier',
+        'Importer',
+        'Exporter'
+    ];
+    var COMPANY_COLUMN_SKIP_WORDS = ['АДРЕС', 'ИНН', 'КОД', 'СТРАНА', 'СТРАНЫ', 'ДАТА', 'НОМЕР', 'USD', 'КГ'];
+    var COMPANY_ORGFORMS = [
+        ['ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ', 'ООО', 100],
+        ['ООО', 'ООО', 90],
+        ['ОТКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'АО', 100],
+        ['ОАО', 'АО', 90],
+        ['АКЦИОНЕРНОЕ ОБЩЕСТВО', 'АО', 95],
+        ['АО', 'АО', 85],
+        ['ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'ПАО', 100],
+        ['ПАО', 'ПАО', 90],
+        ['ЗАКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'ЗАО', 100],
+        ['ЗАО', 'ЗАО', 90],
+        ['ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ', 'ИП', 100],
+        ['ИП', 'ИП', 90],
+        ['LIMITED LIABILITY COMPANY', 'LLC', 100],
+        ['LLC', 'LLC', 90],
+        ['JOINT STOCK COMPANY', 'JSC', 100],
+        ['JSC', 'JSC', 90],
+        ['CORPORATION', 'CORP', 100],
+        ['CORP.', 'CORP', 90],
+        ['CORP', 'CORP', 80],
+        ['COMPANY LIMITED', 'LTD', 100],
+        ['CO., LTD.', 'CO., LTD', 100],
+        ['CO., LTD', 'CO., LTD', 100],
+        ['CO. LTD.', 'CO., LTD', 95],
+        ['CO. LTD', 'CO., LTD', 90],
+        ['CO LTD', 'CO., LTD', 95],
+        ['CO, LTD', 'CO., LTD', 90],
+        ['LTD', 'LTD', 80],
+        ['INC.', 'INC.', 90],
+        ['INC', 'INC.', 80],
+        ['B.V.', 'B.V.', 90],
+        ['BV', 'B.V.', 70],
+        ['SOCIEDAD ANONIMA CERRADA', 'S.A.C.', 100],
+        ['S.A.C.', 'S.A.C.', 90],
+        ['E.I.R.L.', 'E.I.R.L.', 90],
+        ['EIRL', 'E.I.R.L.', 80],
+        ['LTDA', 'LTDA', 90],
+        ['S/A', 'S/A', 90],
+        ['EIRELI', 'EIRELI', 90],
+        ['ТОО', 'ТОО', 90]
+    ].sort(function (a, b) {
+        if (b[2] !== a[2]) { return b[2] - a[2]; }
+        return b[0].length - a[0].length;
+    });
+    var COMPANY_MARKERS = ['ON BEHALF OF', 'ON BEHALF', 'ПО ПОРУЧЕНИЮ', 'ОТ ИМЕНИ', 'BY ORDER OF'];
+    var COMPANY_NAME_TAILS = [
+        'PROCESSING IMPORT AND EXPORT',
+        'PROCESSING IMPORT-EXPORT',
+        'PROCESSING IMPORT EXPORT',
+        'IMPORT AND EXPORT',
+        'IMPORT-EXPORT'
+    ];
+    var COMPANY_NAME_MAP = {
+        'PHUONG ANH SEAFOOD PROCESSING IMPORT AND EXPORT JOINT STOCK COMPANY': 'PHUONG ANH SEAFOOD, JSC',
+        'KIEN CUONG SEAFOOD PROCESSING IMPORT-EXPORT JOINT STOCK COMPANY KIEN CUONG SEAFOOD': 'KIEN CUONG SEAFOOD, JSC',
+        'KIEN CUONG SEAFOOD PROCESSING IMPORT EXPORT JOINT STOCK COMPANY KIEN CUONG SEAFOOD': 'KIEN CUONG SEAFOOD, JSC',
+        'CAMIMEX JOINT STOCK COMPANY CAMIMEX CORP': 'CAMIMEX CORP, JSC',
+        'CAMIMEX JOINT STOCK COMPANY': 'CAMIMEX, JSC',
+        'MINH QUI SEAFOOD CO, LTD': 'MINH QUI SEAFOOD, CO., LTD',
+        'MINH QUI SEAFOOD CO LTD': 'MINH QUI SEAFOOD, CO., LTD',
+        'SEAPRODEX MINH HAI': 'SEAPRODEX MINH HAI',
+        'MINH PHU HAU GIANG SEAFOOD CORPORATION': 'MINH PHU HAU GIANG SEAFOOD, CORP',
+        'MINH PHU SEAFOOD CORP': 'MINH PHU SEAFOOD, CORP',
+        'PHU CUONG-KIEN CUONG CO, LTD': 'PHU CUONG - KIEN CUONG, CO., LTD',
+        'PHU CUONG - KIEN CUONG CO, LTD': 'PHU CUONG - KIEN CUONG, CO., LTD',
+        'THIENDUC ORNAMENTAL CREATURE CORP': 'THIENDUC ORNAMENTAL CREATURE, CORP',
+        'THONG THUAN COMPANY LIMITED': 'THONG THUAN, LTD',
+        'ООО ПОЛЛYКС': 'ПОЛЛУКС, ООО',
+        'ООО ПОЛЛУКС': 'ПОЛЛУКС, ООО',
+        'РЫБОЛОВЕЦКАЯ АРТЕЛЬ КОЛХОЗ ИМ 50 ЛЕТ ОКТЯБРЯ': 'РЫБОЛОВЕЦКАЯ АРТЕЛЬ'
+    };
+
+    function cleanCompanyText(value) {
+        var text = String(value || '').trim().toUpperCase();
+        text = text.replace(/Ё/g, 'Е')
+            .replace(/[«»“”„]/g, '"')
+            .replace(/[‘’]/g, "'")
+            .replace(/[–—]/g, '-')
+            .replace(/\u00A0/g, ' ');
+        text = fixMixedCyrillicLatin(text);
+        text = text.replace(/[()]/g, ' ')
+            .replace(/["']/g, ' ')
+            .replace(/\./g, ' ')
+            .replace(/\s*,\s*/g, ', ')
+            .replace(/\s*-\s*/g, '-')
+            .replace(/\s+/g, ' ')
+            .replace(/^[,;\s]+|[,;\s]+$/g, '')
+            .trim();
+        return text;
+    }
+
+    function fixMixedCyrillicLatin(text) {
+        var map = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У' };
+        var chars = String(text || '').split('');
+        function isCyr(ch) { return /[А-Яа-яЁё]/.test(ch); }
+        for (var i = 0; i < chars.length; i++) {
+            var ch = chars[i];
+            if (!map[ch]) { continue; }
+            if (isCyr(chars[i - 1] || '') || isCyr(chars[i + 1] || '')) {
+                chars[i] = map[ch];
+            }
+        }
+        return chars.join('');
+    }
+
+    function findCompanyColumns(headers) {
+        var cols = [];
+        var seen = {};
+        function add(col) {
+            if (col && headers.indexOf(col) !== -1 && !seen[col]) {
+                cols.push(col);
+                seen[col] = true;
+            }
+        }
+        COMPANY_COLUMNS.forEach(add);
+        COMPANY_COLUMN_HINTS.forEach(add);
+
+        headers.forEach(function (h) {
+            var upper = String(h || '').toUpperCase();
+            var skip = false;
+            COMPANY_COLUMN_SKIP_WORDS.forEach(function (word) {
+                if (upper.indexOf(word) !== -1) { skip = true; }
+            });
+            if (skip) { return; }
+            if (upper.indexOf('ОТПРАВИТЕЛ') !== -1 ||
+                    upper.indexOf('ПОЛУЧАТЕЛ') !== -1 ||
+                    upper.indexOf('ИЗГОТОВИТЕЛ') !== -1 ||
+                    upper.indexOf('ПРОИЗВОДИТЕЛ') !== -1 ||
+                    upper.indexOf('КОНТРАКТОДЕРЖАТЕЛ') !== -1 ||
+                    upper.indexOf('КОНТРАГЕНТ') !== -1 ||
+                    upper.indexOf('КОМПАН') !== -1 ||
+                    upper.indexOf('COMPANY') !== -1 ||
+                    upper.indexOf('SENDER') !== -1 ||
+                    upper.indexOf('RECEIVER') !== -1 ||
+                    upper.indexOf('MANUFACTURER') !== -1 ||
+                    upper.indexOf('SUPPLIER') !== -1 ||
+                    upper.indexOf('IMPORTER') !== -1 ||
+                    upper.indexOf('EXPORTER') !== -1) {
+                add(h);
+            }
+        });
+        return cols;
+    }
+
+    function hasCompanyBoundary(text, idx, len) {
+        var before = idx === 0 ? ' ' : text.charAt(idx - 1);
+        var after = idx + len >= text.length ? ' ' : text.charAt(idx + len);
+        return /[\s,;:"']/.test(before) && /[\s,;:"']/.test(after);
+    }
+
+    function removeCompanyPhrase(text, phrase) {
+        var idx = text.indexOf(phrase);
+        while (idx !== -1) {
+            if (hasCompanyBoundary(text, idx, phrase.length)) {
+                return (text.slice(0, idx) + ' ' + text.slice(idx + phrase.length)).replace(/\s+/g, ' ').trim();
+            }
+            idx = text.indexOf(phrase, idx + 1);
+        }
+        return text;
+    }
+
+    function extractCompanyOrgform(text) {
+        var found = null;
+        COMPANY_ORGFORMS.forEach(function (item) {
+            if (found) { return; }
+            var pattern = cleanCompanyText(item[0]);
+            if (!pattern) { return; }
+            var idx = text.indexOf(pattern);
+            while (idx !== -1) {
+                if (hasCompanyBoundary(text, idx, pattern.length)) {
+                    found = { pattern: pattern, orgform: item[1] };
+                    return;
+                }
+                idx = text.indexOf(pattern, idx + 1);
+            }
+        });
+        return found;
+    }
+
+    function stripCompanyMarkers(text) {
+        var result = text;
+        COMPANY_MARKERS.forEach(function (marker) {
+            var cleanMarker = cleanCompanyText(marker);
+            var idx = result.indexOf(cleanMarker);
+            if (idx !== -1) {
+                result = result.slice(idx + cleanMarker.length).trim();
+            }
+        });
+        return result;
+    }
+
+    function stripCompanyTails(text) {
+        var result = text;
+        COMPANY_NAME_TAILS.forEach(function (tail) {
+            var cleanTail = cleanCompanyText(tail);
+            if (result.slice(-cleanTail.length) === cleanTail) {
+                result = result.slice(0, result.length - cleanTail.length).trim();
+            }
+        });
+        return result;
+    }
+
+    function formatCompanyName(name, orgform) {
+        var cleaned = String(name || '')
+            .replace(/\s*,\s*/g, ', ')
+            .replace(/\s*-\s*/g, '-')
+            .replace(/\s+/g, ' ')
+            .replace(/^[,;\s]+|[,;\s]+$/g, '')
+            .trim();
+        if (!cleaned) { return orgform || ''; }
+        return orgform ? cleaned + ', ' + orgform : cleaned;
+    }
+
+    function getCompanyDictionaryValue(key) {
+        return companyDictionary[key] || COMPANY_NAME_MAP[key] || '';
+    }
+
+    function normalizeCompanyNameAuto(name) {
+        var norm = cleanCompanyText(name);
+        if (!norm) { return ''; }
+
+        if (COMPANY_NAME_MAP[norm]) { return COMPANY_NAME_MAP[norm]; }
+        norm = stripCompanyMarkers(norm);
+        if (COMPANY_NAME_MAP[norm]) { return COMPANY_NAME_MAP[norm]; }
+
+        var org = extractCompanyOrgform(norm);
+        var base = org ? removeCompanyPhrase(norm, org.pattern) : norm;
+        base = stripCompanyTails(base);
+        if (COMPANY_NAME_MAP[base]) { return COMPANY_NAME_MAP[base]; }
+
+        return formatCompanyName(base, org ? org.orgform : '');
+    }
+
+    function normalizeCompanyName(name, opts) {
+        opts = opts || {};
+        var key = cleanCompanyText(name);
+        if (!key) { return ''; }
+        if (!opts.skipDictionary) {
+            var dictValue = getCompanyDictionaryValue(key);
+            if (dictValue) { return dictValue; }
+        }
+        return normalizeCompanyNameAuto(name);
+    }
+
+    function companyDictionarySize() {
+        return Object.keys(companyDictionary).length;
+    }
+
+    function saveCompanyDictionary() {
+        try {
+            localStorage.setItem(LS_COMPANY_DICTIONARY_KEY, JSON.stringify(companyDictionary));
+        } catch (err) {
+            console.warn('Company dictionary save error:', err);
+        }
+        renderCompanyDictionaryStatus();
+    }
+
+    function renderCompanyDictionaryStatus(extraText) {
+        if (!companyDictStatus) { return; }
+        var size = companyDictionarySize();
+        companyDictStatus.textContent = 'Словарь компаний: ' + formatNumber(size) + ' записей' + (extraText ? ' · ' + extraText : '');
+    }
+
+    function normalizeCompanyDictionaryEntries(payload) {
+        var entries = [];
+        if (!payload) { return entries; }
+        if (Array.isArray(payload)) {
+            payload.forEach(function (item) {
+                if (!item) { return; }
+                if (Array.isArray(item)) {
+                    entries.push({ raw_pattern: item[0], canonical_name: item[1] });
+                } else {
+                    entries.push({
+                        raw_pattern: item.raw_pattern || item.pattern || item.raw || item.source || item[0],
+                        canonical_name: item.canonical_name || item.normalized || item.canonical || item.target || item[1]
+                    });
+                }
+            });
+        } else if (typeof payload === 'object') {
+            Object.keys(payload).forEach(function (key) {
+                entries.push({ raw_pattern: key, canonical_name: payload[key] });
+            });
+        }
+        return entries;
+    }
+
+    function mergeCompanyDictionary(payload, overwrite) {
+        var entries = normalizeCompanyDictionaryEntries(payload);
+        var added = 0;
+        var updated = 0;
+        entries.forEach(function (item) {
+            var key = cleanCompanyText(item.raw_pattern);
+            var value = String(item.canonical_name || '').trim();
+            if (!key || !value) { return; }
+            if (!companyDictionary[key]) {
+                companyDictionary[key] = value;
+                added++;
+            } else if (overwrite && companyDictionary[key] !== value) {
+                companyDictionary[key] = value;
+                updated++;
+            }
+        });
+        if (added || updated) { saveCompanyDictionary(); }
+        else { renderCompanyDictionaryStatus(); }
+        return { added: added, updated: updated };
+    }
+
+    function loadCompanyDictionaryFromStorage() {
+        try {
+            var raw = localStorage.getItem(LS_COMPANY_DICTIONARY_KEY);
+            if (!raw) { return; }
+            mergeCompanyDictionary(JSON.parse(raw), true);
+        } catch (err) {
+            console.warn('Company dictionary storage load error:', err);
+        }
+    }
+
+    function loadCompanyDictionaryFromFile() {
+        fetch(COMPANY_DICTIONARY_URL, { cache: 'no-store' })
+            .then(function (res) {
+                if (!res.ok) { throw new Error('not found'); }
+                return res.json();
+            })
+            .then(function (json) {
+                var result = mergeCompanyDictionary(json, false);
+                renderCompanyDictionaryStatus(result.added ? 'загружено из data: +' + result.added : '');
+            })
+            .catch(function () {
+                renderCompanyDictionaryStatus();
+            });
+    }
+
+    function autoAddCompanyDictionaryEntry(rawValue, canonicalName) {
+        if (!companyDictAutosave || !companyDictAutosave.checked) { return false; }
+        var key = cleanCompanyText(rawValue);
+        var value = String(canonicalName || '').trim();
+        if (!key || !value || companyDictionary[key] === value || COMPANY_NAME_MAP[key]) { return false; }
+        if (!companyDictionary[key]) {
+            companyDictionary[key] = value;
+            return true;
+        }
+        return false;
+    }
+
+    function getCompanyDictionaryExportRows() {
+        return Object.keys(companyDictionary).sort(function (a, b) {
+            var va = companyDictionary[a];
+            var vb = companyDictionary[b];
+            if (va === vb) { return a.localeCompare(b); }
+            return va.localeCompare(vb);
+        }).map(function (key) {
+            return { raw_pattern: key, canonical_name: companyDictionary[key] };
+        });
+    }
+
+    function exportCompanyDictionary() {
+        var rows = getCompanyDictionaryExportRows();
+        var json = JSON.stringify(rows, null, 2);
+        var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'company_dictionary.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    }
+
+    function collectCompanyDictionaryFromData(data, headers) {
+        var cols = findCompanyColumns(headers);
+        var added = 0;
+        if (cols.length === 0) { return { added: 0, columns: 0 }; }
+        data.forEach(function (row) {
+            cols.forEach(function (col) {
+                var raw = row[col];
+                if (typeof raw !== 'string' || !raw.trim()) { return; }
+                var canonical = normalizeCompanyName(raw, { skipDictionary: true });
+                var key = cleanCompanyText(raw);
+                if (key && canonical && !companyDictionary[key] && !COMPANY_NAME_MAP[key]) {
+                    companyDictionary[key] = canonical;
+                    added++;
+                }
+            });
+        });
+        if (added) { saveCompanyDictionary(); }
+        else { renderCompanyDictionaryStatus('новых нет'); }
+        return { added: added, columns: cols.length };
+    }
+
+    function initializeCompanyDictionary() {
+        if (companyDictAutosave) {
+            var savedAuto = localStorage.getItem(LS_COMPANY_DICTIONARY_AUTOSAVE);
+            if (savedAuto !== null) {
+                companyDictAutosave.checked = savedAuto === '1';
+            }
+            companyDictAutosave.addEventListener('change', function () {
+                localStorage.setItem(LS_COMPANY_DICTIONARY_AUTOSAVE, this.checked ? '1' : '0');
+            });
+        }
+        if (companyDictCollectBtn) {
+            companyDictCollectBtn.addEventListener('click', function () {
+                var result = collectCompanyDictionaryFromData(getActiveData(), getActiveHeaders());
+                renderCompanyDictionaryStatus(result.columns ? 'добавлено +' + result.added : 'колонки не найдены');
+            });
+        }
+        if (companyDictExportBtn) {
+            companyDictExportBtn.addEventListener('click', exportCompanyDictionary);
+        }
+        if (companyDictImportBtn && companyDictImportInput) {
+            companyDictImportBtn.addEventListener('click', function () { companyDictImportInput.click(); });
+            companyDictImportInput.addEventListener('change', function () {
+                var file = this.files && this.files[0];
+                if (!file) { return; }
+                var reader = new FileReader();
+                reader.onload = function (e) {
+                    try {
+                        var result = mergeCompanyDictionary(JSON.parse(e.target.result), true);
+                        renderCompanyDictionaryStatus('импорт: +' + result.added + ', обновлено ' + result.updated);
+                    } catch (err) {
+                        alert('Не удалось импортировать словарь: ' + err.message);
+                    }
+                    companyDictImportInput.value = '';
+                };
+                reader.readAsText(file, 'UTF-8');
+            });
+        }
+        if (companyDictClearBtn) {
+            companyDictClearBtn.addEventListener('click', function () {
+                if (!confirm('Очистить локальный словарь компаний?')) { return; }
+                companyDictionary = {};
+                saveCompanyDictionary();
+            });
+        }
+        loadCompanyDictionaryFromStorage();
+        renderCompanyDictionaryStatus();
+        loadCompanyDictionaryFromFile();
+    }
 
     function normalizeCompanyNames(data, headers) {
         var count = 0;
-        var targetCols = [];
-        COMPANY_COLUMNS.forEach(function (c) {
-            if (headers.indexOf(c) !== -1) { targetCols.push(c); }
-        });
+        var addedToDictionary = 0;
+        companyDictionaryLastAdded = 0;
+        var targetCols = findCompanyColumns(headers);
         if (targetCols.length === 0) { return 0; }
 
         data.forEach(function (row) {
             targetCols.forEach(function (col) {
                 var val = row[col];
                 if (typeof val !== 'string' || !val.trim()) { return; }
-                var norm = val.trim().toUpperCase()
-                    .replace(/\.\s*/g, ' ')   // S.A. → S A  → SA после trim
-                    .replace(/\s*-\s*/g, '-')  // ГРАНД- ТРЕЙД → ГРАНД-ТРЕЙД
-                    .replace(/\s+/g, ' ')      // лишние пробелы
-                    .replace(/,\s*$/, '')       // запятая в конце
-                    .trim();
+                var norm = normalizeCompanyName(val);
+                if (autoAddCompanyDictionaryEntry(val, norm)) { addedToDictionary++; }
                 if (norm !== val) {
                     row[col] = norm;
                     count++;
                 }
             });
         });
+        if (addedToDictionary) {
+            companyDictionaryLastAdded = addedToDictionary;
+            saveCompanyDictionary();
+            renderCompanyDictionaryStatus('автодобавлено +' + addedToDictionary);
+        }
         return count;
     }
+
+    initializeCompanyDictionary();
 
     // Нормализация страны происхождения:
     // если "Страна происхождения" пустая или "ПРОЧИЕ/НЕУСТАНОВЛЕННЫЕ" —
@@ -1554,7 +2161,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var weightCol = findColumn(headers, COL_WEIGHT);
         if (!valueCol || !weightCol) { return { colName: null, count: 0, error: 'Не найдены столбцы «' + COL_CUSTOMS + '» или «' + COL_WEIGHT + '»' }; }
 
-        var colName = 'RUR за КГ';
+        var colName = 'Нац. вал. за КГ';
         var count = 0;
         data.forEach(function (row) {
             var v = Number(row[valueCol]);
@@ -2108,7 +2715,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (ops.indexOf('normalize-companies') !== -1) {
                 var ncCount = normalizeCompanyNames(data, headers);
-                log.push('Названия компаний: нормализовано ' + ncCount + ' значений');
+                log.push('Названия компаний: нормализовано ' + ncCount + ' значений' +
+                    (companyDictionaryLastAdded ? ', в словарь добавлено ' + companyDictionaryLastAdded : ''));
             }
             if (ops.indexOf('normalize-country') !== -1) {
                 var ncoCount = normalizeCountryOrigin(data, headers);
@@ -2176,9 +2784,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     var r3 = calcRurPerKg(data, headers);
                     if (r3.colName) {
                         if (headers.indexOf(r3.colName) === -1) { headers.push(r3.colName); }
-                        log.push('RUR/кг: ' + r3.count + ' значений');
+                        log.push('Нац. вал./кг: ' + r3.count + ' значений');
                     } else {
-                        log.push('RUR/кг: ' + r3.error);
+                        log.push('Нац. вал./кг: ' + r3.error);
                     }
                 }
                 if (ops.indexOf('ratio') !== -1) {
@@ -2276,6 +2884,8 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<div class="processing-export">';
         html += '<button class="btn btn-primary processing-download-xlsx">Скачать XLSX</button>';
         html += '<button class="btn btn-secondary processing-download-csv">Скачать CSV</button>';
+        html += '<button class="btn btn-primary processing-download-brief-xlsx">Скачать краткий XLSX</button>';
+        html += '<button class="btn btn-secondary processing-download-brief-csv">Скачать краткий CSV</button>';
         html += '</div>';
         html += '<button class="btn btn-outline processing-download-report">Скачать отчёт об обработке</button>';
 
@@ -2286,6 +2896,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         container.querySelector('.processing-download-xlsx').addEventListener('click', function () {
             downloadProcessedXLSX();
+        });
+        container.querySelector('.processing-download-brief-csv').addEventListener('click', function () {
+            downloadBriefProcessedCSV();
+        });
+        container.querySelector('.processing-download-brief-xlsx').addEventListener('click', function () {
+            downloadBriefProcessedXLSX();
         });
         container.querySelector('.processing-download-report').addEventListener('click', function () {
             downloadProcessingReport(log, data, headers);
@@ -2324,11 +2940,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 100);
     }
 
-    function downloadProcessedCSV() {
-        var data = appState.processedData;
-        if (data.length === 0) { return; }
-
-        var headers = getActiveHeaders();
+    function downloadCsvData(data, headers, fileName) {
         var csv = headers.join(CSV_SEPARATOR) + '\n';
         data.forEach(function (row) {
             var line = headers.map(function (h) {
@@ -2342,12 +2954,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         var blob = new Blob([UTF8_BOM + csv], { type: MIME_CSV });
-        triggerDownload(blob, baseFileName() + '_processed.csv');
+        triggerDownload(blob, fileName);
     }
 
-    function downloadProcessedXLSX() {
-        var data = appState.processedData;
-        var headers = getActiveHeaders();
+    function downloadXlsxData(data, headers, sheetName, fileName) {
         if (data.length === 0 || typeof XLSX === 'undefined') { return; }
 
         var ws = XLSX.utils.json_to_sheet(data, { header: headers });
@@ -2368,7 +2978,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ws['!cols'] = colWidths;
 
         var wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Processed');
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
         // Генерируем XLSX как ArrayBuffer, затем патчим XML для freeze pane
         var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -2396,17 +3006,57 @@ document.addEventListener('DOMContentLoaded', function () {
                     return z2.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                 });
             }).then(function (blob) {
-                triggerDownload(blob, baseFileName() + '_processed.xlsx');
+                triggerDownload(blob, fileName);
             }).catch(function () {
                 // Fallback: скачать без freeze pane
                 var blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                triggerDownload(blob, baseFileName() + '_processed.xlsx');
+                triggerDownload(blob, fileName);
             });
         } catch (e) {
             // JSZip не доступен — скачать как есть
             var blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            triggerDownload(blob, baseFileName() + '_processed.xlsx');
+            triggerDownload(blob, fileName);
         }
+    }
+
+    function getBriefProcessedHeaders() {
+        var headers = getActiveHeaders();
+        return getBriefColumnMatches(headers);
+    }
+
+    function projectRows(data, headers) {
+        return data.map(function (row) {
+            var projected = {};
+            headers.forEach(function (h) {
+                projected[h] = row[h];
+            });
+            return projected;
+        });
+    }
+
+    function downloadProcessedCSV() {
+        var data = appState.processedData;
+        if (data.length === 0) { return; }
+        downloadCsvData(data, getActiveHeaders(), baseFileName() + '_processed.csv');
+    }
+
+    function downloadProcessedXLSX() {
+        var data = appState.processedData;
+        downloadXlsxData(data, getActiveHeaders(), 'Processed', baseFileName() + '_processed.xlsx');
+    }
+
+    function downloadBriefProcessedCSV() {
+        var data = appState.processedData;
+        var headers = getBriefProcessedHeaders();
+        if (data.length === 0 || headers.length === 0) { return; }
+        downloadCsvData(projectRows(data, headers), headers, baseFileName() + '_brief_processed.csv');
+    }
+
+    function downloadBriefProcessedXLSX() {
+        var data = appState.processedData;
+        var headers = getBriefProcessedHeaders();
+        if (headers.length === 0) { return; }
+        downloadXlsxData(projectRows(data, headers), headers, 'Brief', baseFileName() + '_brief_processed.xlsx');
     }
 
     function updateProcessingState() {
@@ -2428,16 +3078,26 @@ document.addEventListener('DOMContentLoaded', function () {
         if (analysisButtons[3]) analysisButtons[3].addEventListener('click', function () { runAnalysis('importStructure'); });
         if (analysisButtons[4]) analysisButtons[4].addEventListener('click', function () { runAnalysis('manufacturerStructure'); });
         if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('quarterlyPrices'); });
+        if (analysisButtons[6]) analysisButtons[6].addEventListener('click', function () { runAnalysis('topReceivers'); });
+        if (analysisButtons[7]) analysisButtons[7].addEventListener('click', function () { runAnalysis('topSenders'); });
+        if (analysisButtons[8]) analysisButtons[8].addEventListener('click', function () { runAnalysis('topManufacturers'); });
     }
 
     // --- Фильтр по направлению ИМ/ЭК ---
-    var analysisDirectionFilter = '';
+    var analysisDirectionFilter = 'ИМ';
+    var lastAnalysisType = '';
+
+    function setDirectionFilter(dir) {
+        analysisDirectionFilter = dir;
+        document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-dir') === dir);
+        });
+    }
 
     document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            analysisDirectionFilter = btn.getAttribute('data-dir');
+            setDirectionFilter(btn.getAttribute('data-dir'));
+            if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
         });
     });
 
@@ -2455,6 +3115,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function runAnalysis(type) {
         try {
+            lastAnalysisType = type;
+
             var fd = getFilteredAnalysisData();
             var data = fd.data;
             var headers = fd.headers;
@@ -2492,6 +3154,26 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (type === 'quarterlyPrices') {
                 renderQuarterlyPricesAnalysis(data, headers);
+                return;
+            }
+            if (type === 'topReceivers') {
+                renderCompanyRankingAnalysis(data, headers);
+                return;
+            }
+            if (type === 'topSenders') {
+                renderCompanyRankingAnalysis(data, headers, null, null, {
+                    companyCol: COL_SENDER,
+                    companyLabel: 'Отправитель',
+                    exportName: 'top_senders'
+                });
+                return;
+            }
+            if (type === 'topManufacturers') {
+                renderCompanyRankingAnalysis(data, headers, null, null, {
+                    companyCol: COL_MANUFACTURER,
+                    companyLabel: 'Изготовитель',
+                    exportName: 'top_manufacturers'
+                });
                 return;
             }
 
@@ -2607,7 +3289,7 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<thead><tr><th>Год</th>';
         if (weightCol) { html += '<th>Объём (тонн)</th>'; }
         if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
-        if (rubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+        if (rubCol) { html += '<th>Стоимость (тыс. нац. вал.)</th>'; }
         html += '</tr></thead><tbody>';
         yearKeys.forEach(function (y) {
             var d = byYear[y];
@@ -2636,7 +3318,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<thead><tr><th>Период</th>';
             if (weightCol) { html += '<th>Объём (тонн)</th>'; }
             if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
-            if (rubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+            if (rubCol) { html += '<th>Стоимость (тыс. нац. вал.)</th>'; }
             html += '</tr></thead><tbody>';
             quarterKeys.forEach(function (key) {
                 var d = byQuarter[key];
@@ -2658,7 +3340,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<thead><tr><th>Период</th>';
             if (weightCol) { html += '<th>Объём (тонн)</th>'; }
             if (statUsdCol) { html += '<th>Стоимость (тыс. USD)</th>'; }
-            if (rubCol) { html += '<th>Стоимость (тыс. руб.)</th>'; }
+            if (rubCol) { html += '<th>Стоимость (тыс. нац. вал.)</th>'; }
             html += '</tr></thead><tbody>';
             monthKeys.forEach(function (key) {
                 var d = byMonth[key];
@@ -2676,7 +3358,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var metrics = [];
         if (weightCol) { metrics.push({ key: 'weight', title: 'тонн', unit: 'тонн', div: 1000, cagr: cagrWeight }); }
         if (statUsdCol) { metrics.push({ key: 'usd', title: 'млн долл. США', unit: 'млн USD', div: 1000000, cagr: cagrUsd }); }
-        if (rubCol) { metrics.push({ key: 'rub', title: 'млн руб.', unit: 'млн руб.', div: 1000000, cagr: cagrRub }); }
+        if (rubCol) { metrics.push({ key: 'rub', title: 'млн нац. вал.', unit: 'млн нац. вал.', div: 1000000, cagr: cagrRub }); }
 
         if (yearKeys.length >= 1 && metrics.length > 0) {
             html += '<div class="analysis-section">';
@@ -2789,6 +3471,76 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '</div>'; // .analysis-section
         }
 
+        // --- Графики по месяцам ---
+        if (monthKeys.length > 1 && metrics.length > 0) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">Динамика по месяцам</h3>';
+
+            metrics.forEach(function (m) {
+                var mLabels = [];
+                var mValues = [];
+                var mYears = [];
+                monthKeys.forEach(function (key) {
+                    var d = byMonth[key];
+                    mLabels.push(d.mon.slice(0, 3) + ' ' + String(d.year).slice(2));
+                    mValues.push(round2(d[m.key] / m.div));
+                    mYears.push(d.year);
+                });
+
+                var colSlotM = Math.max(28, Math.min(48, 700 / mLabels.length));
+                var padM = { top: 50, right: 20, bottom: 50, left: 20 };
+                var innerWM = Math.max(mLabels.length * colSlotM, 300);
+                var chartWM = innerWM + padM.left + padM.right;
+                var chartHM = 280;
+                var innerHM = chartHM - padM.top - padM.bottom;
+
+                var maxValM = Math.max.apply(null, mValues) * 1.2;
+                if (maxValM === 0) { maxValM = 1; }
+
+                var gapM = innerWM / mLabels.length;
+                var barWM = Math.min(36, gapM * 0.7);
+
+                var uniqueYears = [];
+                mYears.forEach(function (y) { if (uniqueYears.indexOf(y) === -1) { uniqueYears.push(y); } });
+
+                html += '<div style="overflow-x:auto;margin-bottom:16px">';
+                html += '<svg class="analysis-chart analysis-chart-monthly" width="' + chartWM + '" height="' + chartHM + '" viewBox="0 0 ' + chartWM + ' ' + chartHM + '">';
+                html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+                html += '<text x="' + padM.left + '" y="18" font-size="12" font-weight="600" fill="' + CHART_COLORS.textMuted + '">' + m.title + '</text>';
+
+                for (var gridI = 0; gridI <= 4; gridI++) {
+                    var gridY = padM.top + innerHM * (1 - gridI / 4);
+                    html += '<line x1="' + padM.left + '" y1="' + gridY + '" x2="' + (padM.left + innerWM) + '" y2="' + gridY + '" stroke="' + CHART_COLORS.grid + '" stroke-width="0.5"/>';
+                }
+
+                mLabels.forEach(function (label, i) {
+                    var val = mValues[i];
+                    var barH = (val / maxValM) * innerHM;
+                    var x = padM.left + gapM * i + (gapM - barWM) / 2;
+                    var yBar = padM.top + innerHM - barH;
+                    var yearIdx = uniqueYears.indexOf(mYears[i]);
+                    var fillColor = YEAR_COLORS[yearIdx % YEAR_COLORS.length];
+
+                    html += '<rect x="' + x + '" y="' + yBar + '" width="' + barWM + '" height="' + barH + '" fill="' + fillColor + '" rx="2"/>';
+                    html += '<text x="' + (x + barWM / 2) + '" y="' + (padM.top + innerHM + 14) + '" text-anchor="middle" font-size="8" fill="' + CHART_COLORS.textMuted + '" transform="rotate(-45,' + (x + barWM / 2) + ',' + (padM.top + innerHM + 14) + ')">' + label + '</text>';
+                });
+
+                html += '</svg></div>';
+
+                if (uniqueYears.length > 1) {
+                    html += '<div class="chart-legend" style="margin-bottom:12px">';
+                    uniqueYears.forEach(function (y, yi) {
+                        html += '<span class="chart-legend-item"><span class="chart-legend-color" style="background:' + YEAR_COLORS[yi % YEAR_COLORS.length] + '"></span>' + y + '</span>';
+                    });
+                    html += '</div>';
+                }
+            });
+
+            html += '<button class="btn btn-secondary analysis-export-monthly-png" style="margin-top:8px;font-size:12px">Скачать графики по месяцам PNG</button>';
+            html += '</div>';
+        }
+
         // --- Кнопки экспорта ---
         html += '<div class="processing-export" style="margin-top:20px">';
         html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
@@ -2807,6 +3559,16 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        // Обработчик экспорта графиков по месяцам PNG
+        var monthlyPngBtn = analysisResults.querySelector('.analysis-export-monthly-png');
+        if (monthlyPngBtn) {
+            monthlyPngBtn.addEventListener('click', function () {
+                var svgs = analysisResults.querySelectorAll('.analysis-chart-monthly');
+                if (svgs.length === 0) { return; }
+                exportChartsRowPNG(svgs, baseFileName() + '_volumes_monthly.png');
+            });
+        }
+
         // Подготовим данные для экспорта
         var exportRows = [];
 
@@ -2818,7 +3580,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var row = { 'Период': label };
             if (weightCol) { row['Объём (тонн)'] = round2(d.weight / 1000); }
             if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
-            if (rubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+            if (rubCol) { row['Стоимость (тыс. нац. вал.)'] = round2(d.rub / 1000); }
             exportRows.push(row);
         });
         // CAGR в экспорт
@@ -2826,7 +3588,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var cagrRow = { 'Период': 'CAGR' };
             if (weightCol) { cagrRow['Объём (тонн)'] = cagrWeight !== null ? round2(cagrWeight) + '%' : ''; }
             if (statUsdCol) { cagrRow['Стоимость (тыс. USD)'] = cagrUsd !== null ? round2(cagrUsd) + '%' : ''; }
-            if (rubCol) { cagrRow['Стоимость (тыс. руб.)'] = cagrRub !== null ? round2(cagrRub) + '%' : ''; }
+            if (rubCol) { cagrRow['Стоимость (тыс. нац. вал.)'] = cagrRub !== null ? round2(cagrRub) + '%' : ''; }
             exportRows.push(cagrRow);
         }
 
@@ -2839,7 +3601,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var row = { 'Период': key };
                 if (weightCol) { row['Объём (тонн)'] = round2(d.weight / 1000); }
                 if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
-                if (rubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+                if (rubCol) { row['Стоимость (тыс. нац. вал.)'] = round2(d.rub / 1000); }
                 exportRows.push(row);
             });
         }
@@ -2853,7 +3615,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var row = { 'Период': d.mon + ' ' + d.year };
                 if (weightCol) { row['Объём (тонн)'] = round2(d.weight / 1000); }
                 if (statUsdCol) { row['Стоимость (тыс. USD)'] = round2(d.usd / 1000); }
-                if (rubCol) { row['Стоимость (тыс. руб.)'] = round2(d.rub / 1000); }
+                if (rubCol) { row['Стоимость (тыс. нац. вал.)'] = round2(d.rub / 1000); }
                 exportRows.push(row);
             });
         }
@@ -2861,7 +3623,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var exportHeaders = ['Период'];
         if (weightCol) { exportHeaders.push('Объём (тонн)'); }
         if (statUsdCol) { exportHeaders.push('Стоимость (тыс. USD)'); }
-        if (rubCol) { exportHeaders.push('Стоимость (тыс. руб.)'); }
+        if (rubCol) { exportHeaders.push('Стоимость (тыс. нац. вал.)'); }
 
         // Обработчики экспорта
         analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
@@ -3493,6 +4255,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var sourceLabel = opts.sourceLabel || 'Отправитель';
         var targetLabel = opts.targetLabel || 'Получатель';
         var exportName = opts.exportName || 'import_structure';
+        var otherSourceLabel = sourceLabel === 'Изготовитель' ? 'Прочие изг.' : 'Прочие отпр.';
+        var otherTargetLabel = targetLabel === 'Получатель' ? 'Прочие пол.' : 'Прочие';
 
         var senderCol = findColumn(headers, sourceColName);
         var receiverCol = findColumn(headers, targetColName);
@@ -3532,12 +4296,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Нормализация названий компаний
         function normalizeCompany(name) {
-            var s = name.trim().toUpperCase();
-            // Убираем точки в аббревиатурах: S.A. → SA, Co. → Co, LTD. → LTD
-            s = s.replace(/\.\s*/g, ' ').replace(/\s+/g, ' ').trim();
-            // Убираем запятые в конце
-            s = s.replace(/,\s*$/, '');
-            return s;
+            return normalizeCompanyName(name);
         }
 
         // Группировка: отправитель → получатель → тонны
@@ -3586,15 +4345,15 @@ document.addEventListener('DOMContentLoaded', function () {
             receiversSorted.slice(topN).forEach(function (r) { otherRW += receiverTotals[r]; otherRSet[r] = true; });
 
             leftNodes = topS.slice();
-            if (otherSW > 0) { leftNodes.push('Прочие отпр.'); senderTotals['Прочие отпр.'] = otherSW; }
+            if (otherSW > 0) { leftNodes.push(otherSourceLabel); senderTotals[otherSourceLabel] = otherSW; }
             rightNodes = topR.slice();
-            if (otherRW > 0) { rightNodes.push('Прочие пол.'); receiverTotals['Прочие пол.'] = otherRW; }
+            if (otherRW > 0) { rightNodes.push(otherTargetLabel); receiverTotals[otherTargetLabel] = otherRW; }
 
             var flowMap = {};
             Object.keys(flows).forEach(function (fk) {
                 var parts = fk.split(KEY_SEPARATOR);
-                var s = otherSSet[parts[0]] ? 'Прочие отпр.' : parts[0];
-                var r = otherRSet[parts[1]] ? 'Прочие пол.' : parts[1];
+                var s = otherSSet[parts[0]] ? otherSourceLabel : parts[0];
+                var r = otherRSet[parts[1]] ? otherTargetLabel : parts[1];
                 var key = s + KEY_SEPARATOR + r;
                 flowMap[key] = (flowMap[key] || 0) + flows[fk];
             });
@@ -3897,7 +4656,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Определяем метрики
         var metrics = [];
-        if (rubCol) { metrics.push({ key: 'rub', title: 'Поквартальная динамика цен, руб./кг', unit: 'руб./кг' }); }
+        if (rubCol) { metrics.push({ key: 'rub', title: 'Поквартальная динамика цен, нац. вал./кг', unit: 'нац. вал./кг' }); }
         if (statUsdCol) { metrics.push({ key: 'usd', title: 'Поквартальная динамика цен, долл. США/кг', unit: 'USD/кг' }); }
 
         var html = '';
@@ -4036,27 +4795,369 @@ document.addEventListener('DOMContentLoaded', function () {
                 var pd = priceData[y][q];
                 var row = { 'Год': y, 'Квартал': 'Q' + q };
                 if (statUsdCol) { row['USD/кг'] = pd && pd.usd != null ? pd.usd : ''; }
-                if (rubCol) { row['Руб./кг'] = pd && pd.rub != null ? pd.rub : ''; }
+                if (rubCol) { row['Нац. вал./кг'] = pd && pd.rub != null ? pd.rub : ''; }
                 exportRows.push(row);
             });
             // Средневзвешенная
             var avg = avgPrices[y];
             var avgRow = { 'Год': y, 'Квартал': 'Средневзвешенная' };
             if (statUsdCol) { avgRow['USD/кг'] = avg && avg.usd != null ? avg.usd : ''; }
-            if (rubCol) { avgRow['Руб./кг'] = avg && avg.rub != null ? avg.rub : ''; }
+            if (rubCol) { avgRow['Нац. вал./кг'] = avg && avg.rub != null ? avg.rub : ''; }
             exportRows.push(avgRow);
             exportRows.push({ 'Год': '', 'Квартал': '' });
         });
 
         var exportHeaders = ['Год', 'Квартал'];
         if (statUsdCol) { exportHeaders.push('USD/кг'); }
-        if (rubCol) { exportHeaders.push('Руб./кг'); }
+        if (rubCol) { exportHeaders.push('Нац. вал./кг'); }
 
         analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
             exportAnalysisXLSX(exportRows, exportHeaders, 'quarterly_prices');
         });
         analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
             exportAnalysisCSV(exportRows, exportHeaders, 'quarterly_prices');
+        });
+    }
+
+    // --- Анализ: Топ получателей / Топ отправителей ---
+    function renderCompanyRankingAnalysis(data, headers, selectedYear, topN, opts) {
+        if (!topN) { topN = 15; }
+        if (!opts) { opts = {}; }
+        var companyColName = opts.companyCol || COL_RECEIVER;
+        var companyLabel = opts.companyLabel || 'Получатель';
+        var exportName = opts.exportName || 'top_receivers';
+
+        var companyCol = findColumn(headers, companyColName);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var statUsdCol = findColumn(headers, COL_STAT_USD);
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+
+        if (!companyCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «' + companyColName + '». Выполните обработку с маппингом.</p></div>';
+            return;
+        }
+        if (!weightCol && !statUsdCol) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найдены столбцы «Вес нетто, кг» или «Статистическая стоимость, USD».</p></div>';
+            return;
+        }
+
+        // Нормализация компании
+        function normalizeCompany(name) {
+            return normalizeCompanyName(name);
+        }
+
+        // Годы
+        var yearsSet = {};
+        if (yearCol) {
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                if (y) { yearsSet[y] = true; }
+            });
+        }
+        var years = Object.keys(yearsSet).sort();
+
+        // Фильтр по году
+        var filteredData = data;
+        if (selectedYear && selectedYear !== 'all' && yearCol) {
+            filteredData = data.filter(function (row) {
+                return String(row[yearCol] || '').trim() === selectedYear;
+            });
+        }
+
+        // Определяем неполный год
+        var partialYear = null;
+        var partialQuarters = 0;
+        if (yearCol && quarterCol && years.length >= 2) {
+            var qSet = {};
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                var q = String(row[quarterCol] || '').trim();
+                if (y && q) {
+                    if (!qSet[y]) { qSet[y] = {}; }
+                    qSet[y][q] = true;
+                }
+            });
+            var lastY = years[years.length - 1];
+            var prevY = years[years.length - 2];
+            var lastQCount = Object.keys(qSet[lastY] || {}).length;
+            var prevQCount = Object.keys(qSet[prevY] || {}).length;
+            if (lastQCount < prevQCount) {
+                partialYear = lastY;
+                partialQuarters = lastQCount;
+            }
+        }
+
+        // Агрегация: компания → год → { weight, usd }
+        var byCompanyYear = {};
+        var totalByCompany = {};
+        var grandTotalByYear = {};
+
+        filteredData.forEach(function (row) {
+            var company = normalizeCompany(String(row[companyCol] || ''));
+            if (!company) { return; }
+            var year = yearCol ? String(row[yearCol] || '').trim() : 'Всего';
+            if (!year) { return; }
+            var w = weightCol ? (Number(row[weightCol]) || 0) : 0;
+            var u = statUsdCol ? (Number(row[statUsdCol]) || 0) : 0;
+
+            if (!byCompanyYear[company]) { byCompanyYear[company] = {}; }
+            if (!byCompanyYear[company][year]) { byCompanyYear[company][year] = { weight: 0, usd: 0 }; }
+            byCompanyYear[company][year].weight += w;
+            byCompanyYear[company][year].usd += u;
+
+            if (!totalByCompany[company]) { totalByCompany[company] = { weight: 0, usd: 0 }; }
+            totalByCompany[company].weight += w;
+            totalByCompany[company].usd += u;
+
+            if (!grandTotalByYear[year]) { grandTotalByYear[year] = { weight: 0, usd: 0 }; }
+            grandTotalByYear[year].weight += w;
+            grandTotalByYear[year].usd += u;
+        });
+
+        // Сортировка по весу (или USD если веса нет)
+        var sortKey = weightCol ? 'weight' : 'usd';
+        var companiesSorted = Object.keys(totalByCompany).sort(function (a, b) {
+            return totalByCompany[b][sortKey] - totalByCompany[a][sortKey];
+        });
+
+        var displayN = (topN === 'all' || topN >= companiesSorted.length) ? companiesSorted.length : topN;
+        var companies = companiesSorted.slice(0, displayN);
+        if (companies.length === 0) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Нет данных для анализа.</p></div>';
+            return;
+        }
+
+        var cols = years.length > 0 ? years : ['Всего'];
+        var leader = companies[0];
+
+        // Общий итог
+        var grandTotal = { weight: 0, usd: 0 };
+        companiesSorted.forEach(function (c) {
+            grandTotal.weight += totalByCompany[c].weight;
+            grandTotal.usd += totalByCompany[c].usd;
+        });
+
+        // --- HTML ---
+        var html = '<div class="analysis-section">';
+        html += '<div class="sankey-controls">';
+        html += '<h3 class="analysis-section-title" style="margin:0">Топ ' + companyLabel.toLowerCase() + 'ей: объёмы и стоимость</h3>';
+
+        // Селектор года
+        if (yearCol && years.length > 0) {
+            html += '<select class="company-ranking-year-select">';
+            html += '<option value="all"' + (!selectedYear || selectedYear === 'all' ? ' selected' : '') + '>Все годы</option>';
+            years.forEach(function (y) {
+                html += '<option value="' + y + '"' + (selectedYear === y ? ' selected' : '') + '>' + y + '</option>';
+            });
+            html += '</select>';
+        }
+        // Селектор topN
+        html += '<select class="company-ranking-topn-select">';
+        [10, 15, 20, 'all'].forEach(function (v) {
+            var label = v === 'all' ? 'Все' : 'Топ-' + v;
+            var sel = (String(topN) === String(v)) ? ' selected' : '';
+            html += '<option value="' + v + '"' + sel + '>' + label + '</option>';
+        });
+        html += '</select>';
+        html += '</div>';
+
+        // --- Таблица кг ---
+        if (weightCol) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">Объём, кг (' + companyLabel + ')</h3>';
+            html += '<div class="data-table-wrapper"><table class="data-table">';
+            html += '<thead><tr><th>' + companyLabel + '</th>';
+            cols.forEach(function (y) {
+                var label = (y === partialYear) ? 'Q1' + (partialQuarters > 1 ? '-Q' + partialQuarters : '') + ' ' + y : y;
+                html += '<th>' + label + '</th>';
+            });
+            html += '<th>Доля, %</th></tr></thead><tbody>';
+
+            companies.forEach(function (c) {
+                html += '<tr><td title="' + c + '">' + (c.length > 40 ? c.slice(0, 39) + '\u2026' : c) + '</td>';
+                cols.forEach(function (y) {
+                    var d = byCompanyYear[c] && byCompanyYear[c][y];
+                    var val = d ? d.weight : 0;
+                    html += '<td class="numeric">' + (val > 0 ? formatNumber(Math.round(val)) : '-') + '</td>';
+                });
+                var pct = grandTotal.weight > 0 ? round2(totalByCompany[c].weight / grandTotal.weight * 100) : 0;
+                html += '<td class="numeric">' + (pct > 0 ? pct + '%' : '-') + '</td>';
+                html += '</tr>';
+            });
+
+            // ИТОГО
+            html += '<tr style="font-weight:600;border-top:2px solid var(--color-border)"><td>ИТОГО</td>';
+            cols.forEach(function (y) {
+                var t = grandTotalByYear[y] ? grandTotalByYear[y].weight : 0;
+                html += '<td class="numeric">' + formatNumber(Math.round(t)) + '</td>';
+            });
+            html += '<td class="numeric">100%</td></tr>';
+
+            // Доля лидера
+            html += '<tr style="font-style:italic"><td>Доля ' + (leader.length > 30 ? leader.slice(0, 29) + '\u2026' : leader) + ', %</td>';
+            cols.forEach(function (y) {
+                var lv = byCompanyYear[leader] && byCompanyYear[leader][y] ? byCompanyYear[leader][y].weight : 0;
+                var tv = grandTotalByYear[y] ? grandTotalByYear[y].weight : 0;
+                var p = tv > 0 ? round2(lv / tv * 100) : 0;
+                html += '<td class="numeric">' + (p > 0 ? p + '%' : '-') + '</td>';
+            });
+            html += '<td class="numeric"></td></tr>';
+
+            html += '</tbody></table></div></div>';
+        }
+
+        // --- Таблица тыс. USD ---
+        if (statUsdCol) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">Стоимость, тыс. USD (' + companyLabel + ')</h3>';
+            html += '<div class="data-table-wrapper"><table class="data-table">';
+            html += '<thead><tr><th>' + companyLabel + '</th>';
+            cols.forEach(function (y) {
+                var label = (y === partialYear) ? 'Q1' + (partialQuarters > 1 ? '-Q' + partialQuarters : '') + ' ' + y : y;
+                html += '<th>' + label + '</th>';
+            });
+            html += '<th>Доля, %</th></tr></thead><tbody>';
+
+            companies.forEach(function (c) {
+                html += '<tr><td title="' + c + '">' + (c.length > 40 ? c.slice(0, 39) + '\u2026' : c) + '</td>';
+                cols.forEach(function (y) {
+                    var d = byCompanyYear[c] && byCompanyYear[c][y];
+                    var val = d ? d.usd : 0;
+                    html += '<td class="numeric">' + (val > 0 ? formatNumber(round2(val / 1000)) : '-') + '</td>';
+                });
+                var pct = grandTotal.usd > 0 ? round2(totalByCompany[c].usd / grandTotal.usd * 100) : 0;
+                html += '<td class="numeric">' + (pct > 0 ? pct + '%' : '-') + '</td>';
+                html += '</tr>';
+            });
+
+            // ИТОГО
+            html += '<tr style="font-weight:600;border-top:2px solid var(--color-border)"><td>ИТОГО</td>';
+            cols.forEach(function (y) {
+                var t = grandTotalByYear[y] ? grandTotalByYear[y].usd : 0;
+                html += '<td class="numeric">' + formatNumber(round2(t / 1000)) + '</td>';
+            });
+            html += '<td class="numeric">100%</td></tr>';
+
+            // Доля лидера
+            html += '<tr style="font-style:italic"><td>Доля ' + (leader.length > 30 ? leader.slice(0, 29) + '\u2026' : leader) + ', %</td>';
+            cols.forEach(function (y) {
+                var lv = byCompanyYear[leader] && byCompanyYear[leader][y] ? byCompanyYear[leader][y].usd : 0;
+                var tv = grandTotalByYear[y] ? grandTotalByYear[y].usd : 0;
+                var p = tv > 0 ? round2(lv / tv * 100) : 0;
+                html += '<td class="numeric">' + (p > 0 ? p + '%' : '-') + '</td>';
+            });
+            html += '<td class="numeric"></td></tr>';
+
+            html += '</tbody></table></div></div>';
+        }
+
+        // --- Горизонтальный bar-chart (по весу или USD) ---
+        var chartMetric = weightCol ? 'weight' : 'usd';
+        var chartUnit = weightCol ? 'кг' : 'тыс. USD';
+        var chartDivisor = weightCol ? 1 : 1000;
+
+        var barTop = companies.slice(0, Math.min(companies.length, 20));
+        var barHeight = 28;
+        var maxLabelLen = 0;
+        barTop.forEach(function (c) { if (c.length > maxLabelLen) { maxLabelLen = c.length; } });
+        var labelWidth = Math.max(200, Math.min(350, maxLabelLen * 6.5 + 16));
+        var cw = Math.max(750, labelWidth + 500);
+        var padding = { top: 10, right: 100, bottom: 10, left: labelWidth };
+        var ch = padding.top + barTop.length * (barHeight + 8) + padding.bottom;
+        var innerW = cw - padding.left - padding.right;
+        var maxVal = totalByCompany[barTop[0]][chartMetric] / chartDivisor;
+        if (maxVal === 0) { maxVal = 1; }
+
+        html += '<div class="analysis-section">';
+        html += '<h3 class="analysis-section-title">Топ ' + companyLabel.toLowerCase() + 'ей по объёму (' + chartUnit + ')</h3>';
+        html += '<svg class="analysis-chart company-ranking-chart" width="' + cw + '" height="' + ch + '" viewBox="0 0 ' + cw + ' ' + ch + '">';
+        html += '<style>text { font-family: ' + CHART_FONT + '; font-size: 12px; fill: ' + CHART_COLORS.text + '; }</style>';
+
+        barTop.forEach(function (c, i) {
+            var val = totalByCompany[c][chartMetric] / chartDivisor;
+            var pct = grandTotal[chartMetric] > 0 ? round2(totalByCompany[c][chartMetric] / grandTotal[chartMetric] * 100) : 0;
+            var bw = Math.max(1, (val / maxVal) * innerW);
+            var y = padding.top + i * (barHeight + 8);
+            var label = c.length > 35 ? c.slice(0, 34) + '\u2026' : c;
+            html += '<text x="' + (padding.left - 8) + '" y="' + (y + barHeight / 2 + 4) + '" text-anchor="end" font-size="11" fill="' + CHART_COLORS.text + '">' + label + '</text>';
+            html += '<rect x="' + padding.left + '" y="' + y + '" width="' + bw + '" height="' + barHeight + '" fill="' + CHART_COLORS.primary + '" rx="3"/>';
+            html += '<text x="' + (padding.left + bw + 6) + '" y="' + (y + barHeight / 2 + 4) + '" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(weightCol ? Math.round(val) : round2(val)) + ' (' + pct + '%)</text>';
+        });
+
+        html += '</svg>';
+        html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать график PNG</button>';
+        html += '</div>';
+
+        // Кнопки экспорта
+        html += '<div class="processing-export" style="margin-top:20px">';
+        html += '<button class="btn btn-primary analysis-export-xlsx">Скачать XLSX</button>';
+        html += '<button class="btn btn-secondary analysis-export-csv">Скачать CSV</button>';
+        html += '</div>';
+
+        analysisResults.innerHTML = html;
+
+        // --- Post-render: селекторы ---
+        var yearSelect = analysisResults.querySelector('.company-ranking-year-select');
+        var topnSelect = analysisResults.querySelector('.company-ranking-topn-select');
+
+        function rerun() {
+            var sy = yearSelect ? yearSelect.value : 'all';
+            var sn = topnSelect ? topnSelect.value : '15';
+            var tn = sn === 'all' ? 'all' : parseInt(sn, 10);
+            renderCompanyRankingAnalysis(data, headers, sy, tn, opts);
+        }
+        if (yearSelect) { yearSelect.addEventListener('change', rerun); }
+        if (topnSelect) { topnSelect.addEventListener('change', rerun); }
+
+        // PNG
+        var chartPngBtn = analysisResults.querySelector('.analysis-export-chart-png');
+        if (chartPngBtn) {
+            chartPngBtn.addEventListener('click', function () {
+                var svg = analysisResults.querySelector('.company-ranking-chart');
+                if (svg) { exportChartPNG(svg, baseFileName() + '_' + exportName + '.png'); }
+            });
+        }
+
+        // Экспорт данных
+        var exportRows = [];
+        var exportHeaders = [companyLabel];
+        cols.forEach(function (y) {
+            var label = (y === partialYear) ? 'Q1-Q' + partialQuarters + ' ' + y : y;
+            exportHeaders.push(label + ' (кг)');
+            if (statUsdCol) { exportHeaders.push(label + ' (тыс. USD)'); }
+        });
+        exportHeaders.push('Доля, %');
+
+        companies.forEach(function (c) {
+            var row = {};
+            row[companyLabel] = c;
+            cols.forEach(function (y) {
+                var label = (y === partialYear) ? 'Q1-Q' + partialQuarters + ' ' + y : y;
+                var d = byCompanyYear[c] && byCompanyYear[c][y];
+                if (weightCol) { row[label + ' (кг)'] = d ? Math.round(d.weight) : 0; }
+                if (statUsdCol) { row[label + ' (тыс. USD)'] = d ? round2(d.usd / 1000) : 0; }
+            });
+            row['Доля, %'] = grandTotal[sortKey] > 0 ? round2(totalByCompany[c][sortKey] / grandTotal[sortKey] * 100) + '%' : '-';
+            exportRows.push(row);
+        });
+
+        // ИТОГО
+        var totalRow = {};
+        totalRow[companyLabel] = 'ИТОГО';
+        cols.forEach(function (y) {
+            var label = (y === partialYear) ? 'Q1-Q' + partialQuarters + ' ' + y : y;
+            if (weightCol) { totalRow[label + ' (кг)'] = grandTotalByYear[y] ? Math.round(grandTotalByYear[y].weight) : 0; }
+            if (statUsdCol) { totalRow[label + ' (тыс. USD)'] = grandTotalByYear[y] ? round2(grandTotalByYear[y].usd / 1000) : 0; }
+        });
+        totalRow['Доля, %'] = '100%';
+        exportRows.push(totalRow);
+
+        analysisResults.querySelector('.analysis-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, exportName);
+        });
+        analysisResults.querySelector('.analysis-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, exportName);
         });
     }
 
@@ -4843,7 +5944,7 @@ document.addEventListener('DOMContentLoaded', function () {
         results.sort(function (a, b) { return b.sumWeight - a.sumWeight; });
 
         /* Determine unit */
-        var unit = valField.indexOf('USD') !== -1 ? 'USD/кг' : 'руб./кг';
+        var unit = valField.indexOf('USD') !== -1 ? 'USD/кг' : 'нац. вал./кг';
 
         var html = '<div class="analysis-section">';
         html += '<h3 class="analysis-section-title">Средневзвешенная цена (' + unit + ')</h3>';
@@ -5350,6 +6451,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var researchNotesList   = document.querySelector('.research-notes-list');
     var researchNotesCount  = document.querySelector('.research-notes-count');
     var researchNotesToSlide = document.querySelector('.research-notes-to-slide');
+    var researchMasterBtn   = document.querySelector('.research-master-btn');
 
     // Restore saved settings
     (function () {
@@ -5668,6 +6770,316 @@ document.addEventListener('DOMContentLoaded', function () {
         renderResearchNotes();
     }
 
+    function parseResearchBriefBlocks(text) {
+        var blocks = [];
+        var current = [];
+
+        text.split(/\n/).forEach(function (line) {
+            if (/^#{1,3}\s+/.test(line) && current.length) {
+                blocks.push(current.join('\n').trim());
+                current = [line.replace(/^#{1,3}\s+/, '')];
+            } else {
+                current.push(line);
+            }
+        });
+        if (current.length) blocks.push(current.join('\n').trim());
+
+        blocks = blocks.map(function (block, idx) {
+            var lines = block.split('\n').map(function (line) {
+                return line.trim();
+            }).filter(Boolean);
+            if (!lines.length) return null;
+
+            var title = lines[0].replace(/^#{1,3}\s+/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+            var bodyLines = lines.slice(1).map(function (line) {
+                return line.replace(/^[-*]\s+/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+            }).filter(Boolean);
+
+            if (!bodyLines.length && lines.length > 1) bodyLines = lines.slice(1);
+            if (!bodyLines.length) {
+                title = idx === 0 ? 'Аналитические выводы' : title;
+                bodyLines = lines;
+            }
+
+            return {
+                title: title || ('Блок ' + (idx + 1)),
+                body: bodyLines.join('\n'),
+                raw: block
+            };
+        }).filter(function (block) {
+            return block && (block.body.length > 20 || block.raw.length > 30);
+        });
+
+        if (blocks.length < 2 && text.trim()) {
+            blocks = [{ title: 'Аналитические выводы', body: text.trim(), raw: text.trim() }];
+        }
+
+        return blocks;
+    }
+
+    function addResearchNotesFromBrief(text) {
+        var blocks = parseResearchBriefBlocks(text);
+        blocks.slice(0, 8).forEach(function (block) {
+            researchNotes.push({
+                id: Date.now() + Math.floor(Math.random() * 10000),
+                text: block.title + '\n' + block.body,
+                ts: new Date().toISOString()
+            });
+        });
+        saveResearchNotes();
+        renderResearchNotes();
+    }
+
+    function createResearchBriefSlides(text) {
+        var blocks = parseResearchBriefBlocks(text);
+        if (!blocks.length || !findPresBlock('text')) return 0;
+
+        var startIndex = presState.slides.length;
+        blocks.slice(0, 8).forEach(function (block) {
+            var lines = stripMarkdown(block.body).split('\n').map(function (line) {
+                return line.trim();
+            }).filter(Boolean);
+
+            if (lines.length === 0) lines = [block.body];
+            var LINES_PER_SLIDE = 5;
+            for (var offset = 0; offset < lines.length; offset += LINES_PER_SLIDE) {
+                var title = block.title;
+                if (offset > 0) title += ' (продолжение)';
+                presState.slides.push({
+                    id: presState.nextId++,
+                    type: 'text',
+                    title: title,
+                    hsFilter: '',
+                    topN: 10,
+                    year: '',
+                    opts: {
+                        subtitle: '',
+                        bullets: lines.slice(offset, offset + LINES_PER_SLIDE).join('\n')
+                    }
+                });
+            }
+        });
+
+        if (presState.slides.length === startIndex) return 0;
+        presState.activeIndex = startIndex;
+        renderPresSlideList();
+        previewPresSlide(presState.activeIndex);
+        updatePresButtons();
+        document.querySelector('[data-module="presentation"]').click();
+        return presState.slides.length - startIndex;
+    }
+
+    function buildResearchDeckMetrics() {
+        var data = getActiveData();
+        var headers = getActiveHeaders();
+        if (!data || data.length === 0) return 'Нет загруженных данных.';
+
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var statUsdCol = findColumn(headers, COL_STAT_USD);
+        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
+        var senderCol = findColumn(headers, COL_SENDER);
+        var receiverCol = findColumn(headers, COL_RECEIVER);
+        var manufacturerCol = findColumn(headers, COL_MANUFACTURER);
+        var hsCol = findColumn(headers, COL_HS_CODE);
+        var dirCol = findColumn(headers, COL_DIRECTION);
+
+        function num(row, col) {
+            return col ? (Number(row[col]) || 0) : 0;
+        }
+
+        function topBy(col, valCol, limit) {
+            if (!col || !valCol) return [];
+            var map = {};
+            var total = 0;
+            data.forEach(function (row) {
+                var key = String(row[col] || '').trim();
+                var val = num(row, valCol);
+                if (!key || val <= 0) return;
+                map[key] = (map[key] || 0) + val;
+                total += val;
+            });
+            return Object.keys(map).sort(function (a, b) { return map[b] - map[a]; }).slice(0, limit).map(function (key) {
+                return {
+                    name: key,
+                    tons: round2(map[key] / 1000),
+                    share: total > 0 ? round2(map[key] / total * 100) : 0
+                };
+            });
+        }
+
+        var byYear = {};
+        var byYearQ = {};
+        data.forEach(function (row) {
+            var y = yearCol ? String(row[yearCol] || '').trim() : '';
+            if (y) {
+                if (!byYear[y]) byYear[y] = { w: 0, u: 0 };
+                byYear[y].w += num(row, weightCol);
+                byYear[y].u += num(row, statUsdCol);
+                if (quarterCol) {
+                    var q = String(row[quarterCol] || '').trim();
+                    if (q) {
+                        if (!byYearQ[y]) byYearQ[y] = {};
+                        byYearQ[y][q] = true;
+                    }
+                }
+            }
+        });
+
+        var years = Object.keys(byYear).sort();
+        var partialYear = '';
+        if (quarterCol && years.length) {
+            var lastY = years[years.length - 1];
+            var lastQs = Object.keys(byYearQ[lastY] || {});
+            if (lastQs.length > 0 && lastQs.length < 4) partialYear = lastY + ' (' + lastQs.length + ' кв. из 4)';
+        }
+
+        var totalW = 0;
+        var totalU = 0;
+        data.forEach(function (row) {
+            totalW += num(row, weightCol);
+            totalU += num(row, statUsdCol);
+        });
+
+        var cagrWeight = null;
+        var cagrUsd = null;
+        if (years.length >= 2) {
+            var first = byYear[years[0]];
+            var last = byYear[years[years.length - 1]];
+            var n = years.length - 1;
+            cagrWeight = presCalcCAGR(first.w, last.w, n);
+            cagrUsd = presCalcCAGR(first.u, last.u, n);
+        }
+
+        var prices = [];
+        data.forEach(function (row) {
+            var w = num(row, weightCol);
+            var u = num(row, statUsdCol);
+            if (w > 0 && u > 0) prices.push(u / w);
+        });
+        prices.sort(function (a, b) { return a - b; });
+
+        var hsCodes = {};
+        if (hsCol) {
+            data.forEach(function (row) {
+                var code = String(row[hsCol] || '').trim();
+                if (code) hsCodes[code] = true;
+            });
+        }
+        var dirs = {};
+        if (dirCol) {
+            data.forEach(function (row) {
+                var d = String(row[dirCol] || '').trim();
+                if (d) dirs[d] = true;
+            });
+        }
+
+        var lines = [];
+        lines.push('Срез данных для презентационного анализа:');
+        lines.push('- строк: ' + formatNumber(data.length));
+        lines.push('- период: ' + (years.length ? years[0] + '–' + years[years.length - 1] : 'не определён'));
+        if (partialYear) lines.push('- неполный год: ' + partialYear);
+        lines.push('- направление: ' + (Object.keys(dirs).join(', ') || 'не определено'));
+        lines.push('- кодов ТН ВЭД: ' + Object.keys(hsCodes).slice(0, 8).join(', ') + (Object.keys(hsCodes).length > 8 ? ' и др.' : ''));
+        lines.push('- общий объём: ' + round2(totalW / 1000) + ' тонн');
+        lines.push('- общая стоимость: ' + round2(totalU / 1000) + ' тыс. USD');
+        if (cagrWeight != null) lines.push('- CAGR объёма: ' + cagrWeight + '%; CAGR стоимости: ' + cagrUsd + '%');
+        if (prices.length) {
+            lines.push('- цена USD/кг: средняя ' + (totalW > 0 ? round2(totalU / totalW) : 0) + ', диапазон ' + round2(prices[0]) + '–' + round2(prices[prices.length - 1]));
+        }
+        if (years.length) {
+            lines.push('- динамика по годам:');
+            years.forEach(function (y) {
+                lines.push('  ' + y + ': ' + round2(byYear[y].w / 1000) + ' тонн, ' + round2(byYear[y].u / 1000) + ' тыс. USD');
+            });
+        }
+        lines.push('- топ стран: ' + topBy(countryCol, weightCol, 7).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
+        lines.push('- топ отправителей: ' + topBy(senderCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
+        lines.push('- топ получателей: ' + topBy(receiverCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
+        lines.push('- топ изготовителей: ' + topBy(manufacturerCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
+
+        return lines.join('\n');
+    }
+
+    function buildResearchDeckPrompt() {
+        var commodityEl = document.querySelector('.research-commodity');
+        var commodity = commodityEl ? commodityEl.value.trim() : '';
+        var model = getResearchModel();
+        var canSearch = SEARCH_MODELS.indexOf(model) !== -1;
+
+        return 'Подготовь презентационный анализ рынка для ВЭД-презентации.\n\n' +
+            (commodity ? 'Товар / тема: ' + commodity + '\n\n' : '') +
+            buildResearchDeckMetrics() + '\n\n' +
+            'Нужно сформировать 5–7 готовых блоков для слайдов:\n' +
+            '1. Рынок и внешний контекст\n' +
+            '2. Динамика объёмов и стоимости\n' +
+            '3. Страны и структура поставок\n' +
+            '4. Цены и факторы цены\n' +
+            '5. Ключевые игроки\n' +
+            '6. Риски и ограничения\n' +
+            '7. Итоговые выводы\n\n' +
+            'Для каждого блока дай заголовок формата "## ...", затем 3–5 коротких тезисов для слайда. ' +
+            'Тезисы должны быть деловыми, конкретными, без вводных фраз, на русском языке. ' +
+            'Опирайся сначала на внутренние данные, затем добавляй внешний контекст. ' +
+            'Не сравнивай неполный год с полными годами без явной оговорки. ' +
+            'При поиске внешних данных приоритет источников: UN Comtrade, WITS/World Bank, WTO Tariff & Trade Data, World Bank Pink Sheet, FAOSTAT/ITC для релевантных товарных рынков. ' +
+            (canSearch
+                ? 'Проверь актуальные внешние данные в интернете и укажи источники в скобках в конце релевантных тезисов.'
+                : 'Если используешь внешний контекст без интернет-поиска, помечай такие тезисы как "требует проверки источником".');
+    }
+
+    function researchRunMaster() {
+        var data = getActiveData();
+        if (!data || data.length === 0) {
+            alert('Загрузите и обработайте данные перед сборкой анализа');
+            return;
+        }
+
+        var pKey = researchProvider.value;
+        var apiKey = researchApiKey.value.trim() || localStorage.getItem(LS_RESEARCH_APIKEY) || '';
+        var model = getResearchModel();
+
+        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai' || pKey === 'groq') && !apiKey) {
+            alert('Введите API-ключ в панели настроек слева');
+            researchApiKey.focus();
+            return;
+        }
+
+        localStorage.setItem(LS_RESEARCH_PROVIDER, pKey);
+        localStorage.setItem(LS_RESEARCH_MODEL, model);
+        if (apiKey) localStorage.setItem(LS_RESEARCH_APIKEY, apiKey);
+        if (researchUrl.value.trim()) localStorage.setItem(LS_RESEARCH_AIURL, researchUrl.value.trim());
+
+        var prompt = buildResearchDeckPrompt();
+        researchHistory.push({ role: 'user', content: 'Собрать анализ для презентации' });
+        researchAddMessage('user', 'Собрать анализ для презентации');
+
+        var loadingEl = researchAddMessage('assistant', 'Собираю презентационные блоки...', true);
+        researchMasterBtn.disabled = true;
+        researchMasterBtn.classList.add('loading');
+        researchMasterBtn.textContent = 'Собираю...';
+
+        researchCallAI(pKey, apiKey, model, [{ role: 'user', content: prompt }], buildResearchContext())
+            .then(function (reply) {
+                researchHistory.push({ role: 'assistant', content: reply });
+                loadingEl.remove();
+                addResearchNotesFromBrief(reply);
+                var created = createResearchBriefSlides(reply);
+                researchAddMessage('assistant', reply + '\n\n---\nБлоки сохранены в заметки для отчёта. Создано слайдов в презентации: ' + created + '.');
+            })
+            .catch(function (err) {
+                researchHistory.pop();
+                loadingEl.remove();
+                researchAddMessage('assistant', 'Ошибка: ' + err.message);
+            })
+            .then(function () {
+                researchMasterBtn.disabled = false;
+                researchMasterBtn.classList.remove('loading');
+                researchMasterBtn.textContent = 'Собрать анализ для презентации';
+            });
+    }
+
     // Кнопка «+ Слайд в презентацию» — собирает все заметки в один текстовый слайд
     researchNotesToSlide.addEventListener('click', function () {
         if (!researchNotes.length) return;
@@ -5808,6 +7220,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Send button
     researchSendBtn.addEventListener('click', function () { researchSend(); });
+    researchMasterBtn.addEventListener('click', researchRunMaster);
 
     // Enter to send (Shift+Enter = newline)
     researchInput.addEventListener('keydown', function (e) {

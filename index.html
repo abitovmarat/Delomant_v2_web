@@ -128,6 +128,20 @@
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">Нормализовать названия компаний</span>
                                 </label>
+                                <div class="operation-sub operation-sub-company-dict">
+                                    <div class="company-dict-status">Словарь компаний: 0 записей</div>
+                                    <label class="company-dict-autosave">
+                                        <input type="checkbox" class="company-dict-autosave-checkbox" checked>
+                                        <span>Автодобавление новых вариантов</span>
+                                    </label>
+                                    <div class="company-dict-actions">
+                                        <button class="btn btn-secondary company-dict-collect-btn" type="button">Собрать из данных</button>
+                                        <button class="btn btn-secondary company-dict-import-btn" type="button">Импорт JSON</button>
+                                        <button class="btn btn-secondary company-dict-export-btn" type="button">Экспорт JSON</button>
+                                        <button class="btn btn-secondary company-dict-clear-btn" type="button">Очистить</button>
+                                        <input type="file" class="company-dict-import-input" accept=".json" aria-label="Импорт словаря компаний">
+                                    </div>
+                                </div>
                                 <label class="operation-item" data-op="normalize-country" title="Заполняет пустые значения в столбце «Страна происхождения» из столбца «Код страны отправления» (формат EC - ЭКВАДОР → ЭКВАДОР). Помогает если в ДТ не заполнено поле 16, но заполнено поле 15">
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">Нормализовать страну происхождения</span>
@@ -156,13 +170,13 @@
                                     <input type="checkbox" class="operation-checkbox">
                                     <span class="operation-label">USD за КГ (фактурная)</span>
                                 </label>
-                                <label class="operation-item" data-op="rur-per-kg" title="Создаёт столбец «RUR за КГ» = Фактурная стоимость в рублях / Вес нетто (кг)">
+                                <label class="operation-item" data-op="rur-per-kg" title="Создаёт столбец «Нац. вал. за КГ» = Таможенная стоимость / Вес нетто (кг)">
                                     <input type="checkbox" class="operation-checkbox">
-                                    <span class="operation-label">RUR за КГ</span>
+                                    <span class="operation-label">Нац. вал. за КГ</span>
                                 </label>
-                                <label class="operation-item" data-op="cbr-rate" title="Загружает курс ЦБ РФ на дату каждой строки и пересчитывает фактурную стоимость в рубли по этому курсу">
+                                <label class="operation-item" data-op="cbr-rate" title="Загружает курс ЦБ РФ на дату каждой строки и пересчитывает таможенную стоимость в нац. валюту. Только для таможни РФ">
                                     <input type="checkbox" class="operation-checkbox">
-                                    <span class="operation-label">Курс ЦБ РФ → пересчёт в рубли</span>
+                                    <span class="operation-label">Курс ЦБ РФ → пересчёт</span>
                                 </label>
                                 <div class="operation-group-title">Дополнительно</div>
                                 <label class="operation-item" data-op="ratio" title="Создаёт столбец-отношение из двух выбранных вами столбцов: числитель / знаменатель">
@@ -193,6 +207,7 @@
                             <div class="columns-controls">
                                 <button class="btn btn-secondary columns-select-all">Выбрать все</button>
                                 <button class="btn btn-secondary columns-deselect-all">Снять все</button>
+                                <button class="btn btn-primary columns-brief-btn">Краткая обработка</button>
                             </div>
                             <div class="columns-templates">
                                 <div class="template-row">
@@ -237,11 +252,11 @@
                     <h2 class="module-title">Анализ</h2>
 
                     <div class="action-cards">
-                        <div class="action-card" title="Колонки: Вес нетто, кг · Статистическая стоимость, USD · Фактурная стоимость в рублях · Год · КВАРТАЛ">
+                        <div class="action-card" title="Колонки: Вес нетто, кг · Статистическая стоимость, USD · Таможенная стоимость · Год · КВАРТАЛ">
                             <span class="action-card-icon">📦</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Объёмы и стоимость</h3>
-                                <p class="action-card-description">Тыс. тонн, USD, рубли по годам и кварталам</p>
+                                <p class="action-card-description">Тыс. тонн, USD, нац. вал. по годам и кварталам</p>
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
@@ -277,11 +292,35 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Статистическая стоимость, USD · Фактурная стоимость в рублях · Вес нетто, кг · Год · КВАРТАЛ">
+                        <div class="action-card" title="Колонки: Статистическая стоимость, USD · Таможенная стоимость · Вес нетто, кг · Год · КВАРТАЛ">
                             <span class="action-card-icon">📈</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Поквартальная динамика цен</h3>
-                                <p class="action-card-description">Стоимость руб./кг и USD/кг по кварталам</p>
+                                <p class="action-card-description">Стоимость нац. вал./кг и USD/кг по кварталам</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Наименование получателя · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                            <span class="action-card-icon">🏢</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Топ получателей</h3>
+                                <p class="action-card-description">Объёмы и стоимость по компаниям-получателям</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Наименование отправителя · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                            <span class="action-card-icon">🚢</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Топ отправителей</h3>
+                                <p class="action-card-description">Объёмы и стоимость по компаниям-отправителям</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" title="Колонки: Фирма-изготовитель · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                            <span class="action-card-icon">&#x1F3ED;</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Топ изготовителей</h3>
+                                <p class="action-card-description">Объёмы и стоимость по фирмам-изготовителям</p>
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
@@ -290,8 +329,7 @@
                     <div class="analysis-direction-filter">
                         <span class="analysis-filter-label">Направление:</span>
                         <div class="analysis-filter-btns">
-                            <button class="btn-filter active" data-dir="">Все</button>
-                            <button class="btn-filter" data-dir="ИМ">ИМ (импорт)</button>
+                            <button class="btn-filter active" data-dir="ИМ">ИМ (импорт)</button>
                             <button class="btn-filter" data-dir="ЭК">ЭК (экспорт)</button>
                         </div>
                     </div>
@@ -393,6 +431,13 @@
 
                         <!-- Right: chat -->
                         <div class="research-chat">
+                            <div class="research-master">
+                                <div>
+                                    <div class="research-master-title">Мастер анализа</div>
+                                    <div class="research-master-subtitle">Собирает 5–7 готовых блоков для презентации по данным и внешнему контексту</div>
+                                </div>
+                                <button class="btn btn-primary research-master-btn">Собрать анализ для презентации</button>
+                            </div>
                             <div class="research-messages"></div>
                             <div class="research-presets">
                                 <button class="research-preset-btn">Анализ рынка</button>
@@ -589,7 +634,7 @@
                                 <li><strong>Обогащение из справочника:</strong> VLOOKUP-объединение по ключевой колонке</li>
                                 <li><strong>Очистка:</strong> удаление пробелов, дубликатов, пустых строк, нормализация компаний</li>
                                 <li><strong>Нормализация:</strong> даты в ISO, числа, коды ТН ВЭД до 10 знаков</li>
-                                <li><strong>Расчёты:</strong> USD/кг стат., USD/кг факт., руб./кг, курс ЦБ РФ, пользовательское отношение</li>
+                                <li><strong>Расчёты:</strong> USD/кг стат., USD/кг факт., нац. вал./кг, курс ЦБ РФ, пользовательское отношение</li>
                                 <li><strong>Контроль качества:</strong> удаление пустых колонок, фильтрация столбцов</li>
                             </ul>
                         </div>
@@ -602,7 +647,7 @@
                                 <li><strong>Динамика цен по странам:</strong> средневзвешенная цена USD/кг, линейный график топ-10 стран</li>
                                 <li><strong>Структура импорта:</strong> диаграмма Санки Отправитель → Получатель (тонны)</li>
                                 <li><strong>Структура по изготовителям:</strong> диаграмма Санки Изготовитель → Получатель (тонны)</li>
-                                <li><strong>Поквартальная динамика цен:</strong> руб./кг и USD/кг по кварталам, линии по годам</li>
+                                <li><strong>Поквартальная динамика цен:</strong> нац. вал./кг и USD/кг по кварталам, линии по годам</li>
                             </ul>
                         </div>
 
