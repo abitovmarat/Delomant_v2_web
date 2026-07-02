@@ -1525,19 +1525,44 @@ document.addEventListener('DOMContentLoaded', function () {
         'Exporter'
     ];
     var COMPANY_COLUMN_SKIP_WORDS = ['АДРЕС', 'ИНН', 'КОД', 'СТРАНА', 'СТРАНЫ', 'ДАТА', 'НОМЕР', 'USD', 'КГ'];
+    var COMPANY_ORIGINAL_SUFFIX = ' (оригинал)';
+    var EXCLUDED_ORIGINAL_HEADERS = [
+        'ОКАТО отправителя (оригинал)',
+        'ОКАТО контрактодержателя (оригинал)',
+        'ОКАТО получателя (оригинал)'
+    ];
+    var EXCLUDED_FINAL_HEADERS = EXCLUDED_ORIGINAL_HEADERS.concat([
+        'номер бланка',
+        'Номер свидетельства брокера',
+        'Признак КТС  Метод определения',
+        'Код таможенного органа',
+        'Тип информации',
+        'Банковские реквизиты',
+        'Квота',
+        'Контейнерные перевозки',
+        'Кол-во транспортных средств'
+    ]).map(function (name) {
+        return String(name || '').trim().toUpperCase();
+    });
     var COMPANY_ORGFORMS = [
         ['ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ', 'ООО', 100],
         ['ООО', 'ООО', 90],
+        ['OOO', 'ООО', 88],
         ['ОТКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'АО', 100],
         ['ОАО', 'АО', 90],
+        ['OAO', 'АО', 88],
         ['АКЦИОНЕРНОЕ ОБЩЕСТВО', 'АО', 95],
         ['АО', 'АО', 85],
+        ['AO', 'АО', 83],
         ['ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'ПАО', 100],
         ['ПАО', 'ПАО', 90],
+        ['PAO', 'ПАО', 88],
         ['ЗАКРЫТОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО', 'ЗАО', 100],
         ['ЗАО', 'ЗАО', 90],
+        ['ZAO', 'ЗАО', 88],
         ['ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ', 'ИП', 100],
         ['ИП', 'ИП', 90],
+        ['IP', 'ИП', 88],
         ['LIMITED LIABILITY COMPANY', 'LLC', 100],
         ['LLC', 'LLC', 90],
         ['JOINT STOCK COMPANY', 'JSC', 100],
@@ -1564,11 +1589,13 @@ document.addEventListener('DOMContentLoaded', function () {
         ['LTDA', 'LTDA', 90],
         ['S/A', 'S/A', 90],
         ['EIRELI', 'EIRELI', 90],
-        ['ТОО', 'ТОО', 90]
+        ['ТОО', 'ТОО', 90],
+        ['TOO', 'ТОО', 88]
     ].sort(function (a, b) {
         if (b[2] !== a[2]) { return b[2] - a[2]; }
         return b[0].length - a[0].length;
     });
+    var COMPANY_ORGFORM_PATTERNS = null;
     var COMPANY_MARKERS = ['ON BEHALF OF', 'ON BEHALF', 'ПО ПОРУЧЕНИЮ', 'ОТ ИМЕНИ', 'BY ORDER OF'];
     var COMPANY_NAME_TAILS = [
         'PROCESSING IMPORT AND EXPORT',
@@ -1605,7 +1632,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/[–—]/g, '-')
             .replace(/\u00A0/g, ' ');
         text = fixMixedCyrillicLatin(text);
-        text = text.replace(/[()]/g, ' ')
+        text = text.replace(/[<>]/g, ' ')
+            .replace(/[()]/g, ' ')
             .replace(/["']/g, ' ')
             .replace(/\./g, ' ')
             .replace(/\s*,\s*/g, ', ')
@@ -1617,17 +1645,61 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function fixMixedCyrillicLatin(text) {
-        var map = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У' };
-        var chars = String(text || '').split('');
-        function isCyr(ch) { return /[А-Яа-яЁё]/.test(ch); }
-        for (var i = 0; i < chars.length; i++) {
-            var ch = chars[i];
-            if (!map[ch]) { continue; }
-            if (isCyr(chars[i - 1] || '') || isCyr(chars[i + 1] || '')) {
-                chars[i] = map[ch];
+        var latinToCyr = {
+            A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У'
+        };
+        var cyrToLatin = {
+            'А': 'A', 'В': 'B', 'С': 'C', 'Е': 'E', 'Н': 'H', 'К': 'K', 'М': 'M', 'О': 'O', 'Р': 'P', 'Т': 'T', 'Х': 'X', 'У': 'Y'
+        };
+        function isLatin(ch) { return /[A-Z]/.test(ch); }
+        function isCyr(ch) { return /[А-ЯЁ]/.test(ch); }
+        function getStats(token) {
+            var stats = { latin: 0, cyr: 0, strongLatin: 0, strongCyr: 0, firstScript: '' };
+            for (var i = 0; i < token.length; i++) {
+                var ch = token.charAt(i);
+                if (isLatin(ch)) {
+                    stats.latin++;
+                    if (!latinToCyr[ch]) { stats.strongLatin++; }
+                    if (!stats.firstScript) { stats.firstScript = 'latin'; }
+                } else if (isCyr(ch)) {
+                    stats.cyr++;
+                    if (!cyrToLatin[ch]) { stats.strongCyr++; }
+                    if (!stats.firstScript) { stats.firstScript = 'cyr'; }
+                }
             }
+            return stats;
         }
-        return chars.join('');
+        function canConvertToken(token, target) {
+            for (var i = 0; i < token.length; i++) {
+                var ch = token.charAt(i);
+                if (target === 'cyr' && isLatin(ch) && !latinToCyr[ch]) { return false; }
+                if (target === 'latin' && isCyr(ch) && !cyrToLatin[ch]) { return false; }
+            }
+            return true;
+        }
+
+        var source = String(text || '');
+        var context = getStats(source);
+        return source.replace(/[A-ZА-ЯЁ]+/g, function (token) {
+            var stats = getStats(token);
+            if (!stats.latin || !stats.cyr) { return token; }
+
+            var target = '';
+            if (stats.strongCyr && !stats.strongLatin) { target = 'cyr'; }
+            else if (stats.strongLatin && !stats.strongCyr) { target = 'latin'; }
+            else if (!stats.strongLatin && !stats.strongCyr) {
+                if (context.strongCyr && !context.strongLatin) { target = 'cyr'; }
+                else if (context.strongLatin && !context.strongCyr) { target = 'latin'; }
+                else { target = stats.firstScript || 'cyr'; }
+            }
+            if (!target) { return token; }
+            if (!canConvertToken(token, target)) { return token; }
+
+            return token.split('').map(function (ch) {
+                if (target === 'cyr') { return latinToCyr[ch] || ch; }
+                return cyrToLatin[ch] || ch;
+            }).join('');
+        });
     }
 
     function findCompanyColumns(headers) {
@@ -1644,6 +1716,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         headers.forEach(function (h) {
             var upper = String(h || '').toUpperCase();
+            if (String(h || '').slice(-COMPANY_ORIGINAL_SUFFIX.length) === COMPANY_ORIGINAL_SUFFIX) { return; }
             var skip = false;
             COMPANY_COLUMN_SKIP_WORDS.forEach(function (word) {
                 if (upper.indexOf(word) !== -1) { skip = true; }
@@ -1669,6 +1742,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return cols;
     }
 
+    function getOriginalCompanyColumnName(col) {
+        return String(col || '') + COMPANY_ORIGINAL_SUFFIX;
+    }
+
+    function ensureAdjacentHeader(headers, sourceCol, adjacentCol) {
+        var sourceIdx = headers.indexOf(sourceCol);
+        if (sourceIdx === -1) { return; }
+        var adjacentIdx = headers.indexOf(adjacentCol);
+        if (adjacentIdx !== -1) {
+            headers.splice(adjacentIdx, 1);
+            if (adjacentIdx < sourceIdx) { sourceIdx--; }
+        }
+        headers.splice(sourceIdx + 1, 0, adjacentCol);
+    }
+
     function hasCompanyBoundary(text, idx, len) {
         var before = idx === 0 ? ' ' : text.charAt(idx - 1);
         var after = idx + len >= text.length ? ' ' : text.charAt(idx + len);
@@ -1687,18 +1775,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function extractCompanyOrgform(text) {
+        if (!COMPANY_ORGFORM_PATTERNS) {
+            COMPANY_ORGFORM_PATTERNS = COMPANY_ORGFORMS.map(function (item) {
+                return { pattern: cleanCompanyText(item[0]), orgform: item[1] };
+            }).filter(function (item) {
+                return !!item.pattern;
+            });
+        }
         var found = null;
-        COMPANY_ORGFORMS.forEach(function (item) {
+        COMPANY_ORGFORM_PATTERNS.forEach(function (item) {
             if (found) { return; }
-            var pattern = cleanCompanyText(item[0]);
-            if (!pattern) { return; }
-            var idx = text.indexOf(pattern);
+            var idx = text.indexOf(item.pattern);
             while (idx !== -1) {
-                if (hasCompanyBoundary(text, idx, pattern.length)) {
-                    found = { pattern: pattern, orgform: item[1] };
+                if (hasCompanyBoundary(text, idx, item.pattern.length)) {
+                    found = { pattern: item.pattern, orgform: item.orgform };
                     return;
                 }
-                idx = text.indexOf(pattern, idx + 1);
+                idx = text.indexOf(item.pattern, idx + 1);
             }
         });
         return found;
@@ -1740,6 +1833,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function getCompanyDictionaryValue(key) {
         return companyDictionary[key] || COMPANY_NAME_MAP[key] || '';
+    }
+
+    function sanitizeCompanyCanonicalName(value) {
+        return normalizeCompanyNameAuto(String(value || '').trim());
     }
 
     function normalizeCompanyNameAuto(name) {
@@ -1817,7 +1914,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var updated = 0;
         entries.forEach(function (item) {
             var key = cleanCompanyText(item.raw_pattern);
-            var value = String(item.canonical_name || '').trim();
+            var value = sanitizeCompanyCanonicalName(item.canonical_name);
             if (!key || !value) { return; }
             if (!companyDictionary[key]) {
                 companyDictionary[key] = value;
@@ -1969,10 +2066,19 @@ document.addEventListener('DOMContentLoaded', function () {
         companyDictionaryLastAdded = 0;
         var targetCols = findCompanyColumns(headers);
         if (targetCols.length === 0) { return 0; }
+        var originalCols = {};
+
+        targetCols.forEach(function (col) {
+            var originalCol = getOriginalCompanyColumnName(col);
+            originalCols[col] = originalCol;
+            ensureAdjacentHeader(headers, col, originalCol);
+        });
 
         data.forEach(function (row) {
             targetCols.forEach(function (col) {
                 var val = row[col];
+                var originalCol = originalCols[col];
+                row[originalCol] = val === undefined || val === null ? '' : val;
                 if (typeof val !== 'string' || !val.trim()) { return; }
                 var norm = normalizeCompanyName(val);
                 if (autoAddCompanyDictionaryEntry(val, norm)) { addedToDictionary++; }
@@ -2825,6 +2931,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (ops.indexOf('mapping') !== -1) {
                     finalCols = headers.slice();
                 }
+
+                finalCols = finalCols.filter(function (h) {
+                    return EXCLUDED_FINAL_HEADERS.indexOf(String(h || '').trim().toUpperCase()) === -1;
+                });
 
                 var removedCols = headers.filter(function (h) {
                     return finalCols.indexOf(h) === -1;
