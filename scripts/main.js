@@ -1524,7 +1524,7 @@ document.addEventListener('DOMContentLoaded', function () {
         'Importer',
         'Exporter'
     ];
-    var COMPANY_COLUMN_SKIP_WORDS = ['АДРЕС', 'ИНН', 'КОД', 'СТРАНА', 'СТРАНЫ', 'ДАТА', 'НОМЕР', 'USD', 'КГ'];
+    var COMPANY_COLUMN_SKIP_WORDS = ['АДРЕС', 'ИНН', 'КОД', 'СТРАНА', 'СТРАНЫ', 'ДАТА', 'НОМЕР', 'USD', 'КГ', 'ОКАТО', 'КПП'];
     var COMPANY_ORIGINAL_SUFFIX = ' (оригинал)';
     var EXCLUDED_ORIGINAL_HEADERS = [
         'ОКАТО отправителя (оригинал)',
@@ -1623,6 +1623,43 @@ document.addEventListener('DOMContentLoaded', function () {
         'ООО ПОЛЛУКС': 'ПОЛЛУКС, ООО',
         'РЫБОЛОВЕЦКАЯ АРТЕЛЬ КОЛХОЗ ИМ 50 ЛЕТ ОКТЯБРЯ': 'РЫБОЛОВЕЦКАЯ АРТЕЛЬ'
     };
+    var COMPANY_ADDRESS_CUT_RE = /(,?\s*(ИНН|INN|TIN)\s*[№N:]?\s*\d[\d\s]*)|(,?\s*(АДРЕС|ADDRESS)\s*:?\s*.*)|(,?\s*\d{5,6}\s*,\s*Г\s+.*)/;
+    var COMPANY_ABBREVIATIONS = [
+        ['ТОРГОВАЯ КОМПАНИЯ', 'ТК'],
+        ['ТОРГОВЫЙ ДОМ', 'ТД'],
+        ['ТОРГОВО-ПРОИЗВОДСТВЕННАЯ КОМПАНИЯ', 'ТПК'],
+        ['ТОРГОВО-ФИНАНСОВАЯ КОМПАНИЯ', 'ТФК'],
+        ['ПРОИЗВОДСТВЕННО-ТОРГОВАЯ КОМПАНИЯ', 'ПТК'],
+        ['ТРАНСПОРТНО-ЛОГИСТИЧЕСКАЯ КОМПАНИЯ', 'ТЛК'],
+        ['ТРАНСПОРТНО-ЭКСПЕДИТОРСКАЯ КОМПАНИЯ', 'ТЭК'],
+        ['ПРОИЗВОДСТВЕННАЯ КОМПАНИЯ', 'ПК'],
+        ['ПРОИЗВОДСТВЕННАЯ ГРУППА', 'ПГ'],
+        ['УПРАВЛЯЮЩАЯ КОМПАНИЯ', 'УК']
+    ].sort(function (a, b) {
+        return b[0].length - a[0].length;
+    });
+
+    function cutCompanyAddressInn(text) {
+        var match = COMPANY_ADDRESS_CUT_RE.exec(text);
+        if (!match || match.index === undefined) { return text; }
+        return text.slice(0, match.index).replace(/[,;\s]+$/g, '').trim();
+    }
+
+    function collapseCompanyAbbreviations(text) {
+        for (var i = 0; i < COMPANY_ABBREVIATIONS.length; i++) {
+            var full = COMPANY_ABBREVIATIONS[i][0];
+            if (text.slice(0, full.length) === full && (text.length === full.length || text.charAt(full.length) === ' ')) {
+                return COMPANY_ABBREVIATIONS[i][1] + text.slice(full.length);
+            }
+        }
+        return text;
+    }
+
+    function normalizeCompanyAlphaNumSpacing(text) {
+        return text.replace(/\b([A-Z]{1,6})\s+(\d+)\b/g, function (match, letters, digits) {
+            return letters + digits;
+        });
+    }
 
     function cleanCompanyText(value) {
         var text = String(value || '').trim().toUpperCase();
@@ -1641,6 +1678,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/\s+/g, ' ')
             .replace(/^[,;\s]+|[,;\s]+$/g, '')
             .trim();
+        text = normalizeCompanyAlphaNumSpacing(text);
         return text;
     }
 
@@ -1849,7 +1887,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var org = extractCompanyOrgform(norm);
         var base = org ? removeCompanyPhrase(norm, org.pattern) : norm;
+        base = cutCompanyAddressInn(base);
         base = stripCompanyTails(base);
+        base = collapseCompanyAbbreviations(base);
         if (COMPANY_NAME_MAP[base]) { return COMPANY_NAME_MAP[base]; }
 
         return formatCompanyName(base, org ? org.orgform : '');
