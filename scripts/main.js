@@ -8300,7 +8300,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // SVG: таблица + бар-чарт в одном SVG
         var cols = ['\u0413\u043e\u0434'];
-        if (weightCol) cols.push('\u0442\u044b\u0441. \u0442\u043e\u043d\u043d');
+        if (weightCol) cols.push('\u0442\u043e\u043d\u043d');
         if (statUsdCol) cols.push('\u0442\u044b\u0441. USD');
         if (hasRub) cols.push('\u0442\u044b\u0441. \u0440\u0443\u0431.');
         var nCols = cols.length;
