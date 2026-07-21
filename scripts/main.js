@@ -1634,7 +1634,8 @@ document.addEventListener('DOMContentLoaded', function () {
         ['ТРАНСПОРТНО-ЭКСПЕДИТОРСКАЯ КОМПАНИЯ', 'ТЭК'],
         ['ПРОИЗВОДСТВЕННАЯ КОМПАНИЯ', 'ПК'],
         ['ПРОИЗВОДСТВЕННАЯ ГРУППА', 'ПГ'],
-        ['УПРАВЛЯЮЩАЯ КОМПАНИЯ', 'УК']
+        ['УПРАВЛЯЮЩАЯ КОМПАНИЯ', 'УК'],
+        ['ТРАНСПОРТНЫЕ СИСТЕМЫ', 'ТС']
     ].sort(function (a, b) {
         return b[0].length - a[0].length;
     });
@@ -1645,14 +1646,34 @@ document.addEventListener('DOMContentLoaded', function () {
         return text.slice(0, match.index).replace(/[,;\s]+$/g, '').trim();
     }
 
+    function isCompanyValueDirty(value) {
+        var text = String(value || '');
+        if (!text) { return false; }
+        if (COMPANY_ADDRESS_CUT_RE.test(text)) { return true; }
+        return /\b(ОКАТО|КПП)\b/.test(text);
+    }
+
+    function isCompanyAbbrevBoundary(ch) {
+        return ch === '' || /[\s,;:"'-]/.test(ch);
+    }
+
     function collapseCompanyAbbreviations(text) {
+        var result = text;
         for (var i = 0; i < COMPANY_ABBREVIATIONS.length; i++) {
             var full = COMPANY_ABBREVIATIONS[i][0];
-            if (text.slice(0, full.length) === full && (text.length === full.length || text.charAt(full.length) === ' ')) {
-                return COMPANY_ABBREVIATIONS[i][1] + text.slice(full.length);
+            var idx = result.indexOf(full);
+            while (idx !== -1) {
+                var before = idx === 0 ? '' : result.charAt(idx - 1);
+                var after = idx + full.length >= result.length ? '' : result.charAt(idx + full.length);
+                if (isCompanyAbbrevBoundary(before) && isCompanyAbbrevBoundary(after)) {
+                    result = result.slice(0, idx) + COMPANY_ABBREVIATIONS[i][1] + result.slice(idx + full.length);
+                    idx = result.indexOf(full, idx + COMPANY_ABBREVIATIONS[i][1].length);
+                } else {
+                    idx = result.indexOf(full, idx + 1);
+                }
             }
         }
-        return text;
+        return result;
     }
 
     function normalizeCompanyAlphaNumSpacing(text) {
@@ -1738,6 +1759,62 @@ document.addEventListener('DOMContentLoaded', function () {
                 return cyrToLatin[ch] || ch;
             }).join('');
         });
+    }
+
+    var CYR_TO_LATIN_ALTERNATIVES = {
+        'А': ['A'], 'Б': ['B'], 'В': ['V', 'W'], 'Г': ['G'], 'Д': ['D'],
+        'Е': ['E', 'YE', 'IE'], 'Ж': ['ZH', 'J'], 'З': ['Z'], 'И': ['I'],
+        'Й': ['Y', 'I', 'J'], 'К': ['K', 'C'], 'Л': ['L'], 'М': ['M'], 'Н': ['N'],
+        'О': ['O'], 'П': ['P'], 'Р': ['R'], 'С': ['S', 'C'], 'Т': ['T'], 'У': ['U', 'OU'],
+        'Ф': ['F'], 'Х': ['KH', 'H', 'X'], 'Ц': ['TS', 'C', 'Z'], 'Ч': ['CH'],
+        'Ш': ['SH'], 'Щ': ['SHCH', 'SCH', 'SHCH'], 'Ъ': [''], 'Ы': ['Y', 'I'],
+        'Ь': [''], 'Э': ['E'], 'Ю': ['YU', 'IU', 'U'], 'Я': ['YA', 'IA']
+    };
+
+    function buildTransliterationRegex(cyrLetters) {
+        var pattern = '^';
+        for (var i = 0; i < cyrLetters.length; i++) {
+            var alts = CYR_TO_LATIN_ALTERNATIVES[cyrLetters.charAt(i)];
+            if (!alts) { return null; }
+            pattern += '(?:' + alts.join('|') + ')';
+        }
+        return new RegExp(pattern + '$');
+    }
+
+    function companyTransliteratedTokensMatch(cyrToken, latinToken) {
+        var cyrLetters = cyrToken.replace(/[^А-ЯЁ]/g, '');
+        var latinLetters = latinToken.replace(/[^A-Z]/g, '');
+        if (!cyrLetters || !latinLetters) { return false; }
+        var re = buildTransliterationRegex(cyrLetters);
+        return !!re && re.test(latinLetters);
+    }
+
+    function stripLatinTransliterationDuplicate(text) {
+        var tokens = text.split(' ').filter(function (t) { return t.length > 0; });
+        var cyrTokens = [];
+        var i = 0;
+        while (i < tokens.length && /[А-ЯЁ]/.test(tokens[i])) {
+            cyrTokens.push(tokens[i]);
+            i++;
+        }
+        if (!cyrTokens.length || i >= tokens.length) { return text; }
+
+        var latinTokens = tokens.slice(i).filter(function (t) { return /[A-Z]/.test(t); });
+        if (!latinTokens.length || latinTokens.length !== (tokens.length - i)) { return text; }
+
+        var cyrJoined = cyrTokens.join('');
+        var latinJoined = latinTokens.join('');
+        if (cyrTokens.length === latinTokens.length) {
+            var allMatch = true;
+            for (var j = 0; j < cyrTokens.length; j++) {
+                if (!companyTransliteratedTokensMatch(cyrTokens[j], latinTokens[j])) { allMatch = false; break; }
+            }
+            if (allMatch) { return cyrTokens.join(' '); }
+        }
+        if (companyTransliteratedTokensMatch(cyrJoined, latinJoined)) {
+            return cyrTokens.join(' ');
+        }
+        return text;
     }
 
     function findCompanyColumns(headers) {
@@ -1841,7 +1918,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var cleanMarker = cleanCompanyText(marker);
             var idx = result.indexOf(cleanMarker);
             if (idx !== -1) {
-                result = result.slice(idx + cleanMarker.length).trim();
+                result = result.slice(0, idx).trim();
             }
         });
         return result;
@@ -1870,7 +1947,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function getCompanyDictionaryValue(key) {
-        return companyDictionary[key] || COMPANY_NAME_MAP[key] || '';
+        var value = companyDictionary[key] || COMPANY_NAME_MAP[key] || '';
+        if (value && isCompanyValueDirty(value)) { return ''; }
+        return value;
     }
 
     function sanitizeCompanyCanonicalName(value) {
@@ -1889,6 +1968,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var base = org ? removeCompanyPhrase(norm, org.pattern) : norm;
         base = cutCompanyAddressInn(base);
         base = stripCompanyTails(base);
+        base = stripLatinTransliterationDuplicate(base);
         base = collapseCompanyAbbreviations(base);
         if (COMPANY_NAME_MAP[base]) { return COMPANY_NAME_MAP[base]; }
 
@@ -1999,7 +2079,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var key = cleanCompanyText(rawValue);
         var value = String(canonicalName || '').trim();
         if (!key || !value || companyDictionary[key] === value || COMPANY_NAME_MAP[key]) { return false; }
-        if (!companyDictionary[key]) {
+        if (!companyDictionary[key] || isCompanyValueDirty(companyDictionary[key])) {
             companyDictionary[key] = value;
             return true;
         }
