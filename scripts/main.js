@@ -7000,105 +7000,6 @@ document.addEventListener('DOMContentLoaded', function () {
         renderResearchNotes();
     }
 
-    function parseResearchBriefBlocks(text) {
-        var blocks = [];
-        var current = [];
-
-        text.split(/\n/).forEach(function (line) {
-            if (/^#{1,3}\s+/.test(line) && current.length) {
-                blocks.push(current.join('\n').trim());
-                current = [line.replace(/^#{1,3}\s+/, '')];
-            } else {
-                current.push(line);
-            }
-        });
-        if (current.length) blocks.push(current.join('\n').trim());
-
-        blocks = blocks.map(function (block, idx) {
-            var lines = block.split('\n').map(function (line) {
-                return line.trim();
-            }).filter(Boolean);
-            if (!lines.length) return null;
-
-            var title = lines[0].replace(/^#{1,3}\s+/, '').replace(/^\d+[\.\)]\s*/, '').trim();
-            var bodyLines = lines.slice(1).map(function (line) {
-                return line.replace(/^[-*]\s+/, '').replace(/^\d+[\.\)]\s*/, '').trim();
-            }).filter(Boolean);
-
-            if (!bodyLines.length && lines.length > 1) bodyLines = lines.slice(1);
-            if (!bodyLines.length) {
-                title = idx === 0 ? 'Аналитические выводы' : title;
-                bodyLines = lines;
-            }
-
-            return {
-                title: title || ('Блок ' + (idx + 1)),
-                body: bodyLines.join('\n'),
-                raw: block
-            };
-        }).filter(function (block) {
-            return block && (block.body.length > 20 || block.raw.length > 30);
-        });
-
-        if (blocks.length < 2 && text.trim()) {
-            blocks = [{ title: 'Аналитические выводы', body: text.trim(), raw: text.trim() }];
-        }
-
-        return blocks;
-    }
-
-    function addResearchNotesFromBrief(text) {
-        var blocks = parseResearchBriefBlocks(text);
-        blocks.slice(0, 8).forEach(function (block) {
-            researchNotes.push({
-                id: Date.now() + Math.floor(Math.random() * 10000),
-                text: block.title + '\n' + block.body,
-                ts: new Date().toISOString()
-            });
-        });
-        saveResearchNotes();
-        renderResearchNotes();
-    }
-
-    function createResearchBriefSlides(text) {
-        var blocks = parseResearchBriefBlocks(text);
-        if (!blocks.length || !findPresBlock('text')) return 0;
-
-        var startIndex = presState.slides.length;
-        blocks.slice(0, 8).forEach(function (block) {
-            var lines = stripMarkdown(block.body).split('\n').map(function (line) {
-                return line.trim();
-            }).filter(Boolean);
-
-            if (lines.length === 0) lines = [block.body];
-            var LINES_PER_SLIDE = 5;
-            for (var offset = 0; offset < lines.length; offset += LINES_PER_SLIDE) {
-                var title = block.title;
-                if (offset > 0) title += ' (продолжение)';
-                presState.slides.push({
-                    id: presState.nextId++,
-                    type: 'text',
-                    title: title,
-                    hsFilter: '',
-                    topN: 10,
-                    year: '',
-                    opts: {
-                        subtitle: '',
-                        bullets: lines.slice(offset, offset + LINES_PER_SLIDE).join('\n')
-                    }
-                });
-            }
-        });
-
-        if (presState.slides.length === startIndex) return 0;
-        presState.activeIndex = startIndex;
-        renderPresSlideList();
-        previewPresSlide(presState.activeIndex);
-        updatePresButtons();
-        document.querySelector('[data-module="presentation"]').click();
-        return presState.slides.length - startIndex;
-    }
-
     function buildResearchDeckMetrics() {
         var data = getActiveData();
         var headers = getActiveHeaders();
@@ -7232,31 +7133,84 @@ document.addEventListener('DOMContentLoaded', function () {
         return lines.join('\n');
     }
 
-    function buildResearchDeckPrompt() {
-        var commodityEl = document.querySelector('.research-commodity');
-        var commodity = commodityEl ? commodityEl.value.trim() : '';
-        var model = getResearchModel();
-        var canSearch = SEARCH_MODELS.indexOf(model) !== -1;
+    // Блоки текстового аналитического отчёта — генерируются по одному (узкий промпт на блок)
+    var RESEARCH_DECK_BLOCKS = [
+        { title: 'Рынок и внешний контекст', kind: 'external',
+          instr: 'Дай 3–4 тезиса о состоянии рынка этого товара и внешнем контексте: мировой спрос и предложение, ключевые регионы производства и потребления, макро-факторы. Добавляй внешний контекст, не пересказывай внутренние цифры дословно.' },
+        { title: 'Динамика объёмов и стоимости', kind: 'data',
+          instr: 'На основе приведённого среза дай 3–4 тезиса о динамике объёма (тонн) и стоимости (USD) импорта: направление тренда, темпы (CAGR), заметные изменения по годам. Используй только приведённые числа. Не сравнивай неполный год с полными без явной оговорки.' },
+        { title: 'Страны и структура поставок', kind: 'data',
+          instr: 'Дай 3–4 тезиса о географии поставок по приведённым данным: страны-лидеры и их доли, уровень концентрации рынка, изменения структуры. Только по приведённым данным.' },
+        { title: 'Цены и ценовые факторы', kind: 'mixed',
+          instr: 'Дай 3–4 тезиса о ценах (USD/кг): текущий уровень и диапазон по данным, динамика, а также внешние ценовые факторы (стоимость сырья, логистика, валютный курс, сезонность).' },
+        { title: 'Ключевые игроки', kind: 'external',
+          instr: 'Дай 3–4 тезиса о ключевых игроках рынка. Если в приведённом срезе есть отправители, изготовители или получатели — упомяни лидеров из данных и дополни известными игроками мирового рынка.' },
+        { title: 'Риски и ограничения', kind: 'external',
+          instr: 'Дай 3–4 тезиса о рисках и ограничениях для этого товара: пошлины, квоты, санкции, сертификация и регулирование, логистика, качество. Ориентируйся на актуальность в период данных.' },
+        { title: 'Итоговые выводы', kind: 'summary',
+          instr: 'На основе предыдущих блоков сформулируй 3–5 итоговых выводов и практических рекомендаций для презентации. Кратко и по делу.' }
+    ];
 
-        return 'Подготовь презентационный анализ рынка для ВЭД-презентации.\n\n' +
-            (commodity ? 'Товар / тема: ' + commodity + '\n\n' : '') +
-            buildResearchDeckMetrics() + '\n\n' +
-            'Нужно сформировать 5–7 готовых блоков для слайдов:\n' +
-            '1. Рынок и внешний контекст\n' +
-            '2. Динамика объёмов и стоимости\n' +
-            '3. Страны и структура поставок\n' +
-            '4. Цены и факторы цены\n' +
-            '5. Ключевые игроки\n' +
-            '6. Риски и ограничения\n' +
-            '7. Итоговые выводы\n\n' +
-            'Для каждого блока дай заголовок формата "## ...", затем 3–5 коротких тезисов для слайда. ' +
-            'Тезисы должны быть деловыми, конкретными, без вводных фраз, на русском языке. ' +
-            'Опирайся сначала на внутренние данные, затем добавляй внешний контекст. ' +
-            'Не сравнивай неполный год с полными годами без явной оговорки. ' +
-            'При поиске внешних данных приоритет источников: UN Comtrade, WITS/World Bank, WTO Tariff & Trade Data, World Bank Pink Sheet, FAOSTAT/ITC для релевантных товарных рынков. ' +
-            (canSearch
-                ? 'Проверь актуальные внешние данные в интернете и укажи источники в скобках в конце релевантных тезисов.'
-                : 'Если используешь внешний контекст без интернет-поиска, помечай такие тезисы как "требует проверки источником".');
+    function buildResearchBlockPrompt(block, commodity, metricsText, canSearch, priorText) {
+        var p = 'Ты аналитик ВЭД (внешнеэкономическая деятельность). Готовишь ОДИН блок тезисов для слайда презентации.\n\n';
+        p += 'Блок: ' + block.title + '\n';
+        if (commodity) { p += 'Товар / тема: ' + commodity + '\n'; }
+        p += '\nСрез внутренних данных (таможенная статистика):\n' + metricsText + '\n\n';
+        if (block.kind === 'summary' && priorText) {
+            p += 'Ранее собранные блоки:\n' + priorText + '\n\n';
+        }
+        p += 'Задача: ' + block.instr + '\n\n';
+        if (block.kind === 'external' || block.kind === 'mixed') {
+            if (canSearch) {
+                p += 'Проверь актуальные внешние данные в интернете (приоритет источников: UN Comtrade, WITS/World Bank, WTO Tariff & Trade Data, World Bank Pink Sheet, FAOSTAT/ITC) и указывай источник в скобках в конце тезиса, где он использован.\n';
+            } else {
+                p += 'Внешние сведения без интернет-поиска помечай пометкой «(требует проверки)».\n';
+            }
+        }
+        p += 'Формат ответа: 3–5 тезисов, каждый с новой строки, без нумерации и без заголовков, деловой стиль, на русском. Только тезисы.';
+        return p;
+    }
+
+    // Сохраняет структурированные блоки в заметки и создаёт текстовые слайды
+    function commitResearchBlocks(blocks) {
+        blocks.forEach(function (b) {
+            researchNotes.push({
+                id: Date.now() + Math.floor(Math.random() * 100000),
+                text: b.title + '\n' + b.body,
+                ts: new Date().toISOString()
+            });
+        });
+        saveResearchNotes();
+        renderResearchNotes();
+
+        if (!findPresBlock('text')) { return 0; }
+        var startIndex = presState.slides.length;
+        blocks.forEach(function (block) {
+            var lines = stripMarkdown(block.body).split('\n').map(function (line) {
+                return line.trim();
+            }).filter(Boolean);
+            if (lines.length === 0) { lines = [block.body]; }
+            var LINES_PER_SLIDE = 5;
+            for (var offset = 0; offset < lines.length; offset += LINES_PER_SLIDE) {
+                var title = block.title;
+                if (offset > 0) { title += ' (продолжение)'; }
+                presState.slides.push({
+                    id: presState.nextId++,
+                    type: 'text',
+                    title: title,
+                    hsFilter: '',
+                    topN: 10,
+                    year: '',
+                    opts: { subtitle: '', bullets: lines.slice(offset, offset + LINES_PER_SLIDE).join('\n') }
+                });
+            }
+        });
+        if (presState.slides.length === startIndex) { return 0; }
+        presState.activeIndex = startIndex;
+        renderPresSlideList();
+        previewPresSlide(presState.activeIndex);
+        updatePresButtons();
+        return presState.slides.length - startIndex;
     }
 
     function researchRunMaster() {
@@ -7281,33 +7235,72 @@ document.addEventListener('DOMContentLoaded', function () {
         if (apiKey) localStorage.setItem(LS_RESEARCH_APIKEY, apiKey);
         if (researchUrl.value.trim()) localStorage.setItem(LS_RESEARCH_AIURL, researchUrl.value.trim());
 
-        var prompt = buildResearchDeckPrompt();
+        var commodityEl = document.querySelector('.research-commodity');
+        var commodity = commodityEl ? commodityEl.value.trim() : '';
+        var metricsText = buildResearchDeckMetrics();
+        var canSearch = SEARCH_MODELS.indexOf(model) !== -1;
+        var systemCtx = buildResearchContext();
+        var total = RESEARCH_DECK_BLOCKS.length;
+
         researchHistory.push({ role: 'user', content: 'Собрать анализ для презентации' });
         researchAddMessage('user', 'Собрать анализ для презентации');
+        var loadingEl = researchAddMessage('assistant', 'Собираю блок 1 из ' + total + '…', true);
+        var loadingBubble = loadingEl.querySelector('.research-msg-bubble');
 
-        var loadingEl = researchAddMessage('assistant', 'Собираю презентационные блоки...', true);
         researchMasterBtn.disabled = true;
         researchMasterBtn.classList.add('loading');
         researchMasterBtn.textContent = 'Собираю...';
 
-        researchCallAI(pKey, apiKey, model, [{ role: 'user', content: prompt }], buildResearchContext())
-            .then(function (reply) {
-                researchHistory.push({ role: 'assistant', content: reply });
-                loadingEl.remove();
-                addResearchNotesFromBrief(reply);
-                var created = createResearchBriefSlides(reply);
-                researchAddMessage('assistant', reply + '\n\n---\nБлоки сохранены в заметки для отчёта. Создано слайдов в презентации: ' + created + '.');
-            })
-            .catch(function (err) {
+        var results = [];
+        var idx = 0;
+
+        function finish() {
+            researchMasterBtn.disabled = false;
+            researchMasterBtn.classList.remove('loading');
+            researchMasterBtn.textContent = 'Собрать анализ для презентации';
+        }
+
+        function done() {
+            loadingEl.remove();
+            if (!results.length) {
                 researchHistory.pop();
-                loadingEl.remove();
-                researchAddMessage('assistant', 'Ошибка: ' + err.message);
-            })
-            .then(function () {
-                researchMasterBtn.disabled = false;
-                researchMasterBtn.classList.remove('loading');
-                researchMasterBtn.textContent = 'Собрать анализ для презентации';
-            });
+                researchAddMessage('assistant', 'Не удалось собрать ни одного блока. Проверьте провайдера и ключ.');
+                finish();
+                return;
+            }
+            var created = commitResearchBlocks(results);
+            var combined = results.map(function (b) { return '## ' + b.title + '\n' + b.body; }).join('\n\n');
+            researchHistory.push({ role: 'assistant', content: combined });
+            researchAddMessage('assistant', combined + '\n\n---\nСобрано блоков: ' + results.length + ' из ' + total +
+                '. Сохранено в заметки для отчёта, создано текстовых слайдов: ' + created + '.');
+            finish();
+        }
+
+        function nextBlock() {
+            if (idx >= total) { done(); return; }
+            var block = RESEARCH_DECK_BLOCKS[idx];
+            if (loadingBubble) {
+                loadingBubble.textContent = 'Собираю блок ' + (idx + 1) + ' из ' + total + ': ' + block.title + '…';
+            }
+            var priorText = results.map(function (b) { return b.title + ': ' + b.body; }).join('\n');
+            var prompt = buildResearchBlockPrompt(block, commodity, metricsText, canSearch, priorText);
+
+            researchCallAI(pKey, apiKey, model, [{ role: 'user', content: prompt }], systemCtx)
+                .then(function (reply) {
+                    var body = stripMarkdown(String(reply || '')).trim();
+                    if (body) { results.push({ title: block.title, body: body }); }
+                })
+                .catch(function (err) {
+                    // Блок пропускаем, но продолжаем остальные
+                    console.warn('Блок «' + block.title + '» не собран:', err && err.message);
+                })
+                .then(function () {
+                    idx++;
+                    nextBlock();
+                });
+        }
+
+        nextBlock();
     }
 
     // Кнопка «+ Слайд в презентацию» — собирает все заметки в один текстовый слайд
