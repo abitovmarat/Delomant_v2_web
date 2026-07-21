@@ -7496,6 +7496,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'toc', label: 'Содержание', icon: '\uD83D\uDCD1', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false },
         { type: 'text', label: 'Текст', icon: '\uD83D\uDCDD', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
         { type: 'section-divider', label: 'Разделитель', icon: '\uD83D\uDCCC', category: 'special', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false },
+        { type: 'facts', label: 'Ключевые факты', icon: '\uD83D\uDCCA', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: false },
         { type: 'volumes', label: 'Объёмы', icon: '\uD83D\uDCE6', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'countries', label: 'Страны', icon: '\uD83C\uDF0D', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'price-dynamics', label: 'Цены/страны', icon: '\uD83D\uDCB0', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
@@ -8022,6 +8023,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (type === 'sankey-sender') return renderPresSankeySender(data, headers, slide);
         if (type === 'sankey-manufacturer') return renderPresSankeyManufacturer(data, headers, slide);
         if (type === 'quarterly-prices') return renderPresQuarterlyPrices(data, headers, slide);
+        if (type === 'facts') return renderPresFacts(data, headers, slide);
         return slideWrapper('\u041e\u0448\u0438\u0431\u043a\u0430', '<p>\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u0442\u0438\u043f \u0431\u043b\u043e\u043a\u0430</p>', {});
     }
 
@@ -8165,6 +8167,116 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!first || first <= 0 || years <= 0) return null;
         return (Math.pow(last / first, 1 / years) - 1) * 100;
     }
+    // --- Ключевые факты (KPI-доска, точные цифры без ИИ) ---
+    function svgEscFact(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function truncFact(s, n) {
+        s = String(s || '');
+        return s.length > n ? s.slice(0, n - 1) + '…' : s;
+    }
+    function renderPresFacts(data, headers, slide) {
+        var title = slide.title || 'Ключевые факты';
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var statUsdCol = findColumn(headers, COL_STAT_USD);
+        var hsCol = findColumn(headers, COL_HS_CODE);
+        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
+        if (!data || data.length === 0) return presNoData(title);
+
+        var byYear = {}, byYearQ = {}, byCountry = {}, hsSet = {};
+        var totalW = 0, totalU = 0, grandC = 0;
+        data.forEach(function (row) {
+            var w = Number(row[weightCol]) || 0;
+            var u = Number(row[statUsdCol]) || 0;
+            totalW += w; totalU += u;
+            if (yearCol) {
+                var y = String(row[yearCol] || '').trim();
+                if (y) {
+                    if (!byYear[y]) byYear[y] = { w: 0, u: 0 };
+                    byYear[y].w += w; byYear[y].u += u;
+                    if (quarterCol) {
+                        var q = String(row[quarterCol] || '').trim();
+                        if (q) { if (!byYearQ[y]) byYearQ[y] = {}; byYearQ[y][q] = true; }
+                    }
+                }
+            }
+            if (countryCol) {
+                var c = String(row[countryCol] || '').trim();
+                if (c) { byCountry[c] = (byCountry[c] || 0) + w; grandC += w; }
+            }
+            if (hsCol) {
+                var code = String(row[hsCol] || '').trim();
+                if (code) hsSet[code] = true;
+            }
+        });
+
+        var years = Object.keys(byYear).sort();
+        var partialYear = '';
+        if (quarterCol && years.length) {
+            var ly = years[years.length - 1];
+            var lq = Object.keys(byYearQ[ly] || {});
+            if (lq.length > 0 && lq.length < 4) partialYear = ly;
+        }
+        var fullYears = partialYear ? years.filter(function (y) { return y !== partialYear; }) : years;
+
+        var cagrW = null, cagrU = null;
+        if (fullYears.length >= 2) {
+            var yfrst = byYear[fullYears[0]], ylast = byYear[fullYears[fullYears.length - 1]];
+            var nn = fullYears.length - 1;
+            cagrW = presCalcCAGR(yfrst.w, ylast.w, nn);
+            cagrU = presCalcCAGR(yfrst.u, ylast.u, nn);
+        }
+
+        var leader = '', leaderShare = 0;
+        var cKeys = Object.keys(byCountry);
+        if (cKeys.length) {
+            cKeys.sort(function (a, b) { return byCountry[b] - byCountry[a]; });
+            leader = cKeys[0];
+            leaderShare = grandC > 0 ? round2(byCountry[leader] / grandC * 100) : 0;
+        }
+
+        var avgPrice = totalW > 0 ? round2(totalU / totalW) : null;
+
+        var cards = [];
+        var periodVal = years.length ? (years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1]) : '—';
+        cards.push({ value: periodVal, label: 'Период данных', note: partialYear ? partialYear + ' — неполный' : '', accent: '#2563EB' });
+        cards.push({ value: formatNumber(data.length), label: 'Деклараций', note: '', accent: '#2563EB' });
+        cards.push({ value: formatNumber(round2(totalW / 1000)), label: 'Объём, тонн', note: '', accent: '#0EA5E9' });
+        cards.push({ value: formatNumber(round2(totalU / 1000)), label: 'Стоимость, тыс. USD', note: '', accent: '#0EA5E9' });
+        if (avgPrice != null) cards.push({ value: formatNumber(avgPrice), label: 'Средняя цена, USD/кг', note: '', accent: '#F59E0B' });
+        if (cagrW != null) cards.push({ value: (cagrW > 0 ? '+' : '') + round2(cagrW) + '%', label: 'CAGR объёма', note: partialYear ? 'по полным годам' : '', accent: cagrW >= 0 ? '#10B981' : '#EF4444' });
+        if (cagrU != null) cards.push({ value: (cagrU > 0 ? '+' : '') + round2(cagrU) + '%', label: 'CAGR стоимости', note: partialYear ? 'по полным годам' : '', accent: cagrU >= 0 ? '#10B981' : '#EF4444' });
+        if (leader) cards.push({ value: leaderShare + '%', label: 'Доля лидера: ' + truncFact(leader, 18), note: '', accent: '#8B5CF6' });
+        if (cKeys.length) cards.push({ value: formatNumber(cKeys.length), label: 'Стран-поставщиков', note: '', accent: '#64748B' });
+        else if (Object.keys(hsSet).length) cards.push({ value: formatNumber(Object.keys(hsSet).length), label: 'Кодов ТН ВЭД', note: '', accent: '#64748B' });
+
+        var svgW = 900, cols = 3, gap = 16;
+        var cardW = Math.floor((svgW - gap * (cols - 1)) / cols);
+        var cardH = 104;
+        var rows = Math.ceil(cards.length / cols);
+        var svgH = rows * cardH + (rows - 1) * gap;
+
+        var body = '<svg width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
+        body += '<style>text{font-family:DejaVu Sans,Arial,sans-serif}</style>';
+        cards.forEach(function (card, i) {
+            var cx = (i % cols) * (cardW + gap);
+            var cy = Math.floor(i / cols) * (cardH + gap);
+            body += '<rect x="' + cx + '" y="' + cy + '" width="' + cardW + '" height="' + cardH + '" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>';
+            body += '<rect x="' + cx + '" y="' + cy + '" width="5" height="' + cardH + '" rx="2.5" fill="' + card.accent + '"/>';
+            var vlen = String(card.value).length;
+            var vsize = vlen > 12 ? 22 : (vlen > 8 ? 27 : 32);
+            body += '<text x="' + (cx + 22) + '" y="' + (cy + 47) + '" font-size="' + vsize + '" font-weight="700" fill="#0F172A">' + svgEscFact(card.value) + '</text>';
+            body += '<text x="' + (cx + 22) + '" y="' + (cy + 73) + '" font-size="13" fill="#475569">' + svgEscFact(card.label) + '</text>';
+            if (card.note) body += '<text x="' + (cx + 22) + '" y="' + (cy + 91) + '" font-size="11" fill="#94A3B8">' + svgEscFact(card.note) + '</text>';
+        });
+        body += '</svg>';
+
+        return slideWrapper(title, body, {});
+    }
+
 
     // --- Объёмы и стоимость ---
     function renderPresVolumes(data, headers, slide) {
@@ -9034,7 +9146,7 @@ document.addEventListener('DOMContentLoaded', function () {
         progressFill.style.width = '0%';
         progressDetail.textContent = '0 / ' + total;
 
-        var PDF_ANALYTICS = ['volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
+        var PDF_ANALYTICS = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
         // PDF page dimensions in points at 10px/mm: 297mm × 210mm
         var PDF_W = 2970, PDF_H = 2100;
 
@@ -9480,7 +9592,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var isSimple = SIMPLE_TYPES.indexOf(slideData.type) !== -1;
 
-            var ANALYTICS_TYPES = ['volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
+            var ANALYTICS_TYPES = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices'];
 
             if (isSimple) {
                 if (slideData.type === 'title') addTitleSlide(slideData);
