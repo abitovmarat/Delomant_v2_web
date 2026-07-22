@@ -13,21 +13,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Собирает dist/: статику под расширением .dat (иначе nginx отдаёт её
+      # в обход Apache и пароля) плюс .htaccess с ForceType. Подробности —
+      # в комментарии в начале build.mjs.
+      - name: Build dist
+        run: node build.mjs
+
+      # Выкладывается только содержимое dist/, поэтому список исключений
+      # не нужен: лишние файлы туда просто не попадают.
       - name: Deploy files via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
           server-dir: ${{ secrets.FTP_SERVER_DIR }}
           protocol: ftps
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/.github/**
-            **/node_modules/**
-            **/обучение/**
-            **/memory/**
-            **/md/**
-            **/package.json
-            **/package-lock.json
