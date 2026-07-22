@@ -35,3 +35,7 @@ jobs:
           local-dir: ./dist/
           server-dir: ${{ secrets.FTP_SERVER_DIR }}
           protocol: ftps
+          # У FTP-сервера хостинга самоподписанный сертификат (CN=web-3.cloud4box.com,
+          # issuer тот же), поэтому строгая проверка обрывает соединение. loose
+          # оставляет шифрование канала, но не требует доверенного сертификата.
+          security: loose
