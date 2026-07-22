@@ -1623,6 +1623,15 @@ document.addEventListener('DOMContentLoaded', function () {
         'ООО ПОЛЛУКС': 'ПОЛЛУКС, ООО',
         'РЫБОЛОВЕЦКАЯ АРТЕЛЬ КОЛХОЗ ИМ 50 ЛЕТ ОКТЯБРЯ': 'РЫБОЛОВЕЦКАЯ АРТЕЛЬ'
     };
+    // Синонимы страны: иногда вместо компании стоит страна ("РОССИЯ" / "РОССИЙСКАЯ ФЕДЕРАЦИЯ")
+    // либо она приписана хвостом к названию — считаем это одним значением
+    var COMPANY_COUNTRY_ALIASES = {
+        'РОССИЙСКАЯ ФЕДЕРАЦИЯ': 'РОССИЯ',
+        'РОССИЙСКОЙ ФЕДЕРАЦИИ': 'РОССИЯ',
+        'РФ': 'РОССИЯ',
+        'RUSSIAN FEDERATION': 'РОССИЯ',
+        'RUSSIA': 'РОССИЯ'
+    };
     var COMPANY_ADDRESS_CUT_RE = /(,?\s*(ИНН|INN|TIN)\s*[№N:]?\s*\d[\d\s]*)|(,?\s*(АДРЕС|ADDRESS)\s*:?\s*.*)|(,?\s*\d{5,6}\s*,\s*Г\s+.*)/;
     var COMPANY_ABBREVIATIONS = [
         ['ТОРГОВАЯ КОМПАНИЯ', 'ТК'],
@@ -1956,8 +1965,20 @@ document.addEventListener('DOMContentLoaded', function () {
         return normalizeCompanyNameAuto(String(value || '').trim());
     }
 
+    // Заменяем синоним страны, только если это всё значение целиком
+    // или хвост после запятой. Внутри названия не трогаем, иначе пострадают
+    // "УПРАВЛЕНИЕ ДЕЛАМИ ПРЕЗИДЕНТА РОССИЙСКОЙ ФЕДЕРАЦИИ" и подобные.
+    function applyCompanyCountryAlias(text) {
+        if (COMPANY_COUNTRY_ALIASES[text]) { return COMPANY_COUNTRY_ALIASES[text]; }
+        var commaIdx = text.lastIndexOf(', ');
+        if (commaIdx === -1) { return text; }
+        var tailAlias = COMPANY_COUNTRY_ALIASES[text.slice(commaIdx + 2)];
+        if (!tailAlias) { return text; }
+        return text.slice(0, commaIdx) + ', ' + tailAlias;
+    }
+
     function normalizeCompanyNameAuto(name) {
-        var norm = cleanCompanyText(name);
+        var norm = applyCompanyCountryAlias(cleanCompanyText(name));
         if (!norm) { return ''; }
 
         if (COMPANY_NAME_MAP[norm]) { return COMPANY_NAME_MAP[norm]; }
