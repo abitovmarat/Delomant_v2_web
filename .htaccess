@@ -1,0 +1,4 @@
+AuthType Basic
+AuthName "Delomant Analytics"
+AuthUserFile /var/www/user841943/data/.htpasswd
+Require valid-user
