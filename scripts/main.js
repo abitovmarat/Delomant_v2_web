@@ -7509,6 +7509,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'title', label: 'Титульный', icon: '\uD83D\uDCCB', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: true, hasBullets: false },
         { type: 'toc', label: 'Содержание', icon: '\uD83D\uDCD1', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false },
         { type: 'text', label: 'Текст', icon: '\uD83D\uDCDD', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
+        { type: 'intro', label: 'Введение', icon: '\uD83D\uDCD6', category: 'special', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
         { type: 'section-divider', label: 'Разделитель', icon: '\uD83D\uDCCC', category: 'special', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false },
         { type: 'facts', label: 'Ключевые факты', icon: '\uD83D\uDCCA', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: false },
         { type: 'volumes', label: 'Объёмы', icon: '\uD83D\uDCE6', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
@@ -7518,6 +7519,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'sankey-manufacturer', label: 'Санки: Изг\u2192Пол', icon: '\uD83C\uDFED', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: true, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'quarterly-prices', label: 'Кварт. цены', icon: '\uD83D\uDCC8', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'summary', label: 'Итоги', icon: '\u2705', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
+        { type: 'recommendations', label: 'Рекомендации', icon: '\uD83D\uDCCB', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
         { type: 'contacts', label: 'Контакты', icon: '\u2139\uFE0F', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false }
     ];
 
@@ -7581,6 +7583,16 @@ document.addEventListener('DOMContentLoaded', function () {
             year: '',
             opts: { subtitle: '', bullets: '' }
         };
+        // Введение и Итоги — сразу заполняем обзорным текстом из данных
+        if (type === 'intro' || type === 'summary') {
+            try {
+                var _d = getActiveData(), _h = getActiveHeaders();
+                if (_d && _d.length) {
+                    var _lines = generateReportText(type === 'intro' ? 'intro' : 'resume', _d, _h, slide);
+                    if (_lines.length) slide.opts.bullets = _lines.join('\n');
+                }
+            } catch (e) { /* нет данных — оставляем пустым */ }
+        }
         presState.slides.push(slide);
         presState.activeIndex = presState.slides.length - 1;
         renderPresSlideList();
@@ -8022,14 +8034,98 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- Диспетчер рендера по типу ---
+    // Собирает столбцы (товары) и строки-аспекты для матрицы рекомендаций.
+    // Товары задаются в поле «Пункты» построчно как «Название|ТНВЭД-префикс»;
+    // если пусто — весь набор данных одним столбцом «Рынок».
+    function buildRecommendationRows(data, headers, slide) {
+        var raw = (slide.opts && slide.opts.bullets) || '';
+        var items = raw.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+            var p = l.split('|');
+            return { name: (p[0] || '').trim() || 'Товар', hs: (p[1] || '').trim() };
+        });
+        if (items.length === 0) items = [{ name: 'Рынок', hs: '' }];
+
+        var cols = items.map(function (it) {
+            var fd = filterDataByHS(data, headers, it.hs);
+            return {
+                name: it.name,
+                vm: computeSlideMetrics('volumes', fd, headers, { topN: 10 }),
+                cm: computeSlideMetrics('countries', fd, headers, { topN: 10 }),
+                pm: computeSlideMetrics('price-dynamics', fd, headers, { topN: 10 })
+            };
+        });
+
+        function yy(vm) { return (vm.firstYear && vm.lastYear) ? ' ' + vm.firstYear.slice(-2) + '–' + vm.lastYear.slice(-2) : ''; }
+        function cagrStr(vm) {
+            if (vm.cagrWeight == null) return '—';
+            var parts = [];
+            if (vm.cagrRub != null) parts.push('~' + presRuNum(Math.round(vm.cagrRub)) + '% руб.');
+            if (vm.cagrUsd != null) parts.push('~' + presRuNum(Math.round(vm.cagrUsd)) + '% долл.');
+            parts.push('~' + presRuNum(Math.round(vm.cagrWeight)) + '% шт.');
+            return 'CAGR' + yy(vm) + ': ' + parts.join(', ');
+        }
+        function supplyStr(cm) {
+            if (!cm.leader) return '—';
+            if (cm.leaderShare >= 70) return 'Основной поставщик — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%); нужен поиск альтернатив для снижения рисков';
+            if (cm.leaderShare >= 40) return 'Ведущий поставщик — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%) при выраженной концентрации';
+            return 'Диверсифицированный портфель поставщиков; лидер ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%), риски сбалансированы';
+        }
+        function priceStr(pm) {
+            if (pm.priceMin == null) return '—';
+            return 'Диапазон закупочных цен ' + presRuNum(pm.priceMin, 1) + '–' + presRuNum(pm.priceMax, 1) + ' USD/кг';
+        }
+        function keyStr(vm, cm) {
+            var t = presTrendPhrase(vm.cagrWeight);
+            if (cm.leaderShare >= 70 && t.dir === 'up') return 'Рынок привлекателен высокими темпами роста, но сопряжён с зависимостью от одного поставщика — это ключевой риск';
+            if (t.dir === 'up') return 'Растущий рынок с приемлемым уровнем риска — благоприятен для входа';
+            if (t.dir === 'down') return 'Рынок сжимается — вход требует осторожности и ценовых преимуществ';
+            return 'Стабильный рынок — успех определяется операционной эффективностью в условиях конкуренции';
+        }
+
+        var rows = [
+            { label: 'Общий рынок (объём)', vals: cols.map(function (c) { return cagrStr(c.vm); }) },
+            { label: 'Цепочка поставок', vals: cols.map(function (c) { return supplyStr(c.cm); }) },
+            { label: 'Ценовое позиционирование', vals: cols.map(function (c) { return priceStr(c.pm); }) },
+            { label: 'Ключевой вывод', vals: cols.map(function (c) { return keyStr(c.vm, c.cm); }), bold: true }
+        ];
+        return { cols: cols, rows: rows };
+    }
+
+    function renderPresRecommendations(data, headers, slide) {
+        if (!data || data.length === 0) return presNoData(slide.title || 'Рекомендации');
+        var r = buildRecommendationRows(data, headers, slide);
+        var colW = Math.floor(74 / r.cols.length);
+        var body = '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">';
+        body += '<tr><th style="text-align:left;padding:8px;border-bottom:2px solid #2563EB;color:#2563EB;width:26%">Аспект анализа</th>';
+        r.cols.forEach(function (c) {
+            body += '<th style="text-align:left;padding:8px;border-bottom:2px solid #2563EB;color:#2563EB;width:' + colW + '%">' + svgEscFact(c.name) + '</th>';
+        });
+        body += '</tr>';
+        r.rows.forEach(function (row, ri) {
+            var bg = ri % 2 === 0 ? '#F8FAFC' : '#FFFFFF';
+            var fw = row.bold ? '700' : '400';
+            var color = row.bold ? '#0F172A' : '#334155';
+            body += '<tr style="background:' + bg + '">';
+            body += '<td style="padding:8px;font-weight:600;color:#0F172A;vertical-align:top">' + svgEscFact(row.label) + '</td>';
+            row.vals.forEach(function (v) {
+                body += '<td style="padding:8px;font-weight:' + fw + ';color:' + color + ';vertical-align:top;line-height:1.35">' + svgEscFact(v) + '</td>';
+            });
+            body += '</tr>';
+        });
+        body += '</table>';
+        return slideWrapper(slide.title || 'Рекомендации', body, {});
+    }
+
     function renderPresSlideByType(slide, data, headers) {
         var type = slide.type;
         if (type === 'title') return renderPresTitle(slide);
         if (type === 'toc') return renderPresTOC();
         if (type === 'text') return renderPresText(slide);
+        if (type === 'intro') return renderPresText(slide);
         if (type === 'section-divider') return renderPresSectionDivider(slide);
         if (type === 'contacts') return renderPresContacts();
         if (type === 'summary') return renderPresText(slide);
+        if (type === 'recommendations') return renderPresRecommendations(data, headers, slide);
         // Аналитические блоки — будут добавлены в Фазе 4
         if (type === 'volumes') return renderPresVolumes(data, headers, slide);
         if (type === 'countries') return renderPresCountries(data, headers, slide);
@@ -8853,9 +8949,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 m.cagrRub = hasRub ? presCalcCAGR(byYear[ys[0]].r, byYear[ys[n]].r, n) : null;
             }
             var last = byYear[m.lastYear] || {};
+            var first = byYear[m.firstYear] || {};
             m.latestWeight = round2((last.w || 0) / 1000);
             m.latestUsd = round2((last.u || 0) / 1000);
             m.latestRub = round2((last.r || 0) / 1000);
+            // Значения первого и последнего года — для формулировок «выросли с X до Y»
+            m.firstWeight = round2((first.w || 0) / 1000);
+            m.lastWeight = m.latestWeight;
+            m.firstUsd = round2((first.u || 0) / 1000);
+            m.lastUsd = m.latestUsd;
+            m.firstRub = round2((first.r || 0) / 1000);
+            m.lastRub = m.latestRub;
             m.totalWeight = round2(Object.keys(byYear).reduce(function (s, y) { return s + byYear[y].w; }, 0) / 1000);
             m.totalUsd = round2(Object.keys(byYear).reduce(function (s, y) { return s + byYear[y].u; }, 0) / 1000);
             if (m.cagrWeight > 1) m.trend = 'growth';
@@ -8880,6 +8984,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 var topSum = sorted.slice(0, topN).reduce(function (s, c) { return s + totalByC[c]; }, 0);
                 m.topCoverage = grand > 0 ? round2(topSum / grand * 100) : 0;
                 m.countriesCount = sorted.length;
+                m.secondName = sorted[1] || '';
+                m.secondShare = (grand > 0 && sorted[1]) ? round2(totalByC[sorted[1]] / grand * 100) : 0;
             }
             if (type === 'price-dynamics' && statUsdCol && weightCol) {
                 var prices = [];
@@ -8916,7 +9022,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 var topN = slide.topN || 10;
                 var sd = buildSankeyData(filtered, srcCol, tgtCol, weightCol, topN);
                 m.leader = sd.sources.length > 0 ? sd.sources[0].name : '';
-                m.leaderVolume = sd.sources.length > 0 ? round2(sd.sources[0].total) : 0;
+                // total — в кг (вес нетто); в тексте показываем в тоннах
+                m.leaderVolume = sd.sources.length > 0 ? Math.round(sd.sources[0].total / 1000) : 0;
                 var totalFlow = sd.flows.reduce(function (s, f) { return s + f.value; }, 0);
                 m.topN = topN;
                 m.year = slide.year || m.lastYear;
@@ -8963,71 +9070,174 @@ document.addEventListener('DOMContentLoaded', function () {
         return m;
     }
 
+    // --- Помощники для детерминированной генерации текста (без ИИ) ---
+    // Число в русском формате: разделитель тысяч — пробел, десятичный — запятая
+    function presRuNum(n, digits) {
+        if (n == null || isNaN(n)) return '—';
+        var str = (digits != null ? Number(n).toFixed(digits) : String(round2(n))).replace('.', ',');
+        var parts = str.split(',');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        return parts.join(',');
+    }
+    // Подбор удобной единицы для веса (вход — тонны)
+    function presWeightUnit(tonnes) {
+        if (Math.abs(tonnes) >= 1000) return { div: 1000, unit: 'тыс. тонн', d: 1 };
+        return { div: 1, unit: 'тонн', d: 0 };
+    }
+    // Качественная характеристика тренда по величине CAGR
+    function presTrendPhrase(cagr) {
+        if (cagr == null) return { adj: 'стабильную динамику', dir: 'stable' };
+        if (cagr >= 25) return { adj: 'бурный рост', dir: 'up' };
+        if (cagr >= 8)  return { adj: 'устойчивый рост', dir: 'up' };
+        if (cagr > 1)   return { adj: 'умеренный рост', dir: 'up' };
+        if (cagr < -8)  return { adj: 'заметное сокращение', dir: 'down' };
+        if (cagr < -1)  return { adj: 'сокращение', dir: 'down' };
+        return { adj: 'стабильные объёмы', dir: 'stable' };
+    }
+    // Заголовок-вывод (action title) из метрик. '' если данных мало.
+    function generateActionTitle(type, m) {
+        var product = (m.product || '').trim();
+        var subj = product ? 'Импорт ' + product : 'Импорт';
+        var of = product ? ' ' + product : '';
+        var period = (m.firstYear && m.lastYear) ? m.firstYear + '–' + m.lastYear : '';
+
+        if (type === 'volumes' && m.cagrWeight != null) {
+            var t = presTrendPhrase(m.cagrWeight);
+            if (t.dir === 'up' && m.cagrUsd != null) {
+                return subj + ' демонстрирует ' + t.adj + ': за ' + period +
+                    ' поставки выросли на ' + presRuNum(Math.round(m.cagrWeight)) +
+                    '% в натуральном и на ' + presRuNum(Math.round(m.cagrUsd)) +
+                    '% в долларовом выражении';
+            }
+            if (t.dir === 'down') {
+                return subj + ': за ' + period + ' наблюдается ' + t.adj +
+                    ' физических объёмов (CAGR ' + presRuNum(Math.round(m.cagrWeight)) + '%)';
+            }
+            return subj + ' за ' + period + ' сохраняет ' + t.adj;
+        }
+
+        if (type === 'countries' && m.leader) {
+            if (m.leaderShare >= 70) {
+                return m.leader + ' — абсолютный лидер поставок' + of + ', формируя ' + presRuNum(m.leaderShare, 1) + '% импорта в натуральном выражении';
+            }
+            if (m.leaderShare >= 40) {
+                return m.leader + ' доминирует в поставках' + of + ' (' + presRuNum(m.leaderShare, 1) + '% объёма) при высокой концентрации рынка';
+            }
+            return 'Поставки' + of + ' диверсифицированы: ни одна страна не превышает ' + presRuNum(m.leaderShare, 1) + '% — риски по отдельным направлениям снижены';
+        }
+
+        if (type === 'price-dynamics' && m.priceMin != null) {
+            return 'Цены на импорт' + of + ' варьируются от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения';
+        }
+
+        if ((type === 'sankey-sender' || type === 'sankey-manufacturer') && m.leader) {
+            var srcWord = type === 'sankey-manufacturer' ? 'производителей' : 'поставщиков';
+            return 'В ' + (m.year || m.lastYear) + ' году импорт' + of + ' концентрирован: крупнейший из ' + srcWord + ' — ' + m.leader + ' (' + presRuNum(m.leaderVolume) + ' тонн)';
+        }
+
+        if (type === 'quarterly-prices' && m.usdMin != null) {
+            return 'Поквартальная цена импорта' + of + ' колебалась в диапазоне ' + presRuNum(m.usdMin, 1) + '–' + presRuNum(m.usdMax, 1) + ' USD/кг';
+        }
+
+        return '';
+    }
+
     function generateTemplateText(type, m) {
         var lines = [];
         var trendWord = m.trend === 'growth' ? '\u0443\u0441\u0442\u043e\u0439\u0447\u0438\u0432\u044b\u0439 \u0440\u043e\u0441\u0442' : m.trend === 'decline' ? '\u0441\u043d\u0438\u0436\u0435\u043d\u0438\u0435' : '\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u0443\u044e \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0443';
 
         if (type === 'volumes') {
-            if (m.cagrWeight != null) {
-                lines.push('\u0418\u043c\u043f\u043e\u0440\u0442 \u0434\u0435\u043c\u043e\u043d\u0441\u0442\u0440\u0438\u0440\u0443\u0435\u0442 ' + trendWord + ': CAGR ' + round2(m.cagrWeight) + '% \u0432 \u043d\u0430\u0442\u0443\u0440\u0430\u043b\u044c\u043d\u043e\u043c \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0438 \u0437\u0430 ' + m.firstYear + '\u2013' + m.lastYear);
+            var t = presTrendPhrase(m.cagrWeight);
+            // 1. Натуральный объём: «вырос с X до Y тыс. тонн (CAGR N%)»
+            if (m.firstWeight != null && m.lastWeight != null) {
+                var wu = presWeightUnit(Math.max(Math.abs(m.firstWeight), Math.abs(m.lastWeight)));
+                var verb = t.dir === 'down' ? 'снизился' : (t.dir === 'up' ? 'вырос' : 'изменился');
+                var l1 = 'Натуральный объём импорта ' + verb +
+                    ' с ' + presRuNum(m.firstWeight / wu.div, wu.d) + ' до ' + presRuNum(m.lastWeight / wu.div, wu.d) + ' ' + wu.unit;
+                if (m.cagrWeight != null) l1 += ' (CAGR ' + presRuNum(Math.round(m.cagrWeight)) + '%)';
+                lines.push(l1 + '.');
             }
-            if (m.cagrUsd != null) {
-                lines.push('\u0412 \u0434\u043e\u043b\u043b\u0430\u0440\u043e\u0432\u043e\u043c \u0432\u044b\u0440\u0430\u0436\u0435\u043d\u0438\u0438 CAGR \u0441\u043e\u0441\u0442\u0430\u0432\u043b\u044f\u0435\u0442 ' + round2(m.cagrUsd) + '%');
+            // 2. Долларовая vs натуральная динамика → вывод про среднюю цену
+            if (m.cagrUsd != null && m.cagrWeight != null) {
+                var l2;
+                if (m.cagrUsd < m.cagrWeight - 2) {
+                    l2 = 'Рост в долларах (' + presRuNum(Math.round(m.cagrUsd)) + '%) отстаёт от физического (' + presRuNum(Math.round(m.cagrWeight)) + '%) — средняя цена закупки снижается';
+                } else if (m.cagrUsd > m.cagrWeight + 2) {
+                    l2 = 'Рост в долларах (' + presRuNum(Math.round(m.cagrUsd)) + '%) опережает физический (' + presRuNum(Math.round(m.cagrWeight)) + '%) — средняя цена закупки растёт';
+                } else {
+                    l2 = 'Долларовая стоимость (' + presRuNum(Math.round(m.cagrUsd)) + '%) растёт соразмерно объёму — средняя цена стабильна';
+                }
+                lines.push(l2 + '.');
             }
-            if (m.cagrRub != null && m.cagrUsd != null && m.cagrRub > m.cagrUsd + 5) {
-                lines.push('\u0420\u0443\u0431\u043b\u0451\u0432\u0430\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0440\u0430\u0441\u0442\u0451\u0442 \u043e\u043f\u0435\u0440\u0435\u0436\u0430\u044e\u0449\u0438\u043c\u0438 \u0442\u0435\u043c\u043f\u0430\u043c\u0438 (CAGR ' + round2(m.cagrRub) + '%), \u043e\u0442\u0440\u0430\u0436\u0430\u044f \u0432\u0430\u043b\u044e\u0442\u043d\u044b\u0439 \u0444\u0430\u043a\u0442\u043e\u0440');
-            }
-            if (m.latestWeight) {
-                lines.push('Данные за ' + m.lastYear + ': ' + formatNumber(m.latestWeight) + ' тонн на сумму ' + formatNumber(m.latestUsd) + ' тыс. USD');
+            // 3. Рублёвая динамика → валютный фактор
+            if (m.cagrRub != null && m.cagrUsd != null) {
+                var l3;
+                if (m.cagrRub > m.cagrUsd + 2) {
+                    l3 = 'Рублёвая стоимость растёт быстрее (CAGR ' + presRuNum(Math.round(m.cagrRub)) + '%) из-за ослабления курса — давление на себестоимость для импортёров';
+                } else {
+                    l3 = 'Рублёвая стоимость (CAGR ' + presRuNum(Math.round(m.cagrRub)) + '%) отражает динамику долларовых цен и курса';
+                }
+                lines.push(l3 + '.');
             }
         }
 
         if (type === 'countries') {
             if (m.leader) {
-                lines.push('\u041b\u0438\u0434\u0435\u0440 \u2014 ' + m.leader + ' \u0441 \u0434\u043e\u043b\u0435\u0439 ' + m.leaderShare + '% \u043e\u0442 \u043e\u0431\u0449\u0435\u0433\u043e \u043e\u0431\u044a\u0451\u043c\u0430');
+                lines.push('Ведущий поставщик — ' + m.leader + ' с долей ' + presRuNum(m.leaderShare, 1) + '% от общего объёма импорта.');
+            }
+            if (m.leaderShare != null) {
+                var c;
+                if (m.leaderShare >= 70) c = 'Рынок монозависим от одного поставщика — это создаёт логистические и ценовые риски';
+                else if (m.leaderShare >= 40) c = 'Концентрация высокая: лидер формирует основную часть поставок';
+                else c = 'Структура диверсифицирована — зависимость от отдельных стран умеренная';
+                if (m.secondName) c += ' (второй по объёму — ' + m.secondName + ', ' + presRuNum(m.secondShare, 1) + '%)';
+                lines.push(c + '.');
             }
             if (m.topCoverage) {
-                lines.push('\u0422\u041e\u041f-' + m.topN + ' \u0441\u0442\u0440\u0430\u043d \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u0432\u0430\u044e\u0442 ' + m.topCoverage + '% \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a');
+                lines.push('ТОП-' + m.topN + ' стран обеспечивают ' + presRuNum(m.topCoverage, 1) + '% поставок; всего в импорте участвует ' + (m.countriesCount || '?') + ' стран.');
             }
-            var concLevel = m.leaderShare > 40 ? '\u0432\u044b\u0441\u043e\u043a\u0430\u044f' : m.leaderShare > 20 ? '\u0443\u043c\u0435\u0440\u0435\u043d\u043d\u0430\u044f' : '\u043d\u0438\u0437\u043a\u0430\u044f';
-            lines.push('\u041a\u043e\u043d\u0446\u0435\u043d\u0442\u0440\u0430\u0446\u0438\u044f \u0440\u044b\u043d\u043a\u0430: ' + concLevel + ' (\u0432\u0441\u0435\u0433\u043e ' + (m.countriesCount || '?') + ' \u0441\u0442\u0440\u0430\u043d)');
         }
 
         if (type === 'price-dynamics') {
             if (m.priceMin != null) {
-                lines.push('\u0421\u0440\u0435\u0434\u043d\u0435\u0432\u0437\u0432\u0435\u0448\u0435\u043d\u043d\u0430\u044f \u0446\u0435\u043d\u0430 \u0432\u0430\u0440\u044c\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u043e\u0442 ' + formatNumber(m.priceMin) + ' \u0434\u043e ' + formatNumber(m.priceMax) + ' USD/\u043a\u0433');
+                lines.push('Средневзвешенная цена варьируется от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения.');
+                var spread = m.priceMin > 0 ? round2((m.priceMax - m.priceMin) / m.priceMin * 100) : 0;
+                if (spread >= 30) {
+                    lines.push('Разброс цен между странами значительный (' + presRuNum(Math.round(spread)) + '%) — выбор поставщика существенно влияет на закупочную стоимость.');
+                }
             }
             if (m.leader) {
-                lines.push(m.leader + ' \u2014 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u0446\u0435\u043d\u043e\u0432\u043e\u0439 \u043e\u0440\u0438\u0435\u043d\u0442\u0438\u0440 \u0440\u044b\u043d\u043a\u0430 (\u0434\u043e\u043b\u044f ' + m.leaderShare + '% \u043f\u043e \u043e\u0431\u044a\u0451\u043c\u0443)');
+                lines.push(m.leader + ' как основной поставщик (' + presRuNum(m.leaderShare, 1) + '% объёма) задаёт ценовой ориентир рынка.');
             }
         }
 
         if (type === 'sankey-sender' || type === 'sankey-manufacturer') {
+            var srcWord = m.sourceLabel || 'поставщиков';
             if (m.leader) {
-                lines.push('\u0412 ' + (m.year || m.lastYear) + ' \u0433\u043e\u0434\u0443 \u043a\u0440\u0443\u043f\u043d\u0435\u0439\u0448\u0438\u0439 \u0438\u0437 ' + m.sourceLabel + ': ' + m.leader + ' (' + formatNumber(m.leaderVolume) + ' \u0442\u043e\u043d\u043d)');
+                lines.push('Крупнейший из ' + srcWord + ' в ' + (m.year || m.lastYear) + ' году — ' + m.leader + ' (' + presRuNum(m.leaderVolume) + ' тонн).');
             }
             if (m.topTarget) {
-                lines.push('\u041a\u0440\u0443\u043f\u043d\u0435\u0439\u0448\u0438\u0439 \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c: ' + m.topTarget);
+                lines.push('Ключевой получатель поставок — ' + m.topTarget + '.');
             }
-            lines.push('\u0422\u041e\u041f-' + m.topN + ' ' + m.sourceLabel + ' \u043f\u043e\u0441\u0442\u0430\u0432\u043b\u044f\u044e\u0442 \u0432 ' + (m.targetCount || '?') + ' \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439-\u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u0435\u0439');
+            var structWord = (m.targetCount && m.targetCount <= m.topN) ? 'концентрированная' : 'разветвлённая';
+            lines.push('ТОП-' + m.topN + ' ' + srcWord + ' распределяют поставки между ' + (m.targetCount || '?') + ' получателями — структура ' + structWord + '.');
         }
 
         if (type === 'quarterly-prices') {
-            if (m.rubMin != null) {
-                lines.push('\u0426\u0435\u043d\u044b \u0432 \u0440\u0443\u0431\u043b\u044f\u0445: \u043e\u0442 ' + formatNumber(m.rubMin) + ' \u0434\u043e ' + formatNumber(m.rubMax) + ' \u0440\u0443\u0431./\u043a\u0433 (\u0441\u0440\u0435\u0434\u043d\u0435\u0435 ' + formatNumber(m.rubAvg) + ')');
-            }
             if (m.usdMin != null) {
-                lines.push('\u0426\u0435\u043d\u044b \u0432 \u0434\u043e\u043b\u043b\u0430\u0440\u0430\u0445: \u043e\u0442 ' + formatNumber(m.usdMin) + ' \u0434\u043e ' + formatNumber(m.usdMax) + ' USD/\u043a\u0433 (\u0441\u0440\u0435\u0434\u043d\u0435\u0435 ' + formatNumber(m.usdAvg) + ')');
+                lines.push('Цена в долларах колебалась от ' + presRuNum(m.usdMin, 1) + ' до ' + presRuNum(m.usdMax, 1) + ' USD/кг (в среднем ' + presRuNum(m.usdAvg, 1) + ').');
             }
-            if (m.rubMax && m.rubMin && m.rubMin > 0) {
-                var volatility = round2((m.rubMax - m.rubMin) / m.rubMin * 100);
-                if (volatility > 30) {
-                    lines.push('\u0412\u044b\u0441\u043e\u043a\u0430\u044f \u0432\u043e\u043b\u0430\u0442\u0438\u043b\u044c\u043d\u043e\u0441\u0442\u044c: \u0440\u0430\u0437\u0431\u0440\u043e\u0441 \u0446\u0435\u043d ' + volatility + '%');
-                }
+            if (m.rubMin != null) {
+                lines.push('Цена в рублях: от ' + presRuNum(m.rubMin) + ' до ' + presRuNum(m.rubMax) + ' руб./кг (в среднем ' + presRuNum(m.rubAvg) + ').');
+            }
+            if (m.usdMax && m.usdMin && m.usdMin > 0) {
+                var vol = round2((m.usdMax - m.usdMin) / m.usdMin * 100);
+                if (vol >= 30) lines.push('Высокая волатильность цен (размах ' + presRuNum(Math.round(vol)) + '%) — рынок подвержен ценовым шокам.');
+                else lines.push('Цены относительно стабильны (размах ' + presRuNum(Math.round(vol)) + '%) — предсказуемый ценовой коридор.');
             }
         }
 
-        return lines;
+        return lines;        return lines;
     }
 
     var SEARCH_MODELS = ['perplexity/sonar', 'perplexity/sonar-pro'];
@@ -9064,6 +9274,63 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return basePrompt;
+    }
+
+    // Обзорный текст для «Введения» (kind='intro') и «Резюме» (kind='resume').
+    // Собирается детерминированно из метрик объёмов и стран. Без ИИ.
+    function generateReportText(kind, data, headers, slide) {
+        var vm = computeSlideMetrics('volumes', data, headers, slide);
+        var cm = computeSlideMetrics('countries', data, headers, slide);
+        var product = (slide && slide.opts && slide.opts.product ? slide.opts.product : '').trim();
+        var of = product ? ' ' + product : '';
+        var period = (vm.firstYear && vm.lastYear) ? vm.firstYear + '–' + vm.lastYear : '';
+        var t = presTrendPhrase(vm.cagrWeight);
+        var lines = [];
+
+        if (kind === 'intro') {
+            if (vm.cagrWeight != null && vm.firstWeight != null) {
+                var wu = presWeightUnit(Math.max(Math.abs(vm.firstWeight), Math.abs(vm.lastWeight)));
+                lines.push('Российский рынок импорта' + of + (period ? ' в ' + period + ' гг.' : '') + ' демонстрирует ' + t.adj +
+                    ': объём поставок ' + (t.dir === 'down' ? 'снизился' : (t.dir === 'up' ? 'вырос' : 'изменился')) +
+                    ' с ' + presRuNum(vm.firstWeight / wu.div, wu.d) + ' до ' + presRuNum(vm.lastWeight / wu.div, wu.d) + ' ' + wu.unit +
+                    ' (CAGR ' + presRuNum(Math.round(vm.cagrWeight)) + '%).');
+            }
+            if (cm.leader) {
+                var concPhrase = cm.leaderShare >= 70 ? 'высокая зависимость от одного поставщика'
+                    : (cm.leaderShare >= 40 ? 'выраженная концентрация поставок' : 'диверсифицированная география поставок');
+                lines.push('Структура импорта характеризуется: ' + concPhrase + ' — ключевой поставщик ' + cm.leader +
+                    ' (' + presRuNum(cm.leaderShare, 1) + '% объёма), всего в поставках участвует ' + (cm.countriesCount || '?') + ' стран.');
+            }
+            if (vm.cagrUsd != null && vm.cagrWeight != null) {
+                var priceMove = vm.cagrUsd < vm.cagrWeight - 2 ? 'снижении средней цены закупки'
+                    : (vm.cagrUsd > vm.cagrWeight + 2 ? 'росте средней цены закупки' : 'стабильности средней цены');
+                lines.push('Динамика стоимости (CAGR ' + presRuNum(Math.round(vm.cagrUsd)) + '% в долларах' +
+                    (vm.cagrRub != null ? ', ' + presRuNum(Math.round(vm.cagrRub)) + '% в рублях' : '') +
+                    ') свидетельствует о ' + priceMove + ' на фоне валютного фактора.');
+            }
+        }
+
+        if (kind === 'resume') {
+            if (vm.cagrWeight != null) {
+                lines.push('Рынок импорта' + of + (period ? ' в ' + period + ' гг.' : '') + ' развивался в режиме «' + t.adj + '»: ' +
+                    'ключевые показатели подтверждают ' + (t.dir === 'up' ? 'растущий спрос' : (t.dir === 'down' ? 'сжатие спроса' : 'устойчивое состояние')) + ' сегмента.');
+            }
+            if (cm.leader && cm.leaderShare >= 70) {
+                lines.push('Главный риск — экстремальная зависимость от одного поставщика (' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
+                    '%): диверсификация географии закупок становится приоритетной задачей.');
+            } else if (cm.leader) {
+                lines.push('Структура поставок относительно устойчива (лидер ' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
+                    '%), что снижает чувствительность рынка к шокам по отдельным направлениям.');
+            }
+            if (vm.cagrUsd != null && vm.cagrWeight != null && vm.cagrUsd < vm.cagrWeight - 2) {
+                lines.push('Рост физических объёмов опережает стоимостный — рынок растёт за счёт спроса, а не цены; это создаёт условия для входа новых импортёров.');
+            } else if (vm.cagrRub != null && vm.cagrUsd != null && vm.cagrRub > vm.cagrUsd + 2) {
+                lines.push('Опережающий рост рублёвой стоимости усиливает давление на себестоимость переработчиков — фактор для контроля закупочных цен.');
+            }
+            lines.push('В среднесрочной перспективе устойчивость рынка будет определяться диверсификацией поставок и управлением валютными и логистическими рисками.');
+        }
+
+        return lines;
     }
 
     function generateAIText(type, metrics, providerKey, apiKey, customUrl, selectedModel) {
@@ -9138,6 +9405,90 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- PDF-экспорт (Фаза 5) ---
+    // --- Мастер: собрать отчёт по шаблону компании из данных ---
+    function presRunWizard() {
+        var data = getActiveData(), headers = getActiveHeaders();
+        if (!data || !data.length) { alert('Сначала загрузите данные во вкладке «Данные».'); return; }
+        function q(sel) { return document.querySelector(sel); }
+
+        var repTitle = q('.pres-wiz-title').value.trim() || 'Аналитическая справка';
+        var part = q('.pres-wiz-part').value.trim();
+        var prodRaw = q('.pres-wiz-products').value.trim();
+        var products = prodRaw.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+            var p = l.split('|');
+            return { name: (p[0] || '').trim(), hs: (p[1] || '').trim() };
+        });
+        if (products.length === 0) products = [{ name: '', hs: '' }];
+        var sections = Array.prototype.map.call(document.querySelectorAll('.pres-wiz-sections input:checked'), function (e) { return e.value; });
+        var extras = Array.prototype.map.call(document.querySelectorAll('.pres-wiz-extras input:checked'), function (e) { return e.value; });
+        var single = products.length === 1 ? products[0].name : '';
+
+        var nid = presState.nextId;
+        function mk(type, over) {
+            var b = findPresBlock(type);
+            var sl = { id: nid++, type: type, title: b ? b.label : type, hsFilter: '', topN: 10, year: '', opts: { subtitle: '', bullets: '', commentary: '', product: '' } };
+            if (over) {
+                if (over.title != null) sl.title = over.title;
+                if (over.hsFilter != null) sl.hsFilter = over.hsFilter;
+                if (over.opts) { for (var k in over.opts) sl.opts[k] = over.opts[k]; }
+            }
+            return sl;
+        }
+        function fillAnalytical(sl, product) {
+            var fd = filterDataByHS(data, headers, sl.hsFilter);
+            var m = computeSlideMetrics(sl.type, fd, headers, sl);
+            m.product = product || '';
+            var at = generateActionTitle(sl.type, m);
+            if (at) sl.title = at;
+            var lines = generateTemplateText(sl.type, m);
+            if (lines.length) sl.opts.commentary = lines.join('\n');
+        }
+
+        var slides = [];
+        slides.push(mk('title', { title: repTitle, opts: { subtitle: part } }));
+        slides.push(mk('toc'));
+
+        if (extras.indexOf('intro') !== -1) {
+            var intro = mk('intro');
+            var il = generateReportText('intro', data, headers, { opts: { product: single } });
+            if (il.length) intro.opts.bullets = il.join('\n');
+            slides.push(intro);
+        }
+
+        products.forEach(function (p) {
+            if (products.length > 1 || p.name) {
+                slides.push(mk('section-divider', { title: p.name || 'Анализ рынка', hsFilter: p.hs }));
+            }
+            sections.forEach(function (type) {
+                var sl = mk(type, { hsFilter: p.hs, opts: { product: p.name } });
+                fillAnalytical(sl, p.name);
+                slides.push(sl);
+            });
+        });
+
+        if (extras.indexOf('summary') !== -1) {
+            var sum = mk('summary');
+            var rl = generateReportText('resume', data, headers, { opts: { product: single } });
+            if (rl.length) sum.opts.bullets = rl.join('\n');
+            slides.push(sum);
+        }
+        if (extras.indexOf('recommendations') !== -1) {
+            var rec = mk('recommendations');
+            var prodLines = products.filter(function (p) { return p.name || p.hs; }).map(function (p) { return p.name + '|' + p.hs; });
+            if (prodLines.length) rec.opts.bullets = prodLines.join('\n');
+            slides.push(rec);
+        }
+        slides.push(mk('contacts'));
+
+        presState.slides = slides;
+        presState.nextId = nid;
+        presState.activeIndex = 0;
+        renderPresSlideList();
+        previewPresSlide(0);
+        updatePresButtons();
+        document.querySelector('.pres-wizard-overlay').style.display = 'none';
+    }
+
     function exportPresPDF() {
         if (presState.slides.length === 0) return;
         if (!window.jspdf || !window.html2canvas) {
@@ -9365,6 +9716,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // Export PDF
     presExportBtn.addEventListener('click', exportPresPDF);
 
+    // Мастер сборки отчёта
+    var presWizardBtn = document.querySelector('.pres-wizard-btn');
+    if (presWizardBtn) {
+        presWizardBtn.addEventListener('click', function () {
+            document.querySelector('.pres-wizard-overlay').style.display = '';
+        });
+        document.querySelector('.pres-wiz-cancel').addEventListener('click', function () {
+            document.querySelector('.pres-wizard-overlay').style.display = 'none';
+        });
+        document.querySelector('.pres-wiz-build').addEventListener('click', presRunWizard);
+    }
+
     // Export PPTX
     presExportPptxBtn.addEventListener('click', exportPresPPTX);
 
@@ -9392,7 +9755,7 @@ document.addEventListener('DOMContentLoaded', function () {
         pres.author = 'Delomant';
         pres.title = presState.slides[0] ? (presState.slides[0].title || 'Презентация') : 'Презентация';
 
-        var SIMPLE_TYPES = ['title', 'text', 'summary', 'toc', 'section-divider', 'contacts'];
+        var SIMPLE_TYPES = ['title', 'text', 'summary', 'toc', 'section-divider', 'contacts', 'recommendations'];
         var PPTX_COLORS = LINE_COLORS.map(function(c) { return c.replace('#', ''); });
         var PPTX_YEAR_COLORS = YEAR_COLORS.map(function(c) { return c.replace('#', ''); });
         var FONT = 'Arial';
@@ -9480,6 +9843,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 x: 0.8, y: 4.8, w: 8.4, h: 0.4,
                 fontSize: 12, fontFace: FONT, color: '64748B', align: 'center', valign: 'middle'
             });
+        }
+
+        function addRecommendationsSlide(slideData) {
+            var data = getActiveData(), headers = getActiveHeaders();
+            var r = buildRecommendationRows(data, headers, slideData);
+            var sl = pres.addSlide();
+            pptxHeader(sl, slideData.title || 'Рекомендации');
+            var tableRows = [];
+            var hdr = [{ text: 'Аспект анализа', options: { bold: true, color: '2563EB', fill: { color: 'EFF6FF' } } }];
+            r.cols.forEach(function (c) { hdr.push({ text: c.name, options: { bold: true, color: '2563EB', fill: { color: 'EFF6FF' } } }); });
+            tableRows.push(hdr);
+            r.rows.forEach(function (row) {
+                var tr = [{ text: row.label, options: { bold: true, color: '0F172A' } }];
+                row.vals.forEach(function (v) { tr.push({ text: v, options: { bold: !!row.bold, color: row.bold ? '0F172A' : '334155' } }); });
+                tableRows.push(tr);
+            });
+            var firstW = 1.9;
+            var restW = (9.4 - firstW) / Math.max(1, r.cols.length);
+            var colW = [firstW].concat(r.cols.map(function () { return restW; }));
+            sl.addTable(tableRows, { x: 0.3, y: 0.7, w: 9.4, colW: colW, fontSize: 9, fontFace: FONT, valign: 'top', border: { type: 'solid', color: 'E2E8F0', pt: 0.5 }, autoPage: false });
+            pptxFooter(sl);
         }
 
         function addTextSlide(slideData) {
@@ -9613,6 +9997,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 else if (slideData.type === 'toc') addTocSlide();
                 else if (slideData.type === 'section-divider') addSectionSlide(slideData);
                 else if (slideData.type === 'contacts') addContactsSlide();
+                else if (slideData.type === 'recommendations') addRecommendationsSlide(slideData);
                 else addTextSlide(slideData);
                 slideIndex++;
                 setTimeout(processNext, 0);
@@ -9668,6 +10053,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var filteredData = filterDataByHS(data, headers, slide.hsFilter);
 
         var metrics = computeSlideMetrics(slide.type, filteredData, headers, slide);
+
+        // Название товара для заголовка-вывода берём из поля «Заголовок»,
+        // если пользователь вписал туда товар (напр. «кешью»), а не оставил дефолт блока
+        var titleField = document.querySelector('.pres-set-title');
+        var blockLabel = findPresBlock(slide.type).label;
+        var typed = titleField.value.trim();
+        metrics.product = (typed && typed !== blockLabel) ? typed : '';
+
+        var actionTitle = generateActionTitle(slide.type, metrics);
+        if (actionTitle) { titleField.value = actionTitle; }
+
         var lines = generateTemplateText(slide.type, metrics);
         if (lines.length === 0) {
             document.querySelector('.pres-set-commentary').value = 'Недостаточно данных для генерации текста';

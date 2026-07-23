@@ -461,6 +461,9 @@
                     <div class="pres-container">
                         <!-- Left: Block palette + slide list -->
                         <div class="pres-sidebar">
+                            <!-- Report wizard -->
+                            <button class="btn btn-primary pres-wizard-btn" style="width:100%;margin-bottom:12px">✨ Собрать отчёт</button>
+
                             <!-- Block palette -->
                             <div class="pres-palette">
                                 <h3 class="pres-section-title">Блоки</h3>
@@ -594,6 +597,58 @@
                             <div class="pres-settings-actions">
                                 <button class="btn btn-primary pres-settings-save">Применить</button>
                                 <button class="btn btn-secondary pres-settings-cancel">Отмена</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Report wizard overlay -->
+                    <div class="pres-settings-overlay pres-wizard-overlay" style="display:none">
+                        <div class="pres-settings-panel">
+                            <h3 class="pres-settings-title">✨ Мастер: собрать отчёт</h3>
+                            <div class="pres-settings-form">
+                                <div class="settings-group">
+                                    <label class="settings-label">Название отчёта</label>
+                                    <input type="text" class="pres-wiz-title" placeholder="Анализ российского рынка ...">
+                                </div>
+                                <div class="settings-group" style="display:flex;gap:10px">
+                                    <div style="flex:1">
+                                        <label class="settings-label">Часть</label>
+                                        <input type="text" class="pres-wiz-part" placeholder="Часть I">
+                                    </div>
+                                    <div style="flex:1">
+                                        <label class="settings-label">Год</label>
+                                        <input type="text" class="pres-wiz-year" placeholder="2025">
+                                    </div>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Товары — по строке: Название|ТНВЭД-префикс</label>
+                                    <textarea class="pres-wiz-products" rows="3" placeholder="кешью|0801320&#10;арахис|1202"></textarea>
+                                    <p class="pres-hint">Пусто — весь набор данных как единый рынок</p>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Разделы по каждому товару</label>
+                                    <div class="pres-wiz-sections" style="display:flex;flex-direction:column;gap:6px">
+                                        <label><input type="checkbox" value="volumes" checked> Объёмы и стоимость</label>
+                                        <label><input type="checkbox" value="countries" checked> Структура по странам</label>
+                                        <label><input type="checkbox" value="price-dynamics" checked> Динамика цен</label>
+                                        <label><input type="checkbox" value="sankey-manufacturer" checked> Изготовители → Получатели</label>
+                                        <label><input type="checkbox" value="sankey-sender"> Отправители → Получатели</label>
+                                        <label><input type="checkbox" value="quarterly-prices" checked> Поквартальные цены</label>
+                                    </div>
+                                </div>
+                                <div class="settings-group">
+                                    <label class="settings-label">Дополнительно</label>
+                                    <div class="pres-wiz-extras" style="display:flex;flex-direction:column;gap:6px">
+                                        <label><input type="checkbox" value="intro" checked> Введение (авто-обзор)</label>
+                                        <label><input type="checkbox" value="summary" checked> Резюме (авто-выводы)</label>
+                                        <label><input type="checkbox" value="recommendations" checked> Рекомендации-матрица</label>
+                                    </div>
+                                </div>
+                                <p class="pres-hint">Тексты слайдов заполнятся автоматически из данных. Собранный отчёт заменит текущие слайды.</p>
+                            </div>
+                            <div class="pres-settings-actions">
+                                <button class="btn btn-primary pres-wiz-build">Собрать отчёт</button>
+                                <button class="btn btn-secondary pres-wiz-cancel">Отмена</button>
                             </div>
                         </div>
                     </div>
