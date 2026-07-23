@@ -8475,25 +8475,45 @@ document.addEventListener('DOMContentLoaded', function () {
         // Table border
         body += '<rect x="0" y="0" width="' + svgW + '" height="' + tblH + '" fill="none" stroke="#CBD5E1" stroke-width="1" rx="4"/>';
 
-        // Bar chart
+        // Bar chart (think-cell стиль: подписи прироста между столбцами + плашка CAGR)
         if (barH > 0) {
             var vals = years.map(function(y) { return round2(byYear[y].weight / 1000); });
             var maxV = Math.max.apply(null, vals) || 1;
             var barTop = tblH + 16;
-            var bPad = { l: 8, r: 8, b: 28, t: 20 };
+            var bPad = { l: 8, r: 8, b: 28, t: 34 };
             var bInnerW = svgW - bPad.l - bPad.r;
             var bInnerH = barH - bPad.t - bPad.b;
             var slot = bInnerW / years.length;
             var bW = Math.min(60, slot * 0.6);
+            var centers = [];
             years.forEach(function(y, i) {
                 var v = vals[i];
                 var bh = Math.max(2, (v / maxV) * bInnerH);
                 var bx = bPad.l + slot * i + (slot - bW) / 2;
                 var by2 = barTop + bPad.t + bInnerH - bh;
+                centers.push({ x: bx + bW / 2, topY: by2, v: v });
                 body += '<rect x="' + bx + '" y="' + by2 + '" width="' + bW + '" height="' + bh + '" fill="#2563EB" rx="2"/>';
                 body += '<text x="' + (bx + bW / 2) + '" y="' + (by2 - 4) + '" text-anchor="middle" font-size="10" fill="#0F172A">' + formatNumber(v) + '</text>';
                 body += '<text x="' + (bx + bW / 2) + '" y="' + (barTop + bPad.t + bInnerH + 16) + '" text-anchor="middle" font-size="10" fill="#64748B">' + y + '</text>';
             });
+            // Проценты прироста между соседними столбцами
+            for (var ci = 1; ci < centers.length; ci++) {
+                var prev = centers[ci - 1], cur = centers[ci];
+                if (prev.v > 0) {
+                    var pct = Math.round((cur.v - prev.v) / prev.v * 100);
+                    var y1 = prev.topY - 14, y2 = cur.topY - 14;
+                    body += '<line x1="' + prev.x + '" y1="' + y1 + '" x2="' + cur.x + '" y2="' + y2 + '" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,2"/>';
+                    var sign = pct > 0 ? '+' : '';
+                    var pctColor = pct >= 0 ? '#16A34A' : '#DC2626';
+                    body += '<text x="' + ((prev.x + cur.x) / 2) + '" y="' + (Math.min(y1, y2) - 4) + '" text-anchor="middle" font-size="9" font-weight="700" fill="' + pctColor + '">' + sign + pct + '%</text>';
+                }
+            }
+            // Плашка CAGR
+            if (cagrW !== null) {
+                var badgeW = 84, badgeH = 20, badgeX = svgW - badgeW - 6, badgeY = barTop;
+                body += '<rect x="' + badgeX + '" y="' + badgeY + '" width="' + badgeW + '" height="' + badgeH + '" rx="4" fill="#EFF6FF" stroke="#2563EB" stroke-width="1"/>';
+                body += '<text x="' + (badgeX + badgeW / 2) + '" y="' + (badgeY + 14) + '" text-anchor="middle" font-size="11" font-weight="700" fill="#2563EB">CAGR ' + round2(cagrW) + '%</text>';
+            }
         }
 
         body += '</svg>';
