@@ -23,14 +23,14 @@ jobs:
       - name: Build dist
         run: node build.mjs
 
-      # Выкладываем каждый файл через curl по FTPS. Раньше использовался
-      # SamKirkland/FTP-Deploy-Action, но его TLS-клиент стабильно обрывался
-      # на крупном assets/main.js.dat (~0,5 МБ) при самоподписанном
-      # сертификате хостинга. curl -k заливает такие файлы надёжно.
+      # Выкладываем через lftp одной FTPS-сессией. Прежние варианты падали:
+      # FTP-Deploy-Action обрывался на крупном main.js.dat, а curl-цикл
+      # открывал новое соединение на каждый файл (хрупкий exit code, риск
+      # rate-limit сервера). lftp mirror заливает всё за один логин.
       #
-      # config.php (хеш пароля) создаётся на сервере через setup.php, в dist
-      # не входит и не перезаписывается — вход переживает выкладку.
-      - name: Deploy via curl (FTPS)
+      # mirror без --delete не трогает config.php (хеш пароля создаётся на
+      # сервере через setup.php, в dist не входит) — вход переживает выкладку.
+      - name: Deploy via lftp (FTPS)
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
@@ -38,13 +38,14 @@ jobs:
           FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
         run: |
           set -e
-          cd dist
-          # Нормализуем каталог назначения: гарантируем один слэш в конце
-          DEST="${FTP_SERVER_DIR%/}/"
-          find . -type f | sed 's|^\./||' | while read -r rel; do
-            echo "→ $rel"
-            curl -sS --ssl-reqd -k --ftp-create-dirs --max-time 300 --retry 2 \
-              -u "$FTP_USERNAME:$FTP_PASSWORD" \
-              -T "$rel" "ftp://${FTP_SERVER}${DEST}${rel}"
-          done
-          echo "Готово: выложено $(find . -type f | wc -l) файлов"
+          sudo apt-get update -qq && sudo apt-get install -y lftp
+          lftp -c "
+            set ssl:verify-certificate no;
+            set ftp:ssl-force true;
+            set ftp:ssl-protect-data true;
+            set net:max-retries 2;
+            set net:timeout 60;
+            open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
+            mirror -R --verbose --no-perms ./dist/ '$FTP_SERVER_DIR';
+          "
+          echo 'Deploy complete.'
