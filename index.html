@@ -26,9 +26,9 @@
                     <span class="sidebar-nav-icon" aria-hidden="true">📈</span>
                     <span class="sidebar-nav-text">Анализ</span>
                 </a>
-                <a href="#research" class="sidebar-nav-item">
+                <a href="#enrich" class="sidebar-nav-item">
                     <span class="sidebar-nav-icon" aria-hidden="true">🔍</span>
-                    <span class="sidebar-nav-text">Исследование</span>
+                    <span class="sidebar-nav-text">Обогащение</span>
                 </a>
                 <a href="#reports" class="sidebar-nav-item">
                     <span class="sidebar-nav-icon" aria-hidden="true">📊</span>
@@ -338,118 +338,51 @@
                     </div>
                 </section>
 
-                <!-- Research Module -->
-                <section id="research" class="module module-research">
-                    <h2 class="module-title">Исследование</h2>
+                <!-- Enrichment Module -->
+                <section id="enrich" class="module module-enrich">
+                    <h2 class="module-title">Обогащение данных</h2>
+                    <p class="pres-hint" style="margin:-8px 0 16px">Добавляет к загруженным данным новые столбцы — сегмент получателя, цену за килограмм. Работает на правилах и словарях, без нейросети.</p>
 
-                    <div class="research-container">
-                        <!-- Left: settings -->
-                        <aside class="research-settings">
-                            <div class="settings-group">
-                                <label class="settings-label">Провайдер</label>
-                                <select class="research-provider">
-                                    <option value="openrouter">OpenRouter</option>
-                                    <option value="openai">OpenAI (ChatGPT)</option>
-                                    <option value="groq">Groq (быстрый)</option>
-                                    <option value="ollama">Ollama (локально)</option>
-                                    <option value="lmstudio">LM Studio (локально)</option>
-                                    <option value="claude">Claude API</option>
-                                </select>
-                            </div>
-                            <div class="settings-group research-model-select-group">
-                                <label class="settings-label">Модель</label>
-                                <select class="research-model-select">
-                                    <optgroup label="OpenAI">
-                                        <option value="gpt-4o-mini">GPT-4o mini (быстрый, дешёвый)</option>
-                                        <option value="gpt-4o">GPT-4o</option>
-                                        <option value="gpt-4.1-mini">GPT-4.1 mini</option>
-                                    </optgroup>
-                                    <optgroup label="Groq">
-                                        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (рекомендуется)</option>
-                                        <option value="llama-3.1-8b-instant">Llama 3.1 8B (очень быстрый)</option>
-                                        <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                                        <option value="gemma2-9b-it">Gemma 2 9B</option>
-                                    </optgroup>
-                                    <optgroup label="С поиском в интернете">
-                                        <option value="perplexity/sonar">Perplexity Sonar (поиск)</option>
-                                        <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск)</option>
-                                    </optgroup>
-                                    <optgroup label="Бесплатные — крупные">
-                                        <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 Llama 405B</option>
-                                        <option value="openai/gpt-oss-120b:free">OpenAI OSS 120B</option>
-                                        <option value="meta-llama/llama-3.3-70b-instruct:free" selected>Llama 3.3 70B</option>
-                                        <option value="qwen/qwen3-235b-a22b-thinking-2507">Qwen3 235B Thinking</option>
-                                    </optgroup>
-                                    <optgroup label="Бесплатные — средние">
-                                        <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 24B</option>
-                                        <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
-                                        <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 0528</option>
-                                    </optgroup>
-                                    <option value="custom">Своя модель...</option>
-                                </select>
-                                <input type="text" class="research-model-custom" placeholder="Название модели" style="display:none;margin-top:6px">
-                            </div>
-                            <div class="settings-group research-url-group" style="display:none">
-                                <label class="settings-label">URL сервера</label>
-                                <input type="text" class="research-url" placeholder="http://localhost:11434">
-                            </div>
-                            <div class="settings-group">
-                                <label class="settings-label">API-ключ</label>
-                                <input type="password" class="research-apikey" placeholder="sk-...">
-                                <p class="pres-hint">Хранится только в браузере</p>
-                            </div>
-                            <div class="settings-group">
-                                <label class="settings-label">Товар / тема исследования</label>
-                                <textarea class="research-commodity" rows="3" placeholder="Например: орехи кешью, код ТН ВЭД 0801320000, импорт в Россию"></textarea>
-                                <p class="pres-hint">Нейронка будет знать какой товар анализируется</p>
-                            </div>
-                            <div class="settings-group">
-                                <label class="settings-label">Контекст данных</label>
-                                <label class="research-ctx-item" title="Период данных, полные и частичные годы">
-                                    <input type="checkbox" class="research-ctx-summary" checked>
-                                    <span>Сводка по данным</span>
-                                </label>
-                                <label class="research-ctx-item" title="Топ-5 стран по объёму: доля %, цена USD/кг">
-                                    <input type="checkbox" class="research-ctx-countries" checked>
-                                    <span>Топ стран</span>
-                                </label>
-                                <label class="research-ctx-item" title="Объём (тонн) и стоимость (тыс. USD) по каждому году">
-                                    <input type="checkbox" class="research-ctx-years" checked>
-                                    <span>Динамика по годам</span>
-                                </label>
-                            </div>
-                            <button class="btn btn-secondary research-clear-btn">Очистить чат</button>
-                            <div class="research-notes-section">
-                                <div class="research-notes-header">
-                                    <span class="research-notes-title">Заметки для отчёта</span>
-                                    <span class="research-notes-count">0</span>
-                                </div>
-                                <div class="research-notes-list"></div>
-                                <button class="btn btn-primary research-notes-to-slide" style="display:none">+ Слайд в презентацию</button>
-                            </div>
-                        </aside>
+                    <div class="enrich-container" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+                        <!-- Каталог обогатителей -->
+                        <div class="enrich-catalog" style="flex:1;min-width:320px">
+                            <h3 class="pres-section-title">Что добавить</h3>
+                            <div class="enrich-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
+                            <button class="btn btn-primary enrich-run-btn">Обогатить данные</button>
+                            <p class="pres-hint">Новые столбцы появятся в данных и станут доступны в анализе и презентациях.</p>
+                        </div>
 
-                        <!-- Right: chat -->
-                        <div class="research-chat">
-                            <div class="research-master">
-                                <div>
-                                    <div class="research-master-title">Мастер анализа</div>
-                                    <div class="research-master-subtitle">Собирает 5–7 готовых блоков для презентации по данным и внешнему контексту</div>
-                                </div>
-                                <button class="btn btn-primary research-master-btn">Собрать анализ для презентации</button>
+                        <!-- Результат -->
+                        <div class="enrich-result" style="flex:1;min-width:320px">
+                            <h3 class="pres-section-title">Результат</h3>
+                            <div class="enrich-summary">
+                                <p class="pres-hint">Выберите обогащение и нажмите «Обогатить данные».</p>
                             </div>
-                            <div class="research-messages"></div>
-                            <div class="research-presets">
-                                <button class="research-preset-btn">Анализ рынка</button>
-                                <button class="research-preset-btn">Тренды и прогноз</button>
-                                <button class="research-preset-btn">Ключевые игроки</button>
-                                <button class="research-preset-btn">Ценовые факторы</button>
-                                <button class="research-preset-btn">Регуляторные риски</button>
-                            </div>
-                            <div class="research-input-row">
-                                <textarea class="research-input" rows="2" placeholder="Задайте вопрос по данным или рынку..."></textarea>
-                                <button class="btn btn-primary research-send-btn">Отправить</button>
-                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Словарь сегментов -->
+                    <div class="enrich-dict-section" style="margin-top:24px">
+                        <h3 class="pres-section-title">Словарь сегментов <span class="enrich-dict-count">(0)</span></h3>
+                        <p class="pres-hint">Ручные соответствия «ИНН или название → сегмент». Имеют приоритет над правилами и сохраняются между сессиями.</p>
+                        <div class="enrich-dict-add" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+                            <input type="text" class="enrich-dict-key" placeholder="ИНН или название компании" style="flex:2;min-width:220px">
+                            <select class="enrich-dict-value" style="flex:1;min-width:180px">
+                                        <option value="Опт">Опт</option>
+                                        <option value="Розница">Розница</option>
+                                        <option value="Производство/переработка">Производство/переработка</option>
+                                        <option value="Кондитерская промышленность">Кондитерская промышленность</option>
+                                        <option value="HoReCa">HoReCa</option>
+                                        <option value="Дистрибуция">Дистрибуция</option>
+                                        <option value="Прочее">Прочее</option>
+                            </select>
+                            <button class="btn btn-secondary enrich-dict-add-btn">Добавить</button>
+                        </div>
+                        <div class="enrich-dict-list" style="max-height:220px;overflow:auto"></div>
+                        <div class="enrich-dict-actions" style="display:flex;gap:8px;margin-top:10px">
+                            <button class="btn btn-secondary enrich-dict-export">Экспорт JSON</button>
+                            <button class="btn btn-secondary enrich-dict-import-btn">Импорт JSON</button>
+                            <input type="file" class="enrich-dict-import" accept=".json" style="display:none">
                         </div>
                     </div>
                 </section>

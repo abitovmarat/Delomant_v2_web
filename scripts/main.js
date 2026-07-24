@@ -278,7 +278,6 @@ document.addEventListener('DOMContentLoaded', function () {
             updateRatioSelects();
             updateCustomMappingSelects();
             updateVisualizationFields();
-            autoFillResearchCommodity(appState.rawData, appState.headers);
         };
 
         if (ext === 'csv') {
@@ -452,86 +451,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function autoFillResearchCommodity(rows, headers) {
-        var el = document.querySelector('.research-commodity');
-        if (!el) return;
-
-        var parts = [];
-
-        // 1. ТН ВЭД — берём самый частый код среди первых 200 строк
-        var hsCol = findColumn(headers, COL_HS_CODE);
-        if (!hsCol) hsCol = findColumn(headers, 'Код ТН ВЭД');
-        if (!hsCol) {
-            for (var h = 0; h < headers.length; h++) {
-                if (/G33|ТН\s*ВЭД|HS.?code/i.test(headers[h])) { hsCol = headers[h]; break; }
-            }
-        }
-        if (hsCol) {
-            var hsCounts = {};
-            var limit = Math.min(rows.length, 200);
-            for (var i = 0; i < limit; i++) {
-                var code = String(rows[i][hsCol] || '').trim().replace(/\D/g, '').slice(0, 10);
-                if (code.length >= 4) hsCounts[code] = (hsCounts[code] || 0) + 1;
-            }
-            var topCode = Object.keys(hsCounts).sort(function(a, b) { return hsCounts[b] - hsCounts[a]; })[0];
-            if (topCode) parts.push('ТН ВЭД ' + topCode);
-        }
-
-        // 2. Описание товара — ищем по множеству вариантов названий колонок (до и после маппинга)
-        var descCandidates = [
-            COL_PRODUCT_NAME,
-            'Наименование и характеристики товаров',
-            'Описание товара',
-            'Наименование товара',
-            'Краткое описание',
-            'Описание',
-            'Товар',
-            'Наименование'
-        ];
-        var descCol = null;
-        for (var d = 0; d < descCandidates.length; d++) {
-            descCol = findColumn(headers, descCandidates[d]);
-            if (descCol) break;
-        }
-        // Фоллбэк: ищем по подстрокам в заголовках (G31, G31_1, «описание», «товар»)
-        if (!descCol) {
-            for (var h2 = 0; h2 < headers.length; h2++) {
-                if (/G31|описание.*товар|характеристик.*товар|наименование.*товар/i.test(headers[h2])) {
-                    descCol = headers[h2]; break;
-                }
-            }
-        }
-        if (descCol) {
-            // Собираем описания, группируем по первым 25 символам, берём наиболее частый вариант
-            var rootCounts = {};   // первые 25 символов → суммарный счётчик
-            var rootExample = {};  // первые 25 символов → самый частый полный вариант (до 120 символов)
-            var fullCounts = {};   // полный вариант → счётчик
-            var descSample = Math.min(rows.length, 400);
-            for (var j = 0; j < descSample; j++) {
-                var desc = String(rows[j][descCol] || '').trim().toUpperCase().replace(/\s+/g, ' ');
-                if (desc.length < 4) continue;
-                var full = desc.slice(0, 120);
-                fullCounts[full] = (fullCounts[full] || 0) + 1;
-                var root = desc.slice(0, 25);
-                rootCounts[root] = (rootCounts[root] || 0) + 1;
-                if (!rootExample[root] || fullCounts[full] > fullCounts[rootExample[root]]) {
-                    rootExample[root] = full;
-                }
-            }
-            // Находим самый частый «корень» описания, берём первые 3 слова
-            var topRoot = Object.keys(rootCounts).sort(function(a, b) { return rootCounts[b] - rootCounts[a]; })[0];
-            if (topRoot && rootExample[topRoot]) {
-                var full = rootExample[topRoot];
-                var commaIdx = full.indexOf(',');
-                parts.push(commaIdx > 0 ? full.slice(0, commaIdx) : full.slice(0, 40));
-            }
-        }
-
-        if (parts.length > 0) {
-            el.value = parts.join(', ');
-        }
-    }
-
     function applyParsedData(file, parsed) {
         appState.rawData = parsed.rows;
         appState.headers = parsed.headers;
@@ -547,7 +466,6 @@ document.addEventListener('DOMContentLoaded', function () {
         updateRatioSelects();
         updateCustomMappingSelects();
         updateVisualizationFields();
-        autoFillResearchCommodity(parsed.rows, parsed.headers);
     }
 
     function showFileError(message) {
@@ -6677,822 +6595,323 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /* ================================
-       Module: Research (AI Chat)
+       Module: Enrichment (обогащение данных)
        ================================ */
 
-    var LS_RESEARCH_APIKEY   = 'delomant_research_apikey';
-    var LS_RESEARCH_PROVIDER = 'delomant_research_provider';
-    var LS_RESEARCH_AIURL    = 'delomant_research_aiurl';
-    var LS_RESEARCH_MODEL    = 'delomant_research_model';
-    var LS_RESEARCH_NOTES    = 'delomant_research_notes';
+    var COL_SEGMENT  = 'Сегмент';
+    var COL_PRICE_KG = 'Цена, USD/кг';
 
-    var researchHistory = []; // {role, content}
-    var researchNotes   = JSON.parse(localStorage.getItem(LS_RESEARCH_NOTES) || '[]'); // {id, text, ts}
+    var LS_SEGMENT_DICT = 'delomant_segment_dictionary';
+    var segmentDict = {};
+    try { segmentDict = JSON.parse(localStorage.getItem(LS_SEGMENT_DICT) || '{}') || {}; } catch (e) { segmentDict = {}; }
 
-    var researchMsgs        = document.querySelector('.research-messages');
-    var researchInput       = document.querySelector('.research-input');
-    var researchSendBtn     = document.querySelector('.research-send-btn');
-    var researchClearBtn    = document.querySelector('.research-clear-btn');
-    var researchProvider    = document.querySelector('.research-provider');
-    var researchModelSel    = document.querySelector('.research-model-select');
-    var researchModelCst    = document.querySelector('.research-model-custom');
-    var researchUrlGroup    = document.querySelector('.research-url-group');
-    var researchUrl         = document.querySelector('.research-url');
-    var researchApiKey      = document.querySelector('.research-apikey');
-    var researchNotesList   = document.querySelector('.research-notes-list');
-    var researchNotesCount  = document.querySelector('.research-notes-count');
-    var researchNotesToSlide = document.querySelector('.research-notes-to-slide');
-    var researchMasterBtn   = document.querySelector('.research-master-btn');
-
-    // Restore saved settings
-    (function () {
-        var p = localStorage.getItem(LS_RESEARCH_PROVIDER) || 'openrouter';
-        var k = localStorage.getItem(LS_RESEARCH_APIKEY) || '';
-        var u = localStorage.getItem(LS_RESEARCH_AIURL) || '';
-        var m = localStorage.getItem(LS_RESEARCH_MODEL) || '';
-        researchProvider.value = p;
-        researchApiKey.value = k;
-        researchUrl.value = u;
-        updateResearchProviderUI(p);
-        if (m && researchModelSel) {
-            var found = false;
-            for (var oi = 0; oi < researchModelSel.options.length; oi++) {
-                if (researchModelSel.options[oi].value === m) { found = true; break; }
-            }
-            if (found) {
-                researchModelSel.value = m;
-            } else {
-                researchModelSel.value = 'custom';
-                researchModelCst.value = m;
-                researchModelCst.style.display = '';
-            }
-        }
-    })();
-
-    function updateResearchProviderUI(pKey) {
-        var isLocal = pKey === 'ollama' || pKey === 'lmstudio';
-        var isClaude = pKey === 'claude';
-        var isOpenAI = pKey === 'openai';
-        var isGroq = pKey === 'groq';
-        researchUrlGroup.style.display = isLocal ? '' : 'none';
-        document.querySelector('.research-model-select-group').style.display = (isClaude || isOpenAI) ? 'none' : '';
-        if (isLocal) {
-            researchModelSel.style.display = 'none';
-            researchModelCst.style.display = '';
-            researchModelCst.placeholder = pKey === 'ollama' ? 'qwen3:8b' : 'local-model';
-            researchUrl.placeholder = pKey === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234';
-        } else {
-            researchModelSel.style.display = '';
-            researchModelCst.style.display = researchModelSel.value === 'custom' ? '' : 'none';
-        }
-    }
-
-    researchProvider.addEventListener('change', function () {
-        updateResearchProviderUI(this.value);
-    });
-
-    researchModelSel.addEventListener('change', function () {
-        researchModelCst.style.display = this.value === 'custom' ? '' : 'none';
-        if (this.value === 'custom') researchModelCst.focus();
-    });
-
-    function getResearchModel() {
-        var pKey = researchProvider.value;
-        if (pKey === 'claude') return 'claude-sonnet-4-20250514';
-        if (pKey === 'openai') return 'gpt-4o-mini';
-        if (pKey === 'groq') return researchModelSel.value !== 'custom' ? researchModelSel.value : (researchModelCst.value.trim() || 'llama-3.3-70b-versatile');
-        if (pKey === 'ollama' || pKey === 'lmstudio') {
-            return researchModelCst.value.trim() || (pKey === 'ollama' ? 'qwen3:8b' : 'local-model');
-        }
-        if (researchModelSel.value === 'custom') {
-            return researchModelCst.value.trim() || 'meta-llama/llama-3.3-70b-instruct:free';
-        }
-        return researchModelSel.value || 'meta-llama/llama-3.3-70b-instruct:free';
-    }
-
-    function buildResearchContext() {
-        var data = getActiveData();
-        var headers = getActiveHeaders();
-        if (!data || data.length === 0) return '';
-
-        var weightCol = findColumn(headers, COL_WEIGHT);
-        var statUsdCol = findColumn(headers, COL_STAT_USD);
-        var yearCol = findColumn(headers, COL_YEAR);
-        var quarterCol = findColumn(headers, COL_QUARTER);
-
-        // Описание товара
-        var commodityEl = document.querySelector('.research-commodity');
-        var commodity = commodityEl ? commodityEl.value.trim() : '';
-
-        var ctx = '';
-        if (commodity) ctx += 'Товар/тема: ' + commodity + '\n';
-        ctx += 'Источник: таможенные данные ВЭД (' + data.length + ' деклараций).\n';
-
-        // --- Определяем полные и неполные годы по кварталам ---
-        if (yearCol) {
-            var byYear = {};
-            var byYearQ = {};
-            data.forEach(function (row) {
-                var y = String(row[yearCol] || '').trim();
-                if (!y) return;
-                var w = Number(row[weightCol]) || 0;
-                var u = Number(row[statUsdCol]) || 0;
-                if (!byYear[y]) byYear[y] = { w: 0, u: 0 };
-                byYear[y].w += w;
-                byYear[y].u += u;
-                if (quarterCol) {
-                    var q = String(row[quarterCol] || '').trim();
-                    if (q) {
-                        if (!byYearQ[y]) byYearQ[y] = {};
-                        byYearQ[y][q] = true;
-                    }
-                }
-            });
-
-            var ys = Object.keys(byYear).sort();
-            if (ys.length === 0) return ctx;
-
-            // Определяем неполный год: последний год, у которого < 4 кварталов
-            var partialYear = null;
-            var partialQs = [];
-            if (quarterCol && ys.length >= 2) {
-                var lastY = ys[ys.length - 1];
-                var prevY = ys[ys.length - 2];
-                var lastQs = Object.keys(byYearQ[lastY] || {}).sort();
-                var prevQs = Object.keys(byYearQ[prevY] || {}).sort();
-                if (lastQs.length < prevQs.length || lastQs.length < 4) {
-                    partialYear = lastY;
-                    partialQs = lastQs;
-                }
-            }
-
-            if (document.querySelector('.research-ctx-summary').checked) {
-                ctx += 'Период данных: ' + ys[0] + '–' + ys[ys.length - 1] + '.\n';
-
-                // Явно указываем какие годы полные, какой частичный
-                var fullYears = partialYear ? ys.filter(function(y) { return y !== partialYear; }) : ys;
-                if (fullYears.length > 0) {
-                    ctx += 'Полные годы (январь–декабрь): ' + fullYears.join(', ') + '.\n';
-                }
-                if (partialYear) {
-                    var qLabel = partialQs.length > 0 ? 'Q' + partialQs.join('+Q') : 'неполный';
-                    ctx += 'ВАЖНО: ' + partialYear + ' г. — данные только за ' + qLabel +
-                        ' (' + partialQs.length + ' из 4 кварталов). ' +
-                        'При сравнении с другими годами делать поправку на неполноту периода!\n';
-                }
-            }
-
-            if (document.querySelector('.research-ctx-years').checked) {
-                ctx += 'Объёмы по годам (тонн / тыс. USD):\n';
-                ys.forEach(function (y) {
-                    var d = byYear[y];
-                    var note = '';
-                    if (y === partialYear) {
-                        note = ' [неполный год, только ' + partialQs.length + ' кв.]';
-                    }
-                    ctx += '  ' + y + note + ': ' +
-                        round2(d.w / 1000) + ' тонн, ' +
-                        round2(d.u / 1000) + ' тыс. USD\n';
-                });
-            }
-        }
-
-        if (document.querySelector('.research-ctx-countries').checked) {
-            var cCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
-            var wCol = findColumn(headers, COL_WEIGHT);
-            if (cCol && wCol) {
-                var byC = {};
-                var grand = 0;
-                data.forEach(function (row) {
-                    var c = String(row[cCol] || '').trim();
-                    var w = Number(row[wCol]) || 0;
-                    if (c) { byC[c] = (byC[c] || 0) + w; grand += w; }
-                });
-                var top5 = Object.keys(byC).sort(function (a, b) { return byC[b] - byC[a]; }).slice(0, 5);
-                ctx += 'Топ-5 стран-поставщиков: ' + top5.map(function (c) {
-                    return c + ' (' + round2(byC[c] / grand * 100) + '%)';
-                }).join(', ') + '.\n';
-            }
-        }
-
-        return ctx;
-    }
-
-    var RESEARCH_PRESETS = {
-        'Анализ рынка': 'Проанализируй текущее состояние рынка по данным. Найди актуальную информацию о рыночных тенденциях, объёмах торговли и ключевых участниках.',
-        'Тренды и прогноз': 'На основе динамики по годам определи тренды и дай прогноз на следующий год. Учти глобальные факторы.',
-        'Ключевые игроки': 'Кто является ключевыми поставщиками и покупателями на этом рынке? Найди информацию о ведущих компаниях.',
-        'Ценовые факторы': 'Какие факторы влияют на цены в этом сегменте? Проанализируй динамику цен и внешние факторы.',
-        'Регуляторные риски': 'Какие регуляторные риски и торговые ограничения существуют для данного вида товаров? Проверь актуальные санкции и пошлины.'
-    };
-
-    function renderMarkdown(text) {
-        // Экранируем HTML
-        var s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        // Заголовки
-        s = s.replace(/^#{4,6}\s+(.+)$/gm, '<strong>$1</strong>');
-        s = s.replace(/^###\s+(.+)$/gm, '<strong style="font-size:1.05em">$1</strong>');
-        s = s.replace(/^##\s+(.+)$/gm, '<strong style="font-size:1.1em">$1</strong>');
-        s = s.replace(/^#\s+(.+)$/gm, '<strong style="font-size:1.15em">$1</strong>');
-        // Жирный и курсив
-        s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        // Инлайн-код
-        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // Горизонтальная линия
-        s = s.replace(/^---+$/gm, '<hr>');
-        // Ненумерованные списки
-        s = s.replace(/^[\*\-]\s+(.+)$/gm, '<li>$1</li>');
-        s = s.replace(/(<li>.*<\/li>\n?)+/g, function(m) { return '<ul>' + m + '</ul>'; });
-        // Нумерованные списки
-        s = s.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
-        // Переносы строк → <br> (только там где нет блочных элементов)
-        s = s.replace(/\n{2,}/g, '<br><br>');
-        s = s.replace(/\n/g, '<br>');
-        return s;
-    }
-
-    function researchAddMessage(role, text, isLoading) {
-        var div = document.createElement('div');
-        div.className = 'research-msg ' + role + (isLoading ? ' loading' : '');
-
-        var label = document.createElement('div');
-        label.className = 'research-msg-label';
-        label.textContent = role === 'user' ? 'Вы' : 'AI';
-
-        var bubble = document.createElement('div');
-        bubble.className = 'research-msg-bubble';
-        if (role === 'assistant' && !isLoading) {
-            bubble.innerHTML = renderMarkdown(text);
-        } else {
-            bubble.textContent = text;
-        }
-
-        div.appendChild(label);
-        div.appendChild(bubble);
-
-        // Кнопки для ответа ассистента
-        if (role === 'assistant' && !isLoading) {
-            var actions = document.createElement('div');
-            actions.className = 'research-msg-actions';
-
-            var copyBtn = document.createElement('button');
-            copyBtn.textContent = 'Копировать';
-            copyBtn.addEventListener('click', function () {
-                navigator.clipboard.writeText(text).then(function () {
-                    copyBtn.textContent = 'Скопировано!';
-                    setTimeout(function () { copyBtn.textContent = 'Копировать'; }, 1500);
-                });
-            });
-            actions.appendChild(copyBtn);
-
-            var noteBtn = document.createElement('button');
-            noteBtn.className = 'research-note-btn';
-            noteBtn.textContent = 'В отчёт';
-            noteBtn.addEventListener('click', function () {
-                addResearchNote(text);
-                noteBtn.textContent = '✓ Сохранено';
-                noteBtn.disabled = true;
-            });
-            actions.appendChild(noteBtn);
-
-            div.appendChild(actions);
-        }
-
-        // Убрать заглушку если есть
-        var empty = researchMsgs.querySelector('.research-empty');
-        if (empty) empty.remove();
-
-        researchMsgs.appendChild(div);
-        researchMsgs.scrollTop = researchMsgs.scrollHeight;
-        return div;
-    }
-
-    function researchShowEmpty() {
-        researchMsgs.innerHTML = '';
-        var div = document.createElement('div');
-        div.className = 'research-empty';
-        div.innerHTML = '<div class="research-empty-icon">🔍</div>' +
-            '<div class="research-empty-text">Задайте вопрос — AI ответит с учётом ваших данных</div>';
-        researchMsgs.appendChild(div);
-    }
-
-    researchShowEmpty();
-
-    // --- Заметки для отчёта ---
-
-    function saveResearchNotes() {
-        localStorage.setItem(LS_RESEARCH_NOTES, JSON.stringify(researchNotes));
-    }
-
-    function renderResearchNotes() {
-        researchNotesCount.textContent = researchNotes.length;
-        researchNotesList.innerHTML = '';
-        researchNotes.forEach(function (note) {
-            var item = document.createElement('div');
-            item.className = 'research-note-item';
-
-            var preview = document.createElement('div');
-            preview.className = 'research-note-preview';
-            preview.textContent = note.text.slice(0, 120) + (note.text.length > 120 ? '…' : '');
-
-            var del = document.createElement('button');
-            del.className = 'research-note-del';
-            del.title = 'Удалить';
-            del.textContent = '✕';
-            del.addEventListener('click', function () {
-                researchNotes = researchNotes.filter(function (n) { return n.id !== note.id; });
-                saveResearchNotes();
-                renderResearchNotes();
-            });
-
-            item.appendChild(preview);
-            item.appendChild(del);
-            researchNotesList.appendChild(item);
-        });
-
-        researchNotesToSlide.style.display = researchNotes.length ? '' : 'none';
-    }
-
-    function addResearchNote(text) {
-        researchNotes.push({ id: Date.now(), text: text, ts: new Date().toISOString() });
-        saveResearchNotes();
-        renderResearchNotes();
-    }
-
-    function buildResearchDeckMetrics() {
-        var data = getActiveData();
-        var headers = getActiveHeaders();
-        if (!data || data.length === 0) return 'Нет загруженных данных.';
-
-        var yearCol = findColumn(headers, COL_YEAR);
-        var quarterCol = findColumn(headers, COL_QUARTER);
-        var weightCol = findColumn(headers, COL_WEIGHT);
-        var statUsdCol = findColumn(headers, COL_STAT_USD);
-        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
-        var senderCol = findColumn(headers, COL_SENDER);
-        var receiverCol = findColumn(headers, COL_RECEIVER);
-        var manufacturerCol = findColumn(headers, COL_MANUFACTURER);
-        var hsCol = findColumn(headers, COL_HS_CODE);
-        var dirCol = findColumn(headers, COL_DIRECTION);
-
-        function num(row, col) {
-            return col ? (Number(row[col]) || 0) : 0;
-        }
-
-        function topBy(col, valCol, limit) {
-            if (!col || !valCol) return [];
-            var map = {};
-            var total = 0;
-            data.forEach(function (row) {
-                var key = String(row[col] || '').trim();
-                var val = num(row, valCol);
-                if (!key || val <= 0) return;
-                map[key] = (map[key] || 0) + val;
-                total += val;
-            });
-            return Object.keys(map).sort(function (a, b) { return map[b] - map[a]; }).slice(0, limit).map(function (key) {
-                return {
-                    name: key,
-                    tons: round2(map[key] / 1000),
-                    share: total > 0 ? round2(map[key] / total * 100) : 0
-                };
-            });
-        }
-
-        var byYear = {};
-        var byYearQ = {};
-        data.forEach(function (row) {
-            var y = yearCol ? String(row[yearCol] || '').trim() : '';
-            if (y) {
-                if (!byYear[y]) byYear[y] = { w: 0, u: 0 };
-                byYear[y].w += num(row, weightCol);
-                byYear[y].u += num(row, statUsdCol);
-                if (quarterCol) {
-                    var q = String(row[quarterCol] || '').trim();
-                    if (q) {
-                        if (!byYearQ[y]) byYearQ[y] = {};
-                        byYearQ[y][q] = true;
-                    }
-                }
-            }
-        });
-
-        var years = Object.keys(byYear).sort();
-        var partialYear = '';
-        if (quarterCol && years.length) {
-            var lastY = years[years.length - 1];
-            var lastQs = Object.keys(byYearQ[lastY] || {});
-            if (lastQs.length > 0 && lastQs.length < 4) partialYear = lastY + ' (' + lastQs.length + ' кв. из 4)';
-        }
-
-        var totalW = 0;
-        var totalU = 0;
-        data.forEach(function (row) {
-            totalW += num(row, weightCol);
-            totalU += num(row, statUsdCol);
-        });
-
-        var cagrWeight = null;
-        var cagrUsd = null;
-        if (years.length >= 2) {
-            var first = byYear[years[0]];
-            var last = byYear[years[years.length - 1]];
-            var n = years.length - 1;
-            cagrWeight = presCalcCAGR(first.w, last.w, n);
-            cagrUsd = presCalcCAGR(first.u, last.u, n);
-        }
-
-        var prices = [];
-        data.forEach(function (row) {
-            var w = num(row, weightCol);
-            var u = num(row, statUsdCol);
-            if (w > 0 && u > 0) prices.push(u / w);
-        });
-        prices.sort(function (a, b) { return a - b; });
-
-        var hsCodes = {};
-        if (hsCol) {
-            data.forEach(function (row) {
-                var code = String(row[hsCol] || '').trim();
-                if (code) hsCodes[code] = true;
-            });
-        }
-        var dirs = {};
-        if (dirCol) {
-            data.forEach(function (row) {
-                var d = String(row[dirCol] || '').trim();
-                if (d) dirs[d] = true;
-            });
-        }
-
-        var lines = [];
-        lines.push('Срез данных для презентационного анализа:');
-        lines.push('- строк: ' + formatNumber(data.length));
-        lines.push('- период: ' + (years.length ? years[0] + '–' + years[years.length - 1] : 'не определён'));
-        if (partialYear) lines.push('- неполный год: ' + partialYear);
-        lines.push('- направление: ' + (Object.keys(dirs).join(', ') || 'не определено'));
-        lines.push('- кодов ТН ВЭД: ' + Object.keys(hsCodes).slice(0, 8).join(', ') + (Object.keys(hsCodes).length > 8 ? ' и др.' : ''));
-        lines.push('- общий объём: ' + round2(totalW / 1000) + ' тонн');
-        lines.push('- общая стоимость: ' + round2(totalU / 1000) + ' тыс. USD');
-        if (cagrWeight != null) lines.push('- CAGR объёма: ' + cagrWeight + '%; CAGR стоимости: ' + cagrUsd + '%');
-        if (prices.length) {
-            lines.push('- цена USD/кг: средняя ' + (totalW > 0 ? round2(totalU / totalW) : 0) + ', диапазон ' + round2(prices[0]) + '–' + round2(prices[prices.length - 1]));
-        }
-        if (years.length) {
-            lines.push('- динамика по годам:');
-            years.forEach(function (y) {
-                lines.push('  ' + y + ': ' + round2(byYear[y].w / 1000) + ' тонн, ' + round2(byYear[y].u / 1000) + ' тыс. USD');
-            });
-        }
-        lines.push('- топ стран: ' + topBy(countryCol, weightCol, 7).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
-        lines.push('- топ отправителей: ' + topBy(senderCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
-        lines.push('- топ получателей: ' + topBy(receiverCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
-        lines.push('- топ изготовителей: ' + topBy(manufacturerCol, weightCol, 5).map(function (x) { return x.name + ' ' + x.share + '%'; }).join('; '));
-
-        return lines.join('\n');
-    }
-
-    // Блоки текстового аналитического отчёта — генерируются по одному (узкий промпт на блок)
-    var RESEARCH_DECK_BLOCKS = [
-        { title: 'Рынок и внешний контекст', kind: 'external',
-          instr: 'Дай 3–4 тезиса о состоянии рынка этого товара и внешнем контексте: мировой спрос и предложение, ключевые регионы производства и потребления, макро-факторы. Добавляй внешний контекст, не пересказывай внутренние цифры дословно.' },
-        { title: 'Динамика объёмов и стоимости', kind: 'data',
-          instr: 'На основе приведённого среза дай 3–4 тезиса о динамике объёма (тонн) и стоимости (USD) импорта: направление тренда, темпы (CAGR), заметные изменения по годам. Используй только приведённые числа. Не сравнивай неполный год с полными без явной оговорки.' },
-        { title: 'Страны и структура поставок', kind: 'data',
-          instr: 'Дай 3–4 тезиса о географии поставок по приведённым данным: страны-лидеры и их доли, уровень концентрации рынка, изменения структуры. Только по приведённым данным.' },
-        { title: 'Цены и ценовые факторы', kind: 'mixed',
-          instr: 'Дай 3–4 тезиса о ценах (USD/кг): текущий уровень и диапазон по данным, динамика, а также внешние ценовые факторы (стоимость сырья, логистика, валютный курс, сезонность).' },
-        { title: 'Ключевые игроки', kind: 'external',
-          instr: 'Дай 3–4 тезиса о ключевых игроках рынка. Если в приведённом срезе есть отправители, изготовители или получатели — упомяни лидеров из данных и дополни известными игроками мирового рынка.' },
-        { title: 'Риски и ограничения', kind: 'external',
-          instr: 'Дай 3–4 тезиса о рисках и ограничениях для этого товара: пошлины, квоты, санкции, сертификация и регулирование, логистика, качество. Ориентируйся на актуальность в период данных.' },
-        { title: 'Итоговые выводы', kind: 'summary',
-          instr: 'На основе предыдущих блоков сформулируй 3–5 итоговых выводов и практических рекомендаций для презентации. Кратко и по делу.' }
+    // Сегменты в формулировках компании (взяты из их размеченных отчётов)
+    var SEGMENT_LIST = [
+        'Переработка и производство',
+        'Оптовая торговля',
+        'Дистрибуция',
+        'Кондитерское производство',
+        'Розничная торговля',
+        'Прочее'
     ];
 
-    function buildResearchBlockPrompt(block, commodity, metricsText, canSearch, priorText) {
-        var p = 'Ты аналитик ВЭД (внешнеэкономическая деятельность). Готовишь ОДИН блок тезисов для слайда презентации.\n\n';
-        p += 'Блок: ' + block.title + '\n';
-        if (commodity) { p += 'Товар / тема: ' + commodity + '\n'; }
-        p += '\nСрез внутренних данных (таможенная статистика):\n' + metricsText + '\n\n';
-        if (block.kind === 'summary' && priorText) {
-            p += 'Ранее собранные блоки:\n' + priorText + '\n\n';
+    // Правила-резерв: используются, только если в словаре нет записи.
+    // Порядок важен — узкие категории раньше широких.
+    var SEGMENT_RULES = [
+        { segment: 'Кондитерское производство', keys: ['КОНДИТЕР', 'ШОКОЛАД', 'КОНФЕТ', 'СЛАДОСТ'] },
+        { segment: 'Розничная торговля',        keys: ['РИТЕЙЛ', 'RETAIL', 'МАРКЕТ', 'МАГАЗИН', 'ПЯТЕРОЧКА', 'ПЯТЁРОЧКА', 'ПЕРЕКРЕСТОК', 'ПЕРЕКРЁСТОК', 'МАГНИТ', 'АШАН'] },
+        { segment: 'Переработка и производство', keys: ['ЗАВОД', 'ФАБРИКА', 'КОМБИНАТ', 'ПРОИЗВОДСТВ', 'ПЕРЕРАБОТ', 'АГРО'] },
+        { segment: 'Дистрибуция',               keys: ['ДИСТРИБ', 'DISTRIB', 'ЛОГИСТИК'] },
+        { segment: 'Оптовая торговля',          keys: ['ОПТ', 'ТОРГОВЫЙ ДОМ', 'ТРЕЙД', 'TRADE'] }
+    ];
+
+    // Колонки в сырых выгрузках названы иначе, чем после «Обработки»,
+    // поэтому ищем по нескольким вариантам.
+    function findAnyColumn(headers, names) {
+        for (var i = 0; i < names.length; i++) {
+            if (headers.indexOf(names[i]) !== -1) return names[i];
         }
-        p += 'Задача: ' + block.instr + '\n\n';
-        if (block.kind === 'external' || block.kind === 'mixed') {
-            if (canSearch) {
-                p += 'Проверь актуальные внешние данные в интернете (приоритет источников: UN Comtrade, WITS/World Bank, WTO Tariff & Trade Data, World Bank Pink Sheet, FAOSTAT/ITC) и указывай источник в скобках в конце тезиса, где он использован.\n';
-            } else {
-                p += 'Внешние сведения без интернет-поиска помечай пометкой «(требует проверки)».\n';
-            }
-        }
-        p += 'Формат ответа: 3–5 тезисов, каждый с новой строки, без нумерации и без заголовков, деловой стиль, на русском. Только тезисы.';
-        return p;
+        return null;
     }
 
-    // Сохраняет структурированные блоки в заметки и создаёт текстовые слайды
-    function commitResearchBlocks(blocks) {
-        blocks.forEach(function (b) {
-            researchNotes.push({
-                id: Date.now() + Math.floor(Math.random() * 100000),
-                text: b.title + '\n' + b.body,
-                ts: new Date().toISOString()
+    var RECEIVER_COLS = ['Наименование получателя', 'G082 (Наименование получателя)', '083 Наименование/ФИО получателя'];
+    var INN_COLS      = ['ИНН получателя', 'G081 (ИНН получателя)', '081 ИНН получателя'];
+    var SEGMENT_COLS  = ['Сегмент получателя', 'Сегмент'];
+
+    // Ручной словарь имеет приоритет над правилами: сначала ИНН, потом название
+    function detectSegment(name, inn) {
+        var key = String(name || '').toUpperCase().trim();
+        var innKey = String(inn || '').trim();
+        if (innKey && segmentDict[innKey]) return segmentDict[innKey];
+        if (key && segmentDict[key]) return segmentDict[key];
+        for (var i = 0; i < SEGMENT_RULES.length; i++) {
+            var r = SEGMENT_RULES[i];
+            for (var k = 0; k < r.keys.length; k++) {
+                if (key.indexOf(r.keys[k]) !== -1) return r.segment;
+            }
+        }
+        return 'Прочее';
+    }
+
+    /*
+     * Сегмент получателя.
+     *
+     * Рабочие файлы компании уже содержат ручную разметку в столбце
+     * «Сегмент получателя». Поэтому обогатитель сначала УЧИТСЯ на ней —
+     * пополняет словарь «ИНН → сегмент», — и только потом заполняет строки,
+     * где сегмент пуст. Существующая разметка не перезаписывается.
+     *
+     * На новой сырой выгрузке (разметки нет) словарь и правила проставляют
+     * сегмент автоматически — это и заменяет ручную работу в Excel.
+     */
+    function enrichSegment(data, headers) {
+        var recvCol = findAnyColumn(headers, RECEIVER_COLS);
+        var innCol  = findAnyColumn(headers, INN_COLS);
+        var target  = findAnyColumn(headers, SEGMENT_COLS);
+        if (!recvCol && !innCol) {
+            return { error: 'Не найдены столбцы «' + RECEIVER_COLS[0] + '» или «' + INN_COLS[0] + '»' };
+        }
+
+        // 1. Учимся на уже размеченных строках
+        var learned = 0;
+        if (target) {
+            data.forEach(function (row) {
+                var seg = String(row[target] || '').trim();
+                if (!seg) return;
+                var inn = innCol ? String(row[innCol] || '').trim() : '';
+                var nm  = recvCol ? String(row[recvCol] || '').toUpperCase().trim() : '';
+                if (inn) { if (!segmentDict[inn]) { segmentDict[inn] = seg; learned++; } }
+                else if (nm) { if (!segmentDict[nm]) { segmentDict[nm] = seg; learned++; } }
             });
-        });
-        saveResearchNotes();
-        renderResearchNotes();
+            if (learned) { saveSegmentDict(); renderSegmentDict(); }
+        } else {
+            target = COL_SEGMENT;
+            headers.push(target);
+        }
 
-        if (!findPresBlock('text')) { return 0; }
-        var startIndex = presState.slides.length;
-        blocks.forEach(function (block) {
-            var lines = stripMarkdown(block.body).split('\n').map(function (line) {
-                return line.trim();
-            }).filter(Boolean);
-            if (lines.length === 0) { lines = [block.body]; }
-            var LINES_PER_SLIDE = 5;
-            for (var offset = 0; offset < lines.length; offset += LINES_PER_SLIDE) {
-                var title = block.title;
-                if (offset > 0) { title += ' (продолжение)'; }
-                presState.slides.push({
-                    id: presState.nextId++,
-                    type: 'text',
-                    title: title,
-                    hsFilter: '',
-                    topN: 10,
-                    year: '',
-                    opts: { subtitle: '', bullets: lines.slice(offset, offset + LINES_PER_SLIDE).join('\n') }
-                });
-            }
+        // 2. Заполняем пустые (уже размеченное не трогаем)
+        var stats = {}, filled = 0, already = 0;
+        data.forEach(function (row) {
+            var cur = String(row[target] || '').trim();
+            if (cur) { stats[cur] = (stats[cur] || 0) + 1; already++; return; }
+            var seg = detectSegment(recvCol ? row[recvCol] : '', innCol ? row[innCol] : '');
+            row[target] = seg;
+            stats[seg] = (stats[seg] || 0) + 1;
+            filled++;
         });
-        if (presState.slides.length === startIndex) { return 0; }
-        presState.activeIndex = startIndex;
-        renderPresSlideList();
-        previewPresSlide(presState.activeIndex);
-        updatePresButtons();
-        return presState.slides.length - startIndex;
+
+        return { total: data.length, recognized: filled, already: already, learned: learned, stats: stats, target: target };
     }
 
-    function researchRunMaster() {
+    // --- Обогатитель: цена за килограмм ---
+    var PRICE_COLS  = ['USD за КГ статистическая', 'Цена, USD/кг'];
+    var WEIGHT_COLS = ['Вес нетто, кг', 'G38 (Вес нетто, кг)'];
+    var USD_COLS    = ['Статистическая стоимость, USD', 'G46 (Статистическая стоимость, USD.)', 'USD статистическая'];
+
+    function enrichPriceKg(data, headers) {
+        var existing = findAnyColumn(headers, PRICE_COLS);
+        if (existing) {
+            return { skipped: true, note: 'В данных уже есть столбец «' + existing + '» — расчёт не нужен.' };
+        }
+        var wCol = findAnyColumn(headers, WEIGHT_COLS);
+        var uCol = findAnyColumn(headers, USD_COLS);
+        if (!wCol || !uCol) {
+            return { error: 'Нужны столбцы веса («' + WEIGHT_COLS[0] + '») и стоимости («' + USD_COLS[0] + '»)' };
+        }
+        if (headers.indexOf(COL_PRICE_KG) === -1) headers.push(COL_PRICE_KG);
+        var filled = 0, sum = 0;
+        data.forEach(function (row) {
+            var w = Number(row[wCol]) || 0, u = Number(row[uCol]) || 0;
+            if (w > 0 && u > 0) { var p = round2(u / w); row[COL_PRICE_KG] = p; filled++; sum += p; }
+            else { row[COL_PRICE_KG] = ''; }
+        });
+        return { total: data.length, recognized: filled, avg: filled ? round2(sum / filled) : null };
+    }
+
+    // --- Реестр обогатителей ---
+    var ENRICHERS = [
+        {
+            id: 'segment',
+            label: 'Сегмент получателя',
+            description: 'Опт / розница / производство / кондитерская / HoReCa / дистрибуция — по названию и словарю',
+            adds: [COL_SEGMENT],
+            run: enrichSegment
+        },
+        {
+            id: 'price-kg',
+            label: 'Цена за килограмм',
+            description: 'Стоимость USD за кг по каждой строке — для сравнения и поиска аномалий',
+            adds: [COL_PRICE_KG],
+            run: enrichPriceKg
+        }
+    ];
+
+    // --- UI: каталог ---
+    var enrichList    = document.querySelector('.enrich-list');
+    var enrichRunBtn  = document.querySelector('.enrich-run-btn');
+    var enrichSummary = document.querySelector('.enrich-summary');
+    var enrichDictList = document.querySelector('.enrich-dict-list');
+    var enrichDictCount = document.querySelector('.enrich-dict-count');
+
+    function escEnrich(v) {
+        return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderEnrichList() {
+        if (!enrichList) return;
+        var html = '';
+        ENRICHERS.forEach(function (e) {
+            html += '<label class="enrich-item" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--color-border);border-radius:8px;cursor:pointer">';
+            html += '<input type="checkbox" class="enrich-cb" value="' + e.id + '" checked style="margin-top:3px">';
+            html += '<span><span style="font-weight:600">' + escEnrich(e.label) + '</span>';
+            html += '<br><span style="font-size:12px;color:var(--color-text-secondary)">' + escEnrich(e.description) + '</span>';
+            html += '<br><span style="font-size:11px;color:var(--color-text-muted)">Столбцы: ' + e.adds.map(escEnrich).join(', ') + ' · без нейросети</span>';
+            html += '</span></label>';
+        });
+        enrichList.innerHTML = html;
+    }
+
+    function renderEnrichSummary(results) {
+        if (!enrichSummary) return;
+        var html = '';
+        results.forEach(function (r) {
+            html += '<div style="margin-bottom:16px">';
+            html += '<div style="font-weight:600;margin-bottom:6px">' + escEnrich(r.label) + '</div>';
+            if (r.error) {
+                html += '<div style="color:var(--color-error);font-size:13px">' + escEnrich(r.error) + '</div>';
+            } else if (r.skipped) {
+                html += '<div style="font-size:13px;color:var(--color-text-secondary)">' + escEnrich(r.note || 'Пропущено') + '</div>';
+            } else {
+                if (r.learned) {
+                    html += '<div style="font-size:13px;color:var(--color-success)">Выучено из вашей разметки: ' +
+                        formatNumber(r.learned) + ' компаний → в словарь</div>';
+                }
+                if (r.already) {
+                    html += '<div style="font-size:13px;color:var(--color-text-secondary)">Уже было размечено: ' +
+                        formatNumber(r.already) + ' строк (не изменены)</div>';
+                }
+                html += '<div style="font-size:13px;color:var(--color-text-secondary)">Заполнено строк: ' +
+                    formatNumber(r.recognized) + ' из ' + formatNumber(r.total) + '</div>';
+                if (r.avg != null) {
+                    html += '<div style="font-size:13px;color:var(--color-text-secondary)">Средняя цена: ' + formatNumber(r.avg) + ' USD/кг</div>';
+                }
+                if (r.stats) {
+                    var keys = Object.keys(r.stats).sort(function (a, b) { return r.stats[b] - r.stats[a]; });
+                    html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">';
+                    keys.forEach(function (k) {
+                        var pct = r.total ? Math.round(r.stats[k] / r.total * 100) : 0;
+                        html += '<tr>';
+                        html += '<td style="padding:3px 6px 3px 0">' + escEnrich(k) + '</td>';
+                        html += '<td style="padding:3px 0;text-align:right;white-space:nowrap">' + formatNumber(r.stats[k]) + ' · ' + pct + '%</td>';
+                        html += '</tr>';
+                    });
+                    html += '</table>';
+                }
+            }
+            html += '</div>';
+        });
+        enrichSummary.innerHTML = html || '<p class="pres-hint">Ничего не выбрано.</p>';
+    }
+
+    function runEnrichment() {
         var data = getActiveData();
-        if (!data || data.length === 0) {
-            alert('Загрузите и обработайте данные перед сборкой анализа');
-            return;
-        }
+        var headers = getActiveHeaders();
+        if (!data || !data.length) { alert('Сначала загрузите данные во вкладке «Данные».'); return; }
 
-        var pKey = researchProvider.value;
-        var apiKey = researchApiKey.value.trim() || localStorage.getItem(LS_RESEARCH_APIKEY) || '';
-        var model = getResearchModel();
-
-        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai' || pKey === 'groq') && !apiKey) {
-            alert('Введите API-ключ в панели настроек слева');
-            researchApiKey.focus();
-            return;
-        }
-
-        localStorage.setItem(LS_RESEARCH_PROVIDER, pKey);
-        localStorage.setItem(LS_RESEARCH_MODEL, model);
-        if (apiKey) localStorage.setItem(LS_RESEARCH_APIKEY, apiKey);
-        if (researchUrl.value.trim()) localStorage.setItem(LS_RESEARCH_AIURL, researchUrl.value.trim());
-
-        var commodityEl = document.querySelector('.research-commodity');
-        var commodity = commodityEl ? commodityEl.value.trim() : '';
-        var metricsText = buildResearchDeckMetrics();
-        var canSearch = SEARCH_MODELS.indexOf(model) !== -1;
-        var systemCtx = buildResearchContext();
-        var total = RESEARCH_DECK_BLOCKS.length;
-
-        researchHistory.push({ role: 'user', content: 'Собрать анализ для презентации' });
-        researchAddMessage('user', 'Собрать анализ для презентации');
-        var loadingEl = researchAddMessage('assistant', 'Собираю блок 1 из ' + total + '…', true);
-        var loadingBubble = loadingEl.querySelector('.research-msg-bubble');
-
-        researchMasterBtn.disabled = true;
-        researchMasterBtn.classList.add('loading');
-        researchMasterBtn.textContent = 'Собираю...';
+        var selected = Array.prototype.map.call(document.querySelectorAll('.enrich-cb:checked'), function (cb) { return cb.value; });
+        if (!selected.length) { alert('Выберите хотя бы одно обогащение.'); return; }
 
         var results = [];
-        var idx = 0;
-
-        function finish() {
-            researchMasterBtn.disabled = false;
-            researchMasterBtn.classList.remove('loading');
-            researchMasterBtn.textContent = 'Собрать анализ для презентации';
-        }
-
-        function done() {
-            loadingEl.remove();
-            if (!results.length) {
-                researchHistory.pop();
-                researchAddMessage('assistant', 'Не удалось собрать ни одного блока. Проверьте провайдера и ключ.');
-                finish();
-                return;
-            }
-            var created = commitResearchBlocks(results);
-            var combined = results.map(function (b) { return '## ' + b.title + '\n' + b.body; }).join('\n\n');
-            researchHistory.push({ role: 'assistant', content: combined });
-            researchAddMessage('assistant', combined + '\n\n---\nСобрано блоков: ' + results.length + ' из ' + total +
-                '. Сохранено в заметки для отчёта, создано текстовых слайдов: ' + created + '.');
-            finish();
-        }
-
-        function nextBlock() {
-            if (idx >= total) { done(); return; }
-            var block = RESEARCH_DECK_BLOCKS[idx];
-            if (loadingBubble) {
-                loadingBubble.textContent = 'Собираю блок ' + (idx + 1) + ' из ' + total + ': ' + block.title + '…';
-            }
-            var priorText = results.map(function (b) { return b.title + ': ' + b.body; }).join('\n');
-            var prompt = buildResearchBlockPrompt(block, commodity, metricsText, canSearch, priorText);
-
-            researchCallAI(pKey, apiKey, model, [{ role: 'user', content: prompt }], systemCtx)
-                .then(function (reply) {
-                    var body = stripMarkdown(String(reply || '')).trim();
-                    if (body) { results.push({ title: block.title, body: body }); }
-                })
-                .catch(function (err) {
-                    // Блок пропускаем, но продолжаем остальные
-                    console.warn('Блок «' + block.title + '» не собран:', err && err.message);
-                })
-                .then(function () {
-                    idx++;
-                    nextBlock();
-                });
-        }
-
-        nextBlock();
+        ENRICHERS.forEach(function (e) {
+            if (selected.indexOf(e.id) === -1) return;
+            var res = e.run(data, headers) || {};
+            res.label = e.label;
+            results.push(res);
+        });
+        renderEnrichSummary(results);
     }
 
-    // Кнопка «+ Слайд в презентацию» — собирает все заметки в один текстовый слайд
-    researchNotesToSlide.addEventListener('click', function () {
-        if (!researchNotes.length) return;
-        var combined = researchNotes.map(function (n) { return n.text; }).join('\n\n');
-        // Создаём текстовый слайд
-        var block = findPresBlock('text');
-        if (!block) return;
-        var slide = {
-            id: presState.nextId++,
-            type: 'text',
-            title: 'Аналитические выводы (AI)',
-            hsFilter: '',
-            topN: 10,
-            year: '',
-            opts: { subtitle: '', bullets: combined }
-        };
-        presState.slides.push(slide);
-        presState.activeIndex = presState.slides.length - 1;
-        renderPresSlideList();
-        previewPresSlide(presState.activeIndex);
-        updatePresButtons();
-        // Переходим в презентацию
-        document.querySelector('[data-module="presentation"]').click();
-    });
+    // --- UI: словарь сегментов ---
+    function saveSegmentDict() {
+        try { localStorage.setItem(LS_SEGMENT_DICT, JSON.stringify(segmentDict)); } catch (e) { /* переполнение — игнорируем */ }
+    }
 
-    // Инициальный рендер заметок из localStorage
-    renderResearchNotes();
-
-    function researchSend(text) {
-        text = (text || researchInput.value).trim();
-        if (!text) return;
-
-        var pKey = researchProvider.value;
-        var apiKey = researchApiKey.value.trim() || localStorage.getItem(LS_RESEARCH_APIKEY) || '';
-        var model = getResearchModel();
-
-        if ((pKey === 'openrouter' || pKey === 'claude' || pKey === 'openai' || pKey === 'groq') && !apiKey) {
-            alert('Введите API-ключ в панели настроек слева');
-            researchApiKey.focus();
+    function renderSegmentDict() {
+        if (!enrichDictList) return;
+        var keys = Object.keys(segmentDict);
+        if (enrichDictCount) enrichDictCount.textContent = '(' + keys.length + ')';
+        if (!keys.length) {
+            enrichDictList.innerHTML = '<p class="pres-hint">Пока пусто — сегменты определяются правилами. Добавьте запись, если правило ошиблось.</p>';
             return;
         }
-
-        researchInput.value = '';
-        researchInput.style.height = '';
-
-        researchHistory.push({ role: 'user', content: text });
-        researchAddMessage('user', text);
-
-        var loadingEl = researchAddMessage('assistant', 'Генерирую ответ...', true);
-        researchSendBtn.disabled = true;
-
-        // Сохранить настройки
-        localStorage.setItem(LS_RESEARCH_PROVIDER, pKey);
-        localStorage.setItem(LS_RESEARCH_MODEL, model);
-        if (apiKey) localStorage.setItem(LS_RESEARCH_APIKEY, apiKey);
-
-        var systemCtx = buildResearchContext();
-        researchCallAI(pKey, apiKey, model, researchHistory, systemCtx)
-            .then(function (reply) {
-                researchHistory.push({ role: 'assistant', content: reply });
-                loadingEl.remove();
-                researchAddMessage('assistant', reply);
-            })
-            .catch(function (err) {
-                researchHistory.pop(); // убрать незавершённый запрос
-                loadingEl.remove();
-                var msg = err.message;
-                if ((pKey === 'ollama' || pKey === 'lmstudio') && msg === 'Failed to fetch') {
-                    msg = 'Не удалось подключиться. Запустите сервер и разрешите CORS:\n$env:OLLAMA_ORIGINS="*"; ollama serve';
-                }
-                researchAddMessage('assistant', 'Ошибка: ' + msg);
-            })
-            .then(function () {
-                researchSendBtn.disabled = false;
+        var html = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+        keys.forEach(function (k) {
+            html += '<tr>';
+            html += '<td style="padding:4px 6px 4px 0">' + escEnrich(k) + '</td>';
+            html += '<td style="padding:4px 6px;color:var(--color-text-secondary)">' + escEnrich(segmentDict[k]) + '</td>';
+            html += '<td style="padding:4px 0;text-align:right"><button class="enrich-dict-del" data-key="' + escEnrich(k) + '" title="Удалить">✕</button></td>';
+            html += '</tr>';
+        });
+        html += '</table>';
+        enrichDictList.innerHTML = html;
+        enrichDictList.querySelectorAll('.enrich-dict-del').forEach(function (b) {
+            b.addEventListener('click', function () {
+                delete segmentDict[this.getAttribute('data-key')];
+                saveSegmentDict();
+                renderSegmentDict();
             });
-    }
-
-    function researchCallAI(pKey, apiKey, model, messages, systemCtx) {
-        var provider = AI_PROVIDERS[pKey] || AI_PROVIDERS.openrouter;
-        apiKey = sanitizeAscii(apiKey);
-        model = sanitizeAscii(model);
-
-        if (provider.format === 'claude') {
-            var claudeBody = { model: model, max_tokens: 4096, messages: messages };
-            if (systemCtx) claudeBody.system = systemCtx;
-            return fetch(provider.url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify(claudeBody)
-            })
-            .then(function (r) {
-                if (!r.ok) throw new Error('Claude API: ' + r.status);
-                return r.json();
-            })
-            .then(function (j) {
-                return (j.content && j.content[0] && j.content[0].text) ? j.content[0].text.trim() : '';
-            });
-        }
-
-        var customUrl = researchUrl.value.trim();
-        var url = customUrl || provider.url;
-        if ((pKey === 'ollama' || pKey === 'lmstudio') && customUrl && customUrl.indexOf('/v1/') === -1) {
-            url = url.replace(/\/+$/, '') + '/v1/chat/completions';
-        }
-
-        var hdrs = { 'Content-Type': 'application/json' };
-        if (apiKey) hdrs['Authorization'] = 'Bearer ' + apiKey;
-        if (pKey === 'openrouter') hdrs['HTTP-Referer'] = 'https://delomant.ru';
-
-        // System message с контекстом — всегда первым
-        var msgsWithCtx = systemCtx
-            ? [{ role: 'system', content: systemCtx }].concat(messages)
-            : messages;
-
-        return fetch(url, {
-            method: 'POST',
-            headers: hdrs,
-            body: JSON.stringify({
-                model: model,
-                max_tokens: 4096,
-                messages: msgsWithCtx
-            })
-        })
-        .then(function (r) {
-            if (!r.ok) throw new Error(pKey + ' API: ' + r.status);
-            return r.json();
-        })
-        .then(function (j) {
-            return (j.choices && j.choices[0] && j.choices[0].message)
-                ? j.choices[0].message.content.trim() : '';
         });
     }
 
-    // Send button
-    researchSendBtn.addEventListener('click', function () { researchSend(); });
-    researchMasterBtn.addEventListener('click', researchRunMaster);
+    // --- Инициализация модуля ---
+    if (enrichList) {
+        renderEnrichList();
+        renderSegmentDict();
 
-    // Enter to send (Shift+Enter = newline)
-    researchInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            researchSend();
-        }
-    });
+        enrichRunBtn.addEventListener('click', runEnrichment);
 
-    // Auto-resize textarea
-    researchInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-    });
-
-    // Preset buttons
-    document.querySelectorAll('.research-preset-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var preset = RESEARCH_PRESETS[btn.textContent];
-            if (preset) researchSend(preset);
+        document.querySelector('.enrich-dict-add-btn').addEventListener('click', function () {
+            var keyEl = document.querySelector('.enrich-dict-key');
+            var valEl = document.querySelector('.enrich-dict-value');
+            var key = keyEl.value.trim();
+            if (!key) { keyEl.focus(); return; }
+            // ИНН оставляем как есть, название — в верхний регистр (правила сравнивают так же)
+            segmentDict[/^\d+$/.test(key) ? key : key.toUpperCase()] = valEl.value;
+            saveSegmentDict();
+            keyEl.value = '';
+            renderSegmentDict();
         });
-    });
 
-    // Clear
-    researchClearBtn.addEventListener('click', function () {
-        researchHistory = [];
-        researchShowEmpty();
-    });
+        document.querySelector('.enrich-dict-export').addEventListener('click', function () {
+            var blob = new Blob([JSON.stringify(segmentDict, null, 2)], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'segment_dictionary.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        document.querySelector('.enrich-dict-import-btn').addEventListener('click', function () {
+            document.querySelector('.enrich-dict-import').click();
+        });
+        document.querySelector('.enrich-dict-import').addEventListener('change', function () {
+            var f = this.files[0];
+            if (!f) return;
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                try {
+                    var obj = JSON.parse(ev.target.result);
+                    if (obj && typeof obj === 'object') {
+                        Object.keys(obj).forEach(function (k) { segmentDict[k] = obj[k]; });
+                        saveSegmentDict();
+                        renderSegmentDict();
+                    }
+                } catch (e) { alert('Не удалось прочитать JSON.'); }
+            };
+            reader.readAsText(f);
+            this.value = '';
+        });
+    }
 
     /* ================================
        Module: Presentation Constructor
