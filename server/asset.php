@@ -31,6 +31,7 @@ $map = [
     'logo' => ['Logo.png.dat',              'image/png'],
     'cbr'  => ['cbr_rates.dat',             'application/json; charset=UTF-8'],
     'dict' => ['company_dictionary.dat',    'application/json; charset=UTF-8'],
+    'ctry' => ['comtrade_countries.dat',    'application/json; charset=UTF-8'],
 ];
 
 $key = (string)($_GET['f'] ?? '');

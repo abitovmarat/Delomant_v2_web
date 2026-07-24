@@ -9,8 +9,39 @@ document.addEventListener('DOMContentLoaded', function () {
         fileName: '',
         processedData: [],
         processedHeaders: [],
-        isProcessed: false
+        isProcessed: false,
+        // 'file' — выгрузка пользователя, 'comtrade' — статистика ООН.
+        // От источника зависит, какие анализы вообще выполнимы.
+        dataSource: 'file'
     };
+
+    /*
+     * Агрегированная статистика ООН не содержит отправителей, получателей
+     * и изготовителей. Анализы, которым нужен контрагентский уровень,
+     * на таком источнике объясняют причину вместо пустого графика.
+     */
+    function isContractorDataAvailable() {
+        return appState.dataSource !== 'comtrade';
+    }
+
+    /*
+     * Подпись об источнике для материалов, которые уходят наружу.
+     * Отчёт по зеркальной статистике ООН обязан называть источник — по
+     * своей выгрузке пользователь и так знает, откуда данные.
+     */
+    function dataSourceNote() {
+        return appState.dataSource === 'comtrade'
+            ? 'Источник: UN Comtrade, зеркальная статистика стран-партнёров'
+            : '';
+    }
+
+    function renderContractorUnavailable() {
+        return '<div class="analysis-unavailable">' +
+            '<p>Анализ недоступен на данных UN Comtrade: статистика ООН агрегирована ' +
+            'по кодам ТН ВЭД и не содержит отправителей, получателей и изготовителей.</p>' +
+            '<p>Для этого разреза нужна выгрузка с контрагентским уровнем данных.</p>' +
+            '</div>';
+    }
 
     function getActiveData() {
         return appState.isProcessed ? appState.processedData : appState.rawData;
@@ -451,12 +482,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function applyParsedData(file, parsed) {
+    function applyParsedData(file, parsed, source) {
         appState.rawData = parsed.rows;
         appState.headers = parsed.headers;
         appState.fileName = file.name;
         appState.processedData = [];
         appState.isProcessed = false;
+        appState.dataSource = source || 'file';
 
         console.log('[Delomant] Данные загружены:', parsed.rows.length, 'строк,', parsed.headers.length, 'столбцов');
 
@@ -523,6 +555,447 @@ document.addEventListener('DOMContentLoaded', function () {
             return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
         };
         return fmt(dates[0]) + ' — ' + fmt(dates[dates.length - 1]);
+    }
+
+    /* ================================
+       Module: Data — UN Comtrade
+       ================================ */
+
+    /*
+     * Загрузка зеркальной статистики ООН как альтернатива файловой выгрузке.
+     *
+     * Пользователь мыслит категорией «импорт России из Китая», а в Comtrade
+     * это экспорт Китая в Россию: страна-партнёр выступает репортёром, а РФ —
+     * партнёром. Инверсию делает адаптер, наружу она не торчит.
+     *
+     * Данные приходят агрегированными по кодам HS6, поэтому отправителей,
+     * получателей и изготовителей в них нет — часть анализа на таком
+     * источнике недоступна, см. isContractorDataAvailable().
+     */
+
+    var COMTRADE_PROXY_URL = 'comtrade.php';
+    var COMTRADE_COUNTRIES_URL = 'data/comtrade_countries.json';
+    var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries';
+    var COMTRADE_RF_CODE = 643;
+
+    // Должны совпадать с проверками в comtrade.php.
+    // Периоды по одному — публичный preview отвечает «Maximum number of
+    // periods for preview is 1». Страны и коды спокойно принимаются пачкой,
+    // проверено на 40 странах в одном запросе.
+    var COMTRADE_MAX_REPORTERS = 40;
+    var COMTRADE_MAX_PERIODS = 1;
+    var COMTRADE_MAX_CODES = 40;
+
+    var COMTRADE_RETRY_DELAY = 4000; // пауза перед повтором после 429
+    var COMTRADE_MAX_RETRIES = 3;
+
+    var comtradeCard = document.querySelector('.comtrade-card');
+    var comtradeForm = document.querySelector('.comtrade-form');
+    var comtradeToggle = document.querySelector('.comtrade-toggle');
+    var comtradeCountriesBox = document.querySelector('.comtrade-countries');
+    var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
+    var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
+    var comtradeStatus = document.querySelector('.comtrade-status');
+    var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
+
+    var comtradeCountries = [];
+    var comtradeSelected = {}; // код страны → true
+
+    function loadComtradeCountries() {
+        if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
+
+        try {
+            var cached = localStorage.getItem(LS_COMTRADE_COUNTRIES_KEY);
+            if (cached) {
+                comtradeCountries = JSON.parse(cached);
+                if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
+            }
+        } catch (e) { /* ignore */ }
+
+        return fetch(COMTRADE_COUNTRIES_URL)
+            .then(function (resp) {
+                if (!resp.ok) { throw new Error(resp.status); }
+                return resp.json();
+            })
+            .then(function (json) {
+                comtradeCountries = json;
+                try { localStorage.setItem(LS_COMTRADE_COUNTRIES_KEY, JSON.stringify(json)); } catch (e) { /* ignore */ }
+                return comtradeCountries;
+            })
+            .catch(function () {
+                comtradeCountries = [];
+                return comtradeCountries;
+            });
+    }
+
+    function renderComtradeCountries(filter) {
+        if (!comtradeCountriesBox) { return; }
+
+        var needle = (filter || '').trim().toLowerCase();
+        var html = '';
+
+        comtradeCountries.forEach(function (country) {
+            if (needle && country.name.toLowerCase().indexOf(needle) === -1) { return; }
+            html += '<label class="comtrade-country">' +
+                '<input type="checkbox" value="' + country.code + '"' +
+                (comtradeSelected[country.code] ? ' checked' : '') + '>' +
+                '<span>' + country.name + '</span>' +
+                '</label>';
+        });
+
+        comtradeCountriesBox.innerHTML = html || '<p class="comtrade-empty">Ничего не найдено</p>';
+    }
+
+    function updateComtradeSelectedHint() {
+        if (!comtradeSelectedHint) { return; }
+
+        var names = comtradeCountries
+            .filter(function (c) { return comtradeSelected[c.code]; })
+            .map(function (c) { return c.name; });
+
+        if (names.length === 0) {
+            comtradeSelectedHint.textContent = 'Не выбрано ни одной страны';
+            return;
+        }
+        comtradeSelectedHint.textContent = 'Выбрано ' + names.length + ': ' +
+            (names.length > 6 ? names.slice(0, 6).join(', ') + '…' : names.join(', '));
+    }
+
+    function setComtradeStatus(text, kind) {
+        if (!comtradeStatus) { return; }
+        comtradeStatus.textContent = text;
+        comtradeStatus.className = 'comtrade-status' + (kind ? ' comtrade-status-' + kind : '');
+    }
+
+    /** Разрезает список на куски, которые прокси примет за один запрос. */
+    function comtradeChunk(list, size) {
+        var chunks = [];
+        for (var i = 0; i < list.length; i += size) {
+            chunks.push(list.slice(i, i + size));
+        }
+        return chunks;
+    }
+
+    function buildComtradePeriods(freq, yearFrom, yearTo) {
+        var periods = [];
+        for (var y = yearFrom; y <= yearTo; y++) {
+            if (freq === 'A') {
+                periods.push(String(y));
+            } else {
+                for (var m = 1; m <= 12; m++) {
+                    periods.push(String(y) + (m < 10 ? '0' + m : String(m)));
+                }
+            }
+        }
+        return periods;
+    }
+
+    /** Собирает и проверяет параметры формы. Возвращает null и пишет ошибку в статус. */
+    function collectComtradeParams() {
+        var direction = document.querySelector('.comtrade-direction').value;
+        var freq = document.querySelector('.comtrade-freq').value;
+        var yearFrom = parseInt(document.querySelector('.comtrade-year-from').value, 10);
+        var yearTo = parseInt(document.querySelector('.comtrade-year-to').value, 10);
+        var codesRaw = document.querySelector('.comtrade-codes').value.trim();
+
+        var reporters = Object.keys(comtradeSelected).filter(function (code) {
+            return comtradeSelected[code];
+        });
+
+        if (reporters.length === 0) {
+            setComtradeStatus('Выберите хотя бы одну страну-партнёра', 'error');
+            return null;
+        }
+        if (isNaN(yearFrom) || isNaN(yearTo) || yearFrom > yearTo) {
+            setComtradeStatus('Проверьте диапазон лет', 'error');
+            return null;
+        }
+
+        var codes = ['TOTAL'];
+        if (codesRaw !== '') {
+            codes = codesRaw.split(',').map(function (c) { return c.trim(); }).filter(Boolean);
+            for (var i = 0; i < codes.length; i++) {
+                if (!/^\d{2,6}$/.test(codes[i])) {
+                    setComtradeStatus('Код «' + codes[i] + '» не подходит: нужно от 2 до 6 цифр', 'error');
+                    return null;
+                }
+            }
+        }
+
+        var periods = buildComtradePeriods(freq, yearFrom, yearTo);
+
+        return {
+            direction: direction,
+            freq: freq,
+            // Импорт РФ — это экспорт партнёра в РФ, и наоборот
+            flow: direction === 'import' ? 'X' : 'M',
+            reporters: reporters,
+            periods: periods,
+            codes: codes,
+        };
+    }
+
+    /** Один запрос к прокси с повтором при 429 — публичный эндпоинт лимитирован. */
+    function comtradeRequest(params, attempt) {
+        attempt = attempt || 0;
+
+        var url = COMTRADE_PROXY_URL +
+            '?freq=' + encodeURIComponent(params.freq) +
+            '&flow=' + encodeURIComponent(params.flow) +
+            '&partner=' + COMTRADE_RF_CODE +
+            '&reporter=' + encodeURIComponent(params.reporters.join(',')) +
+            '&period=' + encodeURIComponent(params.periods.join(',')) +
+            '&cmd=' + encodeURIComponent(params.codes.join(','));
+
+        return fetch(url, { cache: 'no-store' })
+            .then(function (resp) {
+                // Читаем текстом: если PHP не отработал, в теле будет HTML,
+                // и разбор JSON выдал бы невнятную ошибку парсера
+                return resp.text().then(function (text) {
+                    var json;
+                    try {
+                        json = JSON.parse(text);
+                    } catch (e) {
+                        throw new Error('Прокси comtrade.php недоступен или вернул не JSON (код ' + resp.status + ')');
+                    }
+
+                    if (resp.status === 429 && attempt < COMTRADE_MAX_RETRIES) {
+                        return new Promise(function (resolve) {
+                            setTimeout(resolve, COMTRADE_RETRY_DELAY);
+                        }).then(function () {
+                            return comtradeRequest(params, attempt + 1);
+                        });
+                    }
+                    if (!resp.ok) {
+                        throw new Error(json.error || ('Ошибка ' + resp.status));
+                    }
+                    return json.data || [];
+                });
+            });
+    }
+
+    /*
+     * Итоговая ли это строка по товарной позиции.
+     *
+     * Comtrade возвращает одну позицию несколькими строками: одна — итог
+     * по всем видам транспорта и таможенным режимам, остальные — разрезы
+     * внутри него. Складывать их нельзя, объём удвоится: у Вьетнама за
+     * 2023 год по коду 030617 приходит итог 12,18 млн USD и ровно та же
+     * сумма отдельной строкой с motCode 2100.
+     */
+    function isComtradeTotalRow(row) {
+        return row.motCode === 0 &&
+            row.partner2Code === 0 &&
+            String(row.customsCode) === 'C00' &&
+            String(row.mosCode) === '0';
+    }
+
+    /*
+     * Приводит ответ API к строкам приложения: оставляет итоговые строки
+     * и схлопывает их по «период + страна + код».
+     */
+    function comtradeToRows(apiRows, params) {
+        var byCode = {};
+        comtradeCountries.forEach(function (c) { byCode[c.code] = c.name; });
+
+        var isImport = params.direction === 'import';
+        var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
+
+        var headers = [
+            COL_DATE_REG,
+            COL_YEAR,
+            COL_QUARTER,
+            COL_DIRECTION,
+            countryCol,
+            COL_HS_CODE,
+            COL_WEIGHT,
+            COL_STAT_USD,
+        ];
+        if (params.freq === 'M') { headers.splice(3, 0, COL_MONTH); }
+
+        /*
+         * Итоговые строки и разрезы приходят вперемешку. Сначала смотрим,
+         * по каким позициям итог вообще есть: если есть — разрезы по этой
+         * позиции игнорируем, если нет — складываем разрезы, чтобы не
+         * потерять данные совсем.
+         */
+        var hasTotal = {};
+        apiRows.forEach(function (row) {
+            if (isComtradeTotalRow(row)) {
+                hasTotal[String(row.period) + '|' + row.reporterCode + '|' + row.cmdCode] = true;
+            }
+        });
+
+        var merged = {};
+        var order = [];
+
+        apiRows.forEach(function (row) {
+            var period = String(row.period || '');
+            var key = period + '|' + row.reporterCode + '|' + row.cmdCode;
+
+            if (hasTotal[key] && !isComtradeTotalRow(row)) { return; }
+
+            if (!merged[key]) {
+                merged[key] = {
+                    period: period,
+                    reporter: row.reporterCode,
+                    cmd: String(row.cmdCode || ''),
+                    weight: 0,
+                    value: 0,
+                    hasWeight: false,
+                };
+                order.push(key);
+            }
+
+            var acc = merged[key];
+            if (row.netWgt != null && row.netWgt > 0) {
+                acc.weight += row.netWgt;
+                acc.hasWeight = true;
+            }
+            if (row.primaryValue != null) {
+                acc.value += row.primaryValue;
+            }
+        });
+
+        var rows = [];
+        var withWeight = 0;
+
+        order.forEach(function (key) {
+            var acc = merged[key];
+            var year = parseInt(acc.period.slice(0, 4), 10);
+            var month = acc.period.length === 6 ? parseInt(acc.period.slice(4, 6), 10) : 1;
+
+            var row = {};
+            row[COL_DATE_REG] = year + '-' + (month < 10 ? '0' + month : month) + '-01';
+            row[COL_YEAR] = year;
+            row[COL_QUARTER] = getQuarter(month);
+            if (params.freq === 'M') { row[COL_MONTH] = MONTH_NAMES[month - 1]; }
+            row[COL_DIRECTION] = isImport ? 'ИМ' : 'ЭК';
+            row[countryCol] = byCode[acc.reporter] || ('Код ' + acc.reporter);
+            row[COL_HS_CODE] = acc.cmd;
+            // Вес отчитывают не все страны: пустая ячейка честнее нуля,
+            // иначе средняя цена USD/кг поедет вниз на пустых строках
+            row[COL_WEIGHT] = acc.hasWeight ? Math.round(acc.weight) : '';
+            row[COL_STAT_USD] = Math.round(acc.value * 100) / 100;
+
+            if (acc.hasWeight) { withWeight++; }
+            rows.push(row);
+        });
+
+        return {
+            headers: headers,
+            rows: rows,
+            weightCoverage: rows.length > 0 ? Math.round(withWeight / rows.length * 100) : 0,
+        };
+    }
+
+    function comtradeLoad() {
+        var params = collectComtradeParams();
+        if (!params) { return; }
+
+        // Прокси ограничивает длину каждого списка — режем запрос на части
+        var batches = [];
+        comtradeChunk(params.periods, COMTRADE_MAX_PERIODS).forEach(function (periods) {
+            comtradeChunk(params.reporters, COMTRADE_MAX_REPORTERS).forEach(function (reporters) {
+                comtradeChunk(params.codes, COMTRADE_MAX_CODES).forEach(function (codes) {
+                    batches.push({
+                        freq: params.freq,
+                        flow: params.flow,
+                        periods: periods,
+                        reporters: reporters,
+                        codes: codes,
+                    });
+                });
+            });
+        });
+
+        // Обращения к API идут с паузой, поэтому длинный период — это минуты.
+        // Лучше предупредить, чем оставить пользователя перед висящей кнопкой.
+        if (batches.length > 20) {
+            var minutes = Math.ceil(batches.length * 1.5 / 60);
+            if (!confirm('Потребуется ' + batches.length + ' запросов к Comtrade, примерно ' +
+                minutes + ' мин. Продолжить?')) {
+                return;
+            }
+        }
+
+        comtradeLoadBtn.disabled = true;
+        setComtradeStatus('Запрос 1 из ' + batches.length + '…', 'progress');
+
+        var collected = [];
+
+        // Последовательно, а не Promise.all: у публичного эндпоинта лимит
+        // на частоту, параллельные запросы упрутся в 429
+        var chain = Promise.resolve();
+        batches.forEach(function (batch, index) {
+            chain = chain.then(function () {
+                setComtradeStatus('Запрос ' + (index + 1) + ' из ' + batches.length + '…', 'progress');
+                return comtradeRequest(batch).then(function (rows) {
+                    collected = collected.concat(rows);
+                });
+            });
+        });
+
+        chain
+            .then(function () {
+                if (collected.length === 0) {
+                    setComtradeStatus('Comtrade не вернул данных по этому запросу. Проверьте коды ТН ВЭД и период.', 'error');
+                    return;
+                }
+
+                var parsed = comtradeToRows(collected, params);
+                var label = 'UN Comtrade — ' +
+                    (params.direction === 'import' ? 'импорт РФ' : 'экспорт РФ') + ', ' +
+                    params.periods[0].slice(0, 4) + '–' + params.periods[params.periods.length - 1].slice(0, 4);
+
+                applyParsedData({ name: label }, parsed, 'comtrade');
+
+                var note = 'Загружено ' + formatNumber(parsed.rows.length) + ' строк. ';
+                note += parsed.weightCoverage === 100
+                    ? 'Вес отчитан по всем строкам.'
+                    : 'Вес отчитан по ' + parsed.weightCoverage + '% строк — расчёт USD/кг возможен только по ним.';
+                setComtradeStatus(note, parsed.weightCoverage >= 50 ? 'ok' : 'warn');
+            })
+            .catch(function (err) {
+                setComtradeStatus(err.message || 'Не удалось загрузить данные', 'error');
+            })
+            .then(function () {
+                comtradeLoadBtn.disabled = false;
+            });
+    }
+
+    if (comtradeToggle) {
+        comtradeToggle.addEventListener('click', function () {
+            var opened = !comtradeForm.hidden;
+            comtradeForm.hidden = opened;
+            comtradeToggle.setAttribute('aria-expanded', String(!opened));
+            comtradeToggle.textContent = opened ? 'Открыть' : 'Свернуть';
+
+            if (!opened && comtradeCountries.length === 0) {
+                loadComtradeCountries().then(function () {
+                    renderComtradeCountries('');
+                    updateComtradeSelectedHint();
+                });
+            }
+        });
+    }
+
+    if (comtradeCountrySearch) {
+        comtradeCountrySearch.addEventListener('input', function () {
+            renderComtradeCountries(this.value);
+        });
+    }
+
+    if (comtradeCountriesBox) {
+        comtradeCountriesBox.addEventListener('change', function (e) {
+            if (e.target.type !== 'checkbox') { return; }
+            comtradeSelected[e.target.value] = e.target.checked;
+            updateComtradeSelectedHint();
+        });
+    }
+
+    if (comtradeLoadBtn) {
+        comtradeLoadBtn.addEventListener('click', comtradeLoad);
     }
 
     /* ================================
@@ -2266,11 +2739,21 @@ document.addEventListener('DOMContentLoaded', function () {
         var hsCol = findColumn(headers, COL_HS_CODE);
         if (!hsCol) { return count; }
 
+        /*
+         * Статистика ООН отчитывается на уровне HS6, и добивать её нулями
+         * нельзя: 030617 превратится в 0306170000, то есть группа выдаст
+         * себя за конкретную подсубпозицию и склеится с таможенными
+         * данными неверно. Разделители чистим в любом случае.
+         */
+        var padToFull = appState.dataSource !== 'comtrade';
+
         data.forEach(function (row) {
             var val = row[hsCol];
             if (val !== undefined && val !== null && val !== '') {
                 var str = String(val).replace(/[\s.\-]/g, '');
-                while (str.length < HS_CODE_LENGTH) { str = str + '0'; }
+                if (padToFull) {
+                    while (str.length < HS_CODE_LENGTH) { str = str + '0'; }
+                }
                 if (str.length > HS_CODE_LENGTH) { str = str.substring(0, HS_CODE_LENGTH); }
                 if (row[hsCol] !== str) {
                     row[hsCol] = str;
@@ -3126,6 +3609,27 @@ document.addEventListener('DOMContentLoaded', function () {
         triggerDownload(blob, fileName);
     }
 
+    /*
+     * Подпись об источнике отдельным листом: вставлять её строкой в лист
+     * с данными нельзя — закрепление шапки и автоширина считают, что
+     * первая строка это заголовки.
+     */
+    function appendSourceSheet(wb) {
+        var note = dataSourceNote();
+        if (!note) { return; }
+
+        var ws = XLSX.utils.aoa_to_sheet([
+            ['Источник данных'],
+            [note],
+            ['Выгружено', new Date().toLocaleDateString('ru-RU')],
+            [],
+            ['Статистика ООН агрегирована по кодам ТН ВЭД (уровень HS6) и не содержит'],
+            ['сведений об отправителях, получателях и изготовителях.'],
+        ]);
+        ws['!cols'] = [{ wch: 72 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Источник');
+    }
+
     function downloadXlsxData(data, headers, sheetName, fileName) {
         if (data.length === 0 || typeof XLSX === 'undefined') { return; }
 
@@ -3148,6 +3652,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        appendSourceSheet(wb);
 
         // Генерируем XLSX как ArrayBuffer, затем патчим XML для freeze pane
         var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -3812,6 +4317,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, name);
+        appendSourceSheet(wb);
         XLSX.writeFile(wb, baseFileName() + '_' + name + '.xlsx');
     }
 
@@ -3938,7 +4444,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Анализ: Объёмы по странам ---
     function renderCountriesAnalysis(data, headers) {
-        var sendCol = findColumn(headers, 'Страна отправления');
+        // «Страна назначения» — для экспортных данных, где отправитель всегда Россия
+        var sendCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна назначения');
         var originCol = findColumn(headers, 'Страна происхождения');
         var weightCol = findColumn(headers, COL_WEIGHT);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
@@ -4208,7 +4715,7 @@ document.addEventListener('DOMContentLoaded', function () {
                        '#EC4899', '#0891B2', '#EA580C', '#4F46E5', '#059669'];
 
     function renderPriceDynamicsAnalysis(data, headers) {
-        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
+        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна происхождения');
         var statUsdCol = findColumn(headers, COL_STAT_USD);
         var weightCol = findColumn(headers, COL_WEIGHT);
         var yearCol = findColumn(headers, COL_YEAR);
@@ -4432,6 +4939,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var weightCol = findColumn(headers, COL_WEIGHT);
         var yearCol = findColumn(headers, COL_YEAR);
 
+        // На статистике ООН этих колонок не бывает в принципе — объясняем
+        // причину, иначе выглядит как отсутствие маппинга
+        if ((!senderCol || !receiverCol) && !isContractorDataAvailable()) {
+            analysisResults.innerHTML = renderContractorUnavailable();
+            return;
+        }
         if (!senderCol) {
             analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «' + sourceColName + '».</p></div>';
             return;
@@ -5002,6 +5515,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var yearCol = findColumn(headers, COL_YEAR);
         var quarterCol = findColumn(headers, COL_QUARTER);
 
+        if (!companyCol && !isContractorDataAvailable()) {
+            analysisResults.innerHTML = renderContractorUnavailable();
+            return;
+        }
         if (!companyCol) {
             analysisResults.innerHTML = '<div class="analysis-empty"><p>Не найден столбец «' + companyColName + '». Выполните обработку с маппингом.</p></div>';
             return;
@@ -7787,7 +8304,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         html += '<div class="pres-slide-footer">';
         html += '<span>DELOMANT</span>';
-        html += '<span>delomant.ru</span>';
+        var srcNote = dataSourceNote();
+        html += '<span>' + (srcNote || 'delomant.ru') + '</span>';
         if (slideNum) html += '<span>' + slideNum + '</span>';
         html += '</div>';
         html += '</div>';
@@ -7898,7 +8416,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var weightCol = findColumn(headers, COL_WEIGHT);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
         var hsCol = findColumn(headers, COL_HS_CODE);
-        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна происхождения');
+        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна происхождения');
         if (!data || data.length === 0) return presNoData(title);
 
         var byYear = {}, byYearQ = {}, byCountry = {}, hsSet = {};
@@ -9462,8 +9980,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function pptxFooter(sl) {
-            sl.addText('delomant.ru', {
-                x: 0.2, y: 5.3, w: 2, h: 0.25,
+            var srcNote = dataSourceNote();
+            sl.addText(srcNote || 'delomant.ru', {
+                x: 0.2, y: 5.3, w: srcNote ? 6 : 2, h: 0.25,
                 fontSize: 8, fontFace: FONT, color: '94A3B8', valign: 'middle'
             });
             sl.addText(String(new Date().getFullYear()), {

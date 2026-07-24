@@ -5,7 +5,7 @@
 RewriteEngine On
 
 # Точки входа отдаём как есть
-RewriteRule ^(index|asset|setup)\.php$ - [L]
+RewriteRule ^(index|asset|setup|comtrade)\.php$ - [L]
 
 # Пути, к которым обращается фронтенд, проксируем на asset.php.
 # Проверку сессии делает сам asset.php.
@@ -14,18 +14,19 @@ RewriteRule ^scripts/main\.js$              asset.php?f=js   [L]
 RewriteRule ^data/Logo\.png$                asset.php?f=logo [L]
 RewriteRule ^data/cbr_rates\.json$          asset.php?f=cbr  [L]
 RewriteRule ^data/company_dictionary\.json$ asset.php?f=dict [L]
+RewriteRule ^data/comtrade_countries\.json$ asset.php?f=ctry [L]
 
 # Корень сайта → форма входа / приложение
 RewriteRule ^$ index.php [L]
 
 # Прямой доступ к внутренностям запрещён (nginx .dat не перехватывает,
 # поэтому запрос доходит до Apache и получает 403)
-RewriteRule ^(app|assets)(/|$) - [F]
+RewriteRule ^(app|assets|cache)(/|$) - [F]
 
-# Файл с хешем пароля недоступен снаружи в любом случае
-<Files "config.php">
+# Хеш пароля и ключ подписки Comtrade недоступны снаружи в любом случае
+<FilesMatch "^(config|comtrade_key)\.php$">
     Require all denied
-</Files>
+</FilesMatch>
 <FilesMatch "\.dat$">
     Require all denied
 </FilesMatch>

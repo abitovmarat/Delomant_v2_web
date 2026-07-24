@@ -72,6 +72,69 @@
                         </div>
                     </div>
 
+                    <div class="comtrade-card">
+                        <div class="comtrade-head">
+                            <span class="comtrade-icon" aria-hidden="true">🌍</span>
+                            <div>
+                                <h3 class="comtrade-title">Загрузка из UN Comtrade</h3>
+                                <p class="comtrade-description">
+                                    Зеркальная статистика стран-партнёров: официальные данные ООН
+                                    вместо файловой выгрузки. Без сведений о контрагентах.
+                                </p>
+                            </div>
+                            <button class="btn btn-secondary comtrade-toggle" aria-expanded="false">Открыть</button>
+                        </div>
+
+                        <div class="comtrade-form" hidden>
+                            <div class="comtrade-row">
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Направление</span>
+                                    <select class="comtrade-direction">
+                                        <option value="import" selected>Импорт России</option>
+                                        <option value="export">Экспорт России</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Частота</span>
+                                    <select class="comtrade-freq">
+                                        <option value="A" selected>Годовая</option>
+                                        <option value="M">Месячная</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Год с</span>
+                                    <input type="number" class="comtrade-year-from" min="1990" max="2030" value="2020">
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Год по</span>
+                                    <input type="number" class="comtrade-year-to" min="1990" max="2030" value="2024">
+                                </label>
+                            </div>
+
+                            <div class="comtrade-row">
+                                <label class="comtrade-field comtrade-field-wide">
+                                    <span class="comtrade-label">Коды ТН ВЭД</span>
+                                    <input type="text" class="comtrade-codes" placeholder="030617, 0306 — от 2 до 6 знаков, через запятую">
+                                    <span class="comtrade-hint">Comtrade работает на уровне HS6. Пусто — вся торговля целиком.</span>
+                                </label>
+                            </div>
+
+                            <div class="comtrade-row">
+                                <div class="comtrade-field comtrade-field-wide">
+                                    <span class="comtrade-label">Страны-партнёры</span>
+                                    <input type="text" class="comtrade-country-search" placeholder="Поиск страны">
+                                    <div class="comtrade-countries" role="group" aria-label="Страны-партнёры"></div>
+                                    <span class="comtrade-hint comtrade-selected-hint">Не выбрано ни одной страны</span>
+                                </div>
+                            </div>
+
+                            <div class="comtrade-actions">
+                                <button class="btn btn-primary comtrade-load-btn">Загрузить данные</button>
+                                <span class="comtrade-status" role="status"></span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="file-list">
                         <!-- Карточки файлов будут добавлены сюда -->
                     </div>

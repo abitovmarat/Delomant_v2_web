@@ -46,6 +46,7 @@ const ASSETS = [
     ['data/Logo.png',                'assets/Logo.png.dat'],
     ['data/cbr_rates.json',          'assets/cbr_rates.dat'],
     ['data/company_dictionary.json', 'assets/company_dictionary.dat'],
+    ['data/comtrade_countries.json', 'assets/comtrade_countries.dat'],
 ];
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');
@@ -57,6 +58,7 @@ const sizes = [];
 // Серверная обвязка
 sizes.push(['index.php', write('index.php', read('server/index.php'))]);
 sizes.push(['asset.php', write('asset.php', read('server/asset.php'))]);
+sizes.push(['comtrade.php', write('comtrade.php', read('server/comtrade.php'))]);
 sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 
 // setup.php с подставленным токеном установки
