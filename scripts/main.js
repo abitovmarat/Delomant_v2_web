@@ -6637,6 +6637,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var RECEIVER_COLS = ['Наименование получателя', 'G082 (Наименование получателя)', '083 Наименование/ФИО получателя'];
     var INN_COLS      = ['ИНН получателя', 'G081 (ИНН получателя)', '081 ИНН получателя'];
     var SEGMENT_COLS  = ['Сегмент получателя', 'Сегмент'];
+    var HOLDING_COLS  = ['Более крупный холдинг/объединение', 'Холдинг'];
+    var PRODUCT_COLS  = ['Продукт получателя'];
 
     // Ручной словарь имеет приоритет над правилами: сначала ИНН, потом название
     function detectSegment(name, inn) {
@@ -6654,53 +6656,125 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /*
-     * Сегмент получателя.
+     * Обобщённый обогатитель «учись на разметке».
      *
-     * Рабочие файлы компании уже содержат ручную разметку в столбце
-     * «Сегмент получателя». Поэтому обогатитель сначала УЧИТСЯ на ней —
-     * пополняет словарь «ИНН → сегмент», — и только потом заполняет строки,
-     * где сегмент пуст. Существующая разметка не перезаписывается.
+     * Рабочие файлы компании уже содержат ручную разметку (сегмент, холдинг,
+     * продукт получателя). Поэтому обогатитель сначала УЧИТСЯ: пополняет
+     * словарь «ИНН/название → значение» из заполненных строк, — и только
+     * потом проставляет значение там, где оно пустое. Существующая разметка
+     * никогда не перезаписывается.
      *
-     * На новой сырой выгрузке (разметки нет) словарь и правила проставляют
-     * сегмент автоматически — это и заменяет ручную работу в Excel.
+     * На новой сырой выгрузке словарь (плюс правила, если заданы) проставляет
+     * значения автоматически — это и заменяет ручную работу в Excel.
      */
-    function enrichSegment(data, headers) {
+    function enrichByDict(data, headers, cfg) {
         var recvCol = findAnyColumn(headers, RECEIVER_COLS);
         var innCol  = findAnyColumn(headers, INN_COLS);
-        var target  = findAnyColumn(headers, SEGMENT_COLS);
+        var target  = findAnyColumn(headers, cfg.targetCols);
+
         if (!recvCol && !innCol) {
             return { error: 'Не найдены столбцы «' + RECEIVER_COLS[0] + '» или «' + INN_COLS[0] + '»' };
         }
-
-        // 1. Учимся на уже размеченных строках
-        var learned = 0;
-        if (target) {
-            data.forEach(function (row) {
-                var seg = String(row[target] || '').trim();
-                if (!seg) return;
-                var inn = innCol ? String(row[innCol] || '').trim() : '';
-                var nm  = recvCol ? String(row[recvCol] || '').toUpperCase().trim() : '';
-                if (inn) { if (!segmentDict[inn]) { segmentDict[inn] = seg; learned++; } }
-                else if (nm) { if (!segmentDict[nm]) { segmentDict[nm] = seg; learned++; } }
-            });
-            if (learned) { saveSegmentDict(); renderSegmentDict(); }
-        } else {
-            target = COL_SEGMENT;
+        if (!target) {
+            if (!cfg.createIfMissing) {
+                return { error: 'Нет столбца «' + cfg.targetCols[0] + '» — не на чем учиться. Загрузите файл с вашей разметкой.' };
+            }
+            target = cfg.targetCols[0];
             headers.push(target);
         }
 
-        // 2. Заполняем пустые (уже размеченное не трогаем)
+        function keysOf(row) {
+            return {
+                inn: innCol ? String(row[innCol] || '').trim() : '',
+                name: recvCol ? String(row[recvCol] || '').toUpperCase().trim() : ''
+            };
+        }
+
+        // 1. Учимся на заполненных строках
+        var learned = 0;
+        data.forEach(function (row) {
+            var val = String(row[target] || '').trim();
+            if (!val) return;
+            var k = keysOf(row);
+            var key = k.inn || k.name;
+            if (key && !cfg.dict[key]) { cfg.dict[key] = val; learned++; }
+        });
+        if (learned) cfg.save();
+
+        // 2. Заполняем пустые
         var stats = {}, filled = 0, already = 0;
         data.forEach(function (row) {
             var cur = String(row[target] || '').trim();
             if (cur) { stats[cur] = (stats[cur] || 0) + 1; already++; return; }
-            var seg = detectSegment(recvCol ? row[recvCol] : '', innCol ? row[innCol] : '');
-            row[target] = seg;
-            stats[seg] = (stats[seg] || 0) + 1;
-            filled++;
+            var k = keysOf(row);
+            var val = (k.inn && cfg.dict[k.inn]) || (k.name && cfg.dict[k.name]) || '';
+            if (!val && cfg.rules) val = applySegmentRules(k.name);
+            if (!val && cfg.fallbackToName) val = k.name;
+            if (!val && cfg.fallback) val = cfg.fallback;
+            if (val) {
+                row[target] = val;
+                stats[val] = (stats[val] || 0) + 1;
+                filled++;
+            }
         });
 
-        return { total: data.length, recognized: filled, already: already, learned: learned, stats: stats, target: target };
+        return { total: data.length, recognized: filled, already: already, learned: learned, stats: stats };
+    }
+
+    function applySegmentRules(name) {
+        for (var i = 0; i < SEGMENT_RULES.length; i++) {
+            var r = SEGMENT_RULES[i];
+            for (var k = 0; k < r.keys.length; k++) {
+                if (name.indexOf(r.keys[k]) !== -1) return r.segment;
+            }
+        }
+        return '';
+    }
+
+    // --- Словари обогатителей ---
+    var LS_HOLDING_DICT = 'delomant_holding_dictionary';
+    var LS_PRODUCT_DICT = 'delomant_product_dictionary';
+    var holdingDict = {}, productDict = {};
+    try { holdingDict = JSON.parse(localStorage.getItem(LS_HOLDING_DICT) || '{}') || {}; } catch (e) { holdingDict = {}; }
+    try { productDict = JSON.parse(localStorage.getItem(LS_PRODUCT_DICT) || '{}') || {}; } catch (e) { productDict = {}; }
+
+    function saveHoldingDict() { try { localStorage.setItem(LS_HOLDING_DICT, JSON.stringify(holdingDict)); } catch (e) {} }
+    function saveProductDict() { try { localStorage.setItem(LS_PRODUCT_DICT, JSON.stringify(productDict)); } catch (e) {} }
+
+    // --- Обогатитель: сегмент получателя (словарь + правила) ---
+    function enrichSegment(data, headers) {
+        var res = enrichByDict(data, headers, {
+            targetCols: SEGMENT_COLS,
+            dict: segmentDict,
+            save: function () { saveSegmentDict(); renderSegmentDict(); },
+            rules: true,
+            fallback: 'Прочее',
+            createIfMissing: true
+        });
+        return res;
+    }
+
+    // --- Обогатитель: холдинг/объединение ---
+    function enrichHolding(data, headers) {
+        return enrichByDict(data, headers, {
+            targetCols: HOLDING_COLS,
+            dict: holdingDict,
+            save: saveHoldingDict,
+            // компания вне холдинга группируется сама по себе
+            fallbackToName: true,
+            createIfMissing: true
+        });
+    }
+
+    // --- Обогатитель: продукт получателя ---
+    function enrichProduct(data, headers) {
+        return enrichByDict(data, headers, {
+            targetCols: PRODUCT_COLS,
+            dict: productDict,
+            save: saveProductDict,
+            // угадать продукт по названию нельзя — оставляем пустым
+            createIfMissing: false
+        });
     }
 
     // --- Обогатитель: цена за килограмм ---
@@ -6736,6 +6810,20 @@ document.addEventListener('DOMContentLoaded', function () {
             description: 'Опт / розница / производство / кондитерская / HoReCa / дистрибуция — по названию и словарю',
             adds: [COL_SEGMENT],
             run: enrichSegment
+        },
+        {
+            id: 'holding',
+            label: 'Холдинг / объединение',
+            description: 'Группирует юрлица в холдинги по вашей разметке; компания вне холдинга остаётся сама собой',
+            adds: [HOLDING_COLS[0]],
+            run: enrichHolding
+        },
+        {
+            id: 'product',
+            label: 'Продукт получателя',
+            description: 'Чем занимается получатель — по вашей разметке. Требует файл с размеченным столбцом',
+            adds: [PRODUCT_COLS[0]],
+            run: enrichProduct
         },
         {
             id: 'price-kg',
@@ -6797,8 +6885,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (r.stats) {
                     var keys = Object.keys(r.stats).sort(function (a, b) { return r.stats[b] - r.stats[a]; });
+                    var TOP = 10;
+                    var shown = keys.slice(0, TOP);
                     html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">';
-                    keys.forEach(function (k) {
+                    shown.forEach(function (k) {
                         var pct = r.total ? Math.round(r.stats[k] / r.total * 100) : 0;
                         html += '<tr>';
                         html += '<td style="padding:3px 6px 3px 0">' + escEnrich(k) + '</td>';
@@ -6806,6 +6896,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         html += '</tr>';
                     });
                     html += '</table>';
+                    if (keys.length > TOP) {
+                        var rest = keys.slice(TOP).reduce(function (sum, k) { return sum + r.stats[k]; }, 0);
+                        html += '<div style="font-size:12px;color:var(--color-text-muted);margin-top:4px">и ещё ' +
+                            (keys.length - TOP) + ' значений · ' + formatNumber(rest) + ' строк</div>';
+                    }
                 }
             }
             html += '</div>';
