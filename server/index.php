@@ -222,7 +222,7 @@ header('Content-Type: text/html; charset=UTF-8');
             </div>
             <button type="submit">Войти</button>
         </form>
-        <div class="foot">© <?= date('Y') ?> Delomant Group</div>
+        <div class="foot">© <?= date('Y') ?> Delomant Group · v0.8</div>
     </div>
 </body>
 </html>
