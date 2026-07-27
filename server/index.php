@@ -211,7 +211,6 @@ header('Content-Type: text/html; charset=UTF-8');
         <div class="brand">
             <div class="brand-mark">D</div>
             <div class="brand-name">Delomant Analytics</div>
-            <div class="brand-sub">Аналитика ВЭД</div>
         </div>
         <form method="post" autocomplete="off">
             <div class="error">Неверный пароль. Попробуйте ещё раз.</div>
