@@ -1071,18 +1071,24 @@ document.addEventListener('DOMContentLoaded', function () {
         var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
         var isMonthly = params.freq === 'M';
 
+        // Нац. валюта: Comtrade отдаёт только USD, поэтому пересчитываем по курсу
+        // ЦБ на дату (getRowRubValue сам это делает, если рублёвых столбцов нет)
+        var rubCtx = buildRubCtx(parsed.headers);
+
         var headers = ['Направление', 'Страна', 'Год'];
         if (isMonthly) { headers.push('Месяц'); }
-        headers.push('Квартал', 'Код ТН ВЭД', 'Объём (тонн)', 'Стоимость (тыс. USD)', 'Цена, USD/кг');
+        headers.push('Квартал', 'Код ТН ВЭД', 'Объём (тонн)',
+            'Стоимость (тыс. USD)', 'Стоимость (тыс. нац. вал.)', 'Цена, USD/кг');
 
         var rows = [];
-        var byCountry = {}; // страна → {w: кг, v: USD}
-        var byYear = {};    // год → {w: кг, v: USD}
-        var totalW = 0, totalV = 0;
+        var byCountry = {}; // страна → {w: кг, v: USD, r: руб}
+        var byYear = {};    // год → {w: кг, v: USD, r: руб}
+        var totalW = 0, totalV = 0, totalR = 0;
 
         parsed.rows.forEach(function (r) {
             var weightKg = typeof r[COL_WEIGHT] === 'number' ? r[COL_WEIGHT] : null;
             var valueUsd = typeof r[COL_STAT_USD] === 'number' ? r[COL_STAT_USD] : null;
+            var valueRub = getRowRubValue(r, rubCtx); // рубли (0, если курса нет)
             var country = r[countryCol];
             var year = r[COL_YEAR];
 
@@ -1094,26 +1100,30 @@ document.addEventListener('DOMContentLoaded', function () {
             if (isMonthly) { out['Месяц'] = r[COL_MONTH]; }
             out['Квартал'] = r[COL_QUARTER];
             out['Код ТН ВЭД'] = r[COL_HS_CODE];
-            // Единицы как в аналитике: тонны (round2) и тыс. USD
+            // Единицы как в аналитике: тонны (round2), тыс. USD и тыс. нац. вал.
             out['Объём (тонн)'] = weightKg != null ? round2(weightKg / 1000) : '';
             out['Стоимость (тыс. USD)'] = valueUsd != null ? round2(valueUsd / 1000) : '';
+            out['Стоимость (тыс. нац. вал.)'] = valueRub > 0 ? round2(valueRub / 1000) : '';
             // Цена только там, где есть вес: иначе средняя поедет вниз на пустых
             out['Цена, USD/кг'] = (weightKg && weightKg > 0 && valueUsd != null)
                 ? round2(valueUsd / weightKg) : '';
             rows.push(out);
 
-            if (!byCountry[country]) { byCountry[country] = { w: 0, v: 0 }; }
+            if (!byCountry[country]) { byCountry[country] = { w: 0, v: 0, r: 0 }; }
             if (weightKg != null) { byCountry[country].w += weightKg; totalW += weightKg; }
             if (valueUsd != null) { byCountry[country].v += valueUsd; totalV += valueUsd; }
+            byCountry[country].r += valueRub; totalR += valueRub;
 
-            if (!byYear[year]) { byYear[year] = { w: 0, v: 0 }; }
+            if (!byYear[year]) { byYear[year] = { w: 0, v: 0, r: 0 }; }
             if (weightKg != null) { byYear[year].w += weightKg; }
             if (valueUsd != null) { byYear[year].v += valueUsd; }
+            byYear[year].r += valueRub;
         });
 
         // Сводка по странам для слайдов: доли по объёму/стоимости и средняя цена
         var summaryHeaders = ['Страна', 'Объём (тонн)', 'Доля по объёму, %',
-            'Стоимость (тыс. USD)', 'Доля по стоимости, %', 'Средняя цена, USD/кг'];
+            'Стоимость (тыс. USD)', 'Доля по стоимости, %',
+            'Стоимость (тыс. нац. вал.)', 'Средняя цена, USD/кг'];
         var summaryRows = Object.keys(byCountry).map(function (c) {
             var a = byCountry[c];
             return {
@@ -1122,6 +1132,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Доля по объёму, %': totalW > 0 ? round2(a.w / totalW * 100) : '',
                 'Стоимость (тыс. USD)': round2(a.v / 1000),
                 'Доля по стоимости, %': totalV > 0 ? round2(a.v / totalV * 100) : '',
+                'Стоимость (тыс. нац. вал.)': a.r > 0 ? round2(a.r / 1000) : '',
                 'Средняя цена, USD/кг': a.w > 0 ? round2(a.v / a.w) : '',
             };
         }).sort(function (x, y) { return y['Объём (тонн)'] - x['Объём (тонн)']; });
@@ -1133,7 +1144,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return (Math.pow(last / first, 1 / years) - 1) * 100;
         }
         var yearHeaders = ['Год', 'Объём (тонн)', 'Рост объёма г/г, %',
-            'Стоимость (тыс. USD)', 'Рост стоимости г/г, %', 'Средняя цена, USD/кг'];
+            'Стоимость (тыс. USD)', 'Рост USD г/г, %',
+            'Стоимость (тыс. нац. вал.)', 'Рост нац. вал. г/г, %', 'Средняя цена, USD/кг'];
         var yearKeys = Object.keys(byYear).sort();
         var yearRows = yearKeys.map(function (y, i) {
             var a = byYear[y];
@@ -1142,13 +1154,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Объём (тонн)': round2(a.w / 1000),
                 'Рост объёма г/г, %': '',
                 'Стоимость (тыс. USD)': round2(a.v / 1000),
-                'Рост стоимости г/г, %': '',
+                'Рост USD г/г, %': '',
+                'Стоимость (тыс. нац. вал.)': a.r > 0 ? round2(a.r / 1000) : '',
+                'Рост нац. вал. г/г, %': '',
                 'Средняя цена, USD/кг': a.w > 0 ? round2(a.v / a.w) : '',
             };
             if (i > 0) {
                 var prev = byYear[yearKeys[i - 1]];
                 if (prev.w > 0) { row['Рост объёма г/г, %'] = round2((a.w / prev.w - 1) * 100); }
-                if (prev.v > 0) { row['Рост стоимости г/г, %'] = round2((a.v / prev.v - 1) * 100); }
+                if (prev.v > 0) { row['Рост USD г/г, %'] = round2((a.v / prev.v - 1) * 100); }
+                if (prev.r > 0) { row['Рост нац. вал. г/г, %'] = round2((a.r / prev.r - 1) * 100); }
             }
             return row;
         });
@@ -1158,12 +1173,15 @@ document.addEventListener('DOMContentLoaded', function () {
             var n = yearKeys.length - 1;
             var cagrW = calcCAGR(f.w, l.w, n);
             var cagrV = calcCAGR(f.v, l.v, n);
+            var cagrR = calcCAGR(f.r, l.r, n);
             yearRows.push({
                 'Год': 'CAGR',
                 'Объём (тонн)': cagrW !== null ? round2(cagrW) + '%' : '—',
                 'Рост объёма г/г, %': '',
                 'Стоимость (тыс. USD)': cagrV !== null ? round2(cagrV) + '%' : '—',
-                'Рост стоимости г/г, %': '',
+                'Рост USD г/г, %': '',
+                'Стоимость (тыс. нац. вал.)': cagrR !== null ? round2(cagrR) + '%' : '—',
+                'Рост нац. вал. г/г, %': '',
                 'Средняя цена, USD/кг': '',
             });
         }
@@ -3224,20 +3242,26 @@ document.addEventListener('DOMContentLoaded', function () {
     function getRowRubValue(row, ctx) {
         var direction = ctx.directionCol ? String(row[ctx.directionCol] || '').trim().toUpperCase() : '';
 
-        if (direction === 'ЭК' && ctx.statUsdCol && ctx.dateReleaseCol) {
+        // Импорт: таможенная стоимость уже в рублях (таможенные выгрузки)
+        if (direction !== 'ЭК') {
+            if (ctx.customsCol) { return Number(row[ctx.customsCol]) || 0; }
+            if (ctx.invoiceRubCol) { return Number(row[ctx.invoiceRubCol]) || 0; }
+        }
+
+        // Экспорт, либо импорт без рублёвого столбца (напр. UN Comtrade — только
+        // USD): пересчитываем статистическую стоимость в рубли по курсу ЦБ на дату
+        if (ctx.statUsdCol && ctx.dateReleaseCol) {
             var usdVal = Number(row[ctx.statUsdCol]) || 0;
             if (usdVal === 0) { return 0; }
             var d = parseDate(row[ctx.dateReleaseCol]);
-            if (!d) { return 0; }
-            var iso = d.toISOString().split('T')[0];
-            var rates = findClosestRate(iso);
-            if (rates && rates['USD']) {
-                return round2(usdVal * rates['USD']);
+            if (d) {
+                var iso = d.toISOString().split('T')[0];
+                var rates = findClosestRate(iso);
+                if (rates && rates['USD']) { return round2(usdVal * rates['USD']); }
             }
-            return 0;
         }
 
-        // ИМ или направление не определено — таможенная стоимость (рубли)
+        // Экспорт без курса — рублёвые столбцы как запасной вариант
         if (ctx.customsCol) { return Number(row[ctx.customsCol]) || 0; }
         if (ctx.invoiceRubCol) { return Number(row[ctx.invoiceRubCol]) || 0; }
         return 0;
