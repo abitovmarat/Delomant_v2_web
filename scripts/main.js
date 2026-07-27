@@ -598,12 +598,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeStatus = document.querySelector('.comtrade-status');
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
     var comtradeOriginalBtn = document.querySelector('.comtrade-original-btn');
+    var comtradePresentationBtn = document.querySelector('.comtrade-presentation-btn');
 
     var comtradeCountries = [];
     var comtradeSelected = {}; // код страны → true
     // Сырой ответ API — строки как пришли, до схлопывания в comtradeToRows.
     // Храним, чтобы пользователь мог скачать оригинал выгрузки.
     var comtradeRawRows = [];
+    // Понятная версия для презентаций: {headers, rows} с ценой и объёмом.
+    var comtradePresentation = null;
 
     function loadComtradeCountries() {
         if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
@@ -925,7 +928,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         comtradeLoadBtn.disabled = true;
         if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = true; }
+        if (comtradePresentationBtn) { comtradePresentationBtn.hidden = true; }
         comtradeRawRows = [];
+        comtradePresentation = null;
         setComtradeStatus('Запрос 1 из ' + batches.length + '…', 'progress');
 
         var collected = [];
@@ -954,6 +959,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = false; }
 
                 var parsed = comtradeToRows(collected, params);
+
+                // Понятная версия для презентаций: цена, объём, читаемые подписи
+                comtradePresentation = buildComtradePresentation(parsed, params);
+                if (comtradePresentationBtn) { comtradePresentationBtn.hidden = false; }
+
                 var label = 'UN Comtrade — ' +
                     (params.direction === 'import' ? 'импорт РФ' : 'экспорт РФ') + ', ' +
                     params.periods[0].slice(0, 4) + '–' + params.periods[params.periods.length - 1].slice(0, 4);
@@ -1032,6 +1042,56 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (comtradeOriginalBtn) {
         comtradeOriginalBtn.addEventListener('click', downloadComtradeOriginal);
+    }
+
+    /*
+     * Понятная версия выгрузки Comtrade — для рядового сотрудника, готовящего
+     * презентацию: читаемые подписи, объём в тоннах и посчитанная цена USD/кг.
+     * Строится из уже обработанных строк (parsed), а не из сырого ответа.
+     */
+    function buildComtradePresentation(parsed, params) {
+        var isImport = params.direction === 'import';
+        var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
+        var isMonthly = params.freq === 'M';
+
+        var headers = ['Направление', 'Страна', 'Год'];
+        if (isMonthly) { headers.push('Месяц'); }
+        headers.push('Квартал', 'Код ТН ВЭД', 'Объём, тонн', 'Стоимость, USD', 'Цена, USD/кг');
+
+        var rows = parsed.rows.map(function (r) {
+            var weightKg = typeof r[COL_WEIGHT] === 'number' ? r[COL_WEIGHT] : null;
+            var valueUsd = typeof r[COL_STAT_USD] === 'number' ? r[COL_STAT_USD] : null;
+
+            var out = {
+                'Направление': isImport ? 'Импорт' : 'Экспорт',
+                'Страна': r[countryCol],
+                'Год': r[COL_YEAR],
+            };
+            if (isMonthly) { out['Месяц'] = r[COL_MONTH]; }
+            out['Квартал'] = r[COL_QUARTER];
+            out['Код ТН ВЭД'] = r[COL_HS_CODE];
+            // Объём в тоннах: презентации привычнее тонны, чем килограммы
+            out['Объём, тонн'] = weightKg != null ? Math.round(weightKg / 1000 * 1000) / 1000 : '';
+            out['Стоимость, USD'] = valueUsd != null ? valueUsd : '';
+            // Цена только там, где есть вес: иначе средняя поедет вниз на пустых
+            out['Цена, USD/кг'] = (weightKg && weightKg > 0 && valueUsd != null)
+                ? Math.round(valueUsd / weightKg * 100) / 100 : '';
+            return out;
+        });
+
+        return { headers: headers, rows: rows };
+    }
+
+    function downloadComtradePresentation() {
+        if (!comtradePresentation || comtradePresentation.rows.length === 0) { return; }
+        var fileName = 'comtrade_presentation_' +
+            new Date().toISOString().slice(0, 10) + '.xlsx';
+        downloadXlsxData(comtradePresentation.rows, comtradePresentation.headers,
+            'Comtrade', fileName);
+    }
+
+    if (comtradePresentationBtn) {
+        comtradePresentationBtn.addEventListener('click', downloadComtradePresentation);
     }
 
     /* ================================
