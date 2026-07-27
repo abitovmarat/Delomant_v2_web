@@ -1044,10 +1044,27 @@ document.addEventListener('DOMContentLoaded', function () {
         comtradeOriginalBtn.addEventListener('click', downloadComtradeOriginal);
     }
 
+    // Ширина колонок листа по содержимому (первые 100 строк) — как в downloadXlsxData
+    function comtradeColWidths(data, headers) {
+        return headers.map(function (h) {
+            var maxLen = String(h).length;
+            var n = Math.min(data.length, 100);
+            for (var r = 0; r < n; r++) {
+                var v = data[r][h];
+                if (v != null) { var l = String(v).length; if (l > maxLen) { maxLen = l; } }
+            }
+            return { wch: Math.min(maxLen + 2, 50) };
+        });
+    }
+
     /*
      * Понятная версия выгрузки Comtrade — для рядового сотрудника, готовящего
-     * презентацию: читаемые подписи, объём в тоннах и посчитанная цена USD/кг.
+     * презентацию. Единицы совпадают с аналитикой приложения, чтобы не путаться:
+     * объём — «Объём (тонн)» (вес / 1000, round2), стоимость — «тыс. USD».
      * Строится из уже обработанных строк (parsed), а не из сырого ответа.
+     *
+     * Возвращает два набора: detail — построчная таблица, summary — сводка по
+     * странам (доли и средняя цена) для слайдов.
      */
     function buildComtradePresentation(parsed, params) {
         var isImport = params.direction === 'import';
@@ -1056,38 +1073,83 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var headers = ['Направление', 'Страна', 'Год'];
         if (isMonthly) { headers.push('Месяц'); }
-        headers.push('Квартал', 'Код ТН ВЭД', 'Объём, тонн', 'Стоимость, USD', 'Цена, USD/кг');
+        headers.push('Квартал', 'Код ТН ВЭД', 'Объём (тонн)', 'Стоимость (тыс. USD)', 'Цена, USD/кг');
 
-        var rows = parsed.rows.map(function (r) {
+        var rows = [];
+        var byCountry = {}; // страна → {w: кг, v: USD}
+        var totalW = 0, totalV = 0;
+
+        parsed.rows.forEach(function (r) {
             var weightKg = typeof r[COL_WEIGHT] === 'number' ? r[COL_WEIGHT] : null;
             var valueUsd = typeof r[COL_STAT_USD] === 'number' ? r[COL_STAT_USD] : null;
+            var country = r[countryCol];
 
             var out = {
                 'Направление': isImport ? 'Импорт' : 'Экспорт',
-                'Страна': r[countryCol],
+                'Страна': country,
                 'Год': r[COL_YEAR],
             };
             if (isMonthly) { out['Месяц'] = r[COL_MONTH]; }
             out['Квартал'] = r[COL_QUARTER];
             out['Код ТН ВЭД'] = r[COL_HS_CODE];
-            // Объём в тоннах: презентации привычнее тонны, чем килограммы
-            out['Объём, тонн'] = weightKg != null ? Math.round(weightKg / 1000 * 1000) / 1000 : '';
-            out['Стоимость, USD'] = valueUsd != null ? valueUsd : '';
+            // Единицы как в аналитике: тонны (round2) и тыс. USD
+            out['Объём (тонн)'] = weightKg != null ? round2(weightKg / 1000) : '';
+            out['Стоимость (тыс. USD)'] = valueUsd != null ? round2(valueUsd / 1000) : '';
             // Цена только там, где есть вес: иначе средняя поедет вниз на пустых
             out['Цена, USD/кг'] = (weightKg && weightKg > 0 && valueUsd != null)
-                ? Math.round(valueUsd / weightKg * 100) / 100 : '';
-            return out;
+                ? round2(valueUsd / weightKg) : '';
+            rows.push(out);
+
+            if (!byCountry[country]) { byCountry[country] = { w: 0, v: 0 }; }
+            if (weightKg != null) { byCountry[country].w += weightKg; totalW += weightKg; }
+            if (valueUsd != null) { byCountry[country].v += valueUsd; totalV += valueUsd; }
         });
 
-        return { headers: headers, rows: rows };
+        // Сводка по странам для слайдов: доли по объёму/стоимости и средняя цена
+        var summaryHeaders = ['Страна', 'Объём (тонн)', 'Доля по объёму, %',
+            'Стоимость (тыс. USD)', 'Доля по стоимости, %', 'Средняя цена, USD/кг'];
+        var summaryRows = Object.keys(byCountry).map(function (c) {
+            var a = byCountry[c];
+            return {
+                'Страна': c,
+                'Объём (тонн)': round2(a.w / 1000),
+                'Доля по объёму, %': totalW > 0 ? round2(a.w / totalW * 100) : '',
+                'Стоимость (тыс. USD)': round2(a.v / 1000),
+                'Доля по стоимости, %': totalV > 0 ? round2(a.v / totalV * 100) : '',
+                'Средняя цена, USD/кг': a.w > 0 ? round2(a.v / a.w) : '',
+            };
+        }).sort(function (x, y) { return y['Объём (тонн)'] - x['Объём (тонн)']; });
+
+        return {
+            headers: headers, rows: rows,
+            summaryHeaders: summaryHeaders, summaryRows: summaryRows,
+        };
     }
 
     function downloadComtradePresentation() {
         if (!comtradePresentation || comtradePresentation.rows.length === 0) { return; }
-        var fileName = 'comtrade_presentation_' +
-            new Date().toISOString().slice(0, 10) + '.xlsx';
-        downloadXlsxData(comtradePresentation.rows, comtradePresentation.headers,
-            'Comtrade', fileName);
+        if (typeof XLSX === 'undefined') { return; }
+
+        var p = comtradePresentation;
+        var wb = XLSX.utils.book_new();
+
+        var wsData = XLSX.utils.json_to_sheet(p.rows, { header: p.headers });
+        wsData['!cols'] = comtradeColWidths(p.rows, p.headers);
+        XLSX.utils.book_append_sheet(wb, wsData, 'Данные');
+
+        if (p.summaryRows.length > 0) {
+            var wsSum = XLSX.utils.json_to_sheet(p.summaryRows, { header: p.summaryHeaders });
+            wsSum['!cols'] = comtradeColWidths(p.summaryRows, p.summaryHeaders);
+            XLSX.utils.book_append_sheet(wb, wsSum, 'Для слайдов — страны');
+        }
+
+        appendSourceSheet(wb);
+
+        var fileName = 'comtrade_presentation_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+        var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        triggerDownload(new Blob([wbout], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }), fileName);
     }
 
     if (comtradePresentationBtn) {
