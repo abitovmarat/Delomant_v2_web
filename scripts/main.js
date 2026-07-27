@@ -1077,17 +1077,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var rows = [];
         var byCountry = {}; // страна → {w: кг, v: USD}
+        var byYear = {};    // год → {w: кг, v: USD}
         var totalW = 0, totalV = 0;
 
         parsed.rows.forEach(function (r) {
             var weightKg = typeof r[COL_WEIGHT] === 'number' ? r[COL_WEIGHT] : null;
             var valueUsd = typeof r[COL_STAT_USD] === 'number' ? r[COL_STAT_USD] : null;
             var country = r[countryCol];
+            var year = r[COL_YEAR];
 
             var out = {
                 'Направление': isImport ? 'Импорт' : 'Экспорт',
                 'Страна': country,
-                'Год': r[COL_YEAR],
+                'Год': year,
             };
             if (isMonthly) { out['Месяц'] = r[COL_MONTH]; }
             out['Квартал'] = r[COL_QUARTER];
@@ -1103,6 +1105,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!byCountry[country]) { byCountry[country] = { w: 0, v: 0 }; }
             if (weightKg != null) { byCountry[country].w += weightKg; totalW += weightKg; }
             if (valueUsd != null) { byCountry[country].v += valueUsd; totalV += valueUsd; }
+
+            if (!byYear[year]) { byYear[year] = { w: 0, v: 0 }; }
+            if (weightKg != null) { byYear[year].w += weightKg; }
+            if (valueUsd != null) { byYear[year].v += valueUsd; }
         });
 
         // Сводка по странам для слайдов: доли по объёму/стоимости и средняя цена
@@ -1120,9 +1126,52 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }).sort(function (x, y) { return y['Объём (тонн)'] - x['Объём (тонн)']; });
 
+        // Сводка по годам для слайдов: рост год-к-году + итоговый CAGR.
+        // CAGR как в аналитике: (last/first)^(1/лет) − 1, ×100.
+        function calcCAGR(first, last, years) {
+            if (!first || first <= 0 || years <= 0) { return null; }
+            return (Math.pow(last / first, 1 / years) - 1) * 100;
+        }
+        var yearHeaders = ['Год', 'Объём (тонн)', 'Рост объёма г/г, %',
+            'Стоимость (тыс. USD)', 'Рост стоимости г/г, %', 'Средняя цена, USD/кг'];
+        var yearKeys = Object.keys(byYear).sort();
+        var yearRows = yearKeys.map(function (y, i) {
+            var a = byYear[y];
+            var row = {
+                'Год': y,
+                'Объём (тонн)': round2(a.w / 1000),
+                'Рост объёма г/г, %': '',
+                'Стоимость (тыс. USD)': round2(a.v / 1000),
+                'Рост стоимости г/г, %': '',
+                'Средняя цена, USD/кг': a.w > 0 ? round2(a.v / a.w) : '',
+            };
+            if (i > 0) {
+                var prev = byYear[yearKeys[i - 1]];
+                if (prev.w > 0) { row['Рост объёма г/г, %'] = round2((a.w / prev.w - 1) * 100); }
+                if (prev.v > 0) { row['Рост стоимости г/г, %'] = round2((a.v / prev.v - 1) * 100); }
+            }
+            return row;
+        });
+        // Строка CAGR (первый → последний год), как в анализе «Объёмы и стоимость»
+        if (yearKeys.length >= 2) {
+            var f = byYear[yearKeys[0]], l = byYear[yearKeys[yearKeys.length - 1]];
+            var n = yearKeys.length - 1;
+            var cagrW = calcCAGR(f.w, l.w, n);
+            var cagrV = calcCAGR(f.v, l.v, n);
+            yearRows.push({
+                'Год': 'CAGR',
+                'Объём (тонн)': cagrW !== null ? round2(cagrW) + '%' : '—',
+                'Рост объёма г/г, %': '',
+                'Стоимость (тыс. USD)': cagrV !== null ? round2(cagrV) + '%' : '—',
+                'Рост стоимости г/г, %': '',
+                'Средняя цена, USD/кг': '',
+            });
+        }
+
         return {
             headers: headers, rows: rows,
             summaryHeaders: summaryHeaders, summaryRows: summaryRows,
+            yearHeaders: yearHeaders, yearRows: yearRows,
         };
     }
 
@@ -1141,6 +1190,12 @@ document.addEventListener('DOMContentLoaded', function () {
             var wsSum = XLSX.utils.json_to_sheet(p.summaryRows, { header: p.summaryHeaders });
             wsSum['!cols'] = comtradeColWidths(p.summaryRows, p.summaryHeaders);
             XLSX.utils.book_append_sheet(wb, wsSum, 'Для слайдов — страны');
+        }
+
+        if (p.yearRows.length > 0) {
+            var wsYear = XLSX.utils.json_to_sheet(p.yearRows, { header: p.yearHeaders });
+            wsYear['!cols'] = comtradeColWidths(p.yearRows, p.yearHeaders);
+            XLSX.utils.book_append_sheet(wb, wsYear, 'Для слайдов — годы');
         }
 
         appendSourceSheet(wb);
