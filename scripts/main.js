@@ -7354,6 +7354,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var COL_SEGMENT  = 'Сегмент';
     var COL_PRICE_KG = 'Цена, USD/кг';
+    var COL_REGION   = 'Регион получателя';
 
     var LS_SEGMENT_DICT = 'delomant_segment_dictionary';
     var segmentDict = {};
@@ -7422,6 +7423,10 @@ document.addEventListener('DOMContentLoaded', function () {
      * значения автоматически — это и заменяет ручную работу в Excel.
      */
     function enrichByDict(data, headers, cfg) {
+        if (!isContractorDataAvailable()) {
+            return { skipped: true, note: 'Недоступно на данных UN Comtrade: статистика ООН агрегирована и не содержит контрагентов (получателей, ИНН). Загрузите таможенную выгрузку.' };
+        }
+
         var recvCol = findAnyColumn(headers, RECEIVER_COLS);
         var innCol  = findAnyColumn(headers, INN_COLS);
         var target  = findAnyColumn(headers, cfg.targetCols);
@@ -7437,10 +7442,15 @@ document.addEventListener('DOMContentLoaded', function () {
             headers.push(target);
         }
 
+        // name — канонический ключ для словаря (нормализация схлопывает
+        // «ООО Ромашка» и «Ромашка, ООО» в одно), nameRaw — для правил,
+        // которые ищут ключевые слова в исходном названии.
         function keysOf(row) {
+            var rawName = recvCol ? String(row[recvCol] || '') : '';
             return {
                 inn: innCol ? String(row[innCol] || '').trim() : '',
-                name: recvCol ? String(row[recvCol] || '').toUpperCase().trim() : ''
+                name: rawName ? normalizeCompanyName(rawName) : '',
+                nameRaw: rawName.toUpperCase().trim()
             };
         }
 
@@ -7462,7 +7472,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (cur) { stats[cur] = (stats[cur] || 0) + 1; already++; return; }
             var k = keysOf(row);
             var val = (k.inn && cfg.dict[k.inn]) || (k.name && cfg.dict[k.name]) || '';
-            if (!val && cfg.rules) val = applySegmentRules(k.name);
+            if (!val && cfg.rules) val = applySegmentRules(k.nameRaw);
             if (!val && cfg.fallbackToName) val = k.name;
             if (!val && cfg.fallback) val = cfg.fallback;
             if (val) {
@@ -7556,6 +7566,75 @@ document.addEventListener('DOMContentLoaded', function () {
         return { total: data.length, recognized: filled, avg: filled ? round2(sum / filled) : null };
     }
 
+    // --- Обогатитель: регион получателя по ИНН ---
+    // Первые две цифры ИНН — код региона налогового органа (по справочнику
+    // ФНС). Для ИНН он отличается от «конституционных»/ГИБДД-кодов: Крым — 91,
+    // Севастополь — 92. Спорные и неактуальные коды (упразднённые округа,
+    // новые регионы) не заводим — лучше пустая ячейка, чем неверный регион.
+    var REGION_BY_INN = {
+        '01': 'Республика Адыгея', '02': 'Республика Башкортостан', '03': 'Республика Бурятия',
+        '04': 'Республика Алтай', '05': 'Республика Дагестан', '06': 'Республика Ингушетия',
+        '07': 'Кабардино-Балкарская Республика', '08': 'Республика Калмыкия',
+        '09': 'Карачаево-Черкесская Республика', '10': 'Республика Карелия', '11': 'Республика Коми',
+        '12': 'Республика Марий Эл', '13': 'Республика Мордовия', '14': 'Республика Саха (Якутия)',
+        '15': 'Республика Северная Осетия — Алания', '16': 'Республика Татарстан', '17': 'Республика Тыва',
+        '18': 'Удмуртская Республика', '19': 'Республика Хакасия', '20': 'Чеченская Республика',
+        '21': 'Чувашская Республика', '22': 'Алтайский край', '23': 'Краснодарский край',
+        '24': 'Красноярский край', '25': 'Приморский край', '26': 'Ставропольский край',
+        '27': 'Хабаровский край', '28': 'Амурская область', '29': 'Архангельская область',
+        '30': 'Астраханская область', '31': 'Белгородская область', '32': 'Брянская область',
+        '33': 'Владимирская область', '34': 'Волгоградская область', '35': 'Вологодская область',
+        '36': 'Воронежская область', '37': 'Ивановская область', '38': 'Иркутская область',
+        '39': 'Калининградская область', '40': 'Калужская область', '41': 'Камчатский край',
+        '42': 'Кемеровская область', '43': 'Кировская область', '44': 'Костромская область',
+        '45': 'Курганская область', '46': 'Курская область', '47': 'Ленинградская область',
+        '48': 'Липецкая область', '49': 'Магаданская область', '50': 'Московская область',
+        '51': 'Мурманская область', '52': 'Нижегородская область', '53': 'Новгородская область',
+        '54': 'Новосибирская область', '55': 'Омская область', '56': 'Оренбургская область',
+        '57': 'Орловская область', '58': 'Пензенская область', '59': 'Пермский край',
+        '60': 'Псковская область', '61': 'Ростовская область', '62': 'Рязанская область',
+        '63': 'Самарская область', '64': 'Саратовская область', '65': 'Сахалинская область',
+        '66': 'Свердловская область', '67': 'Смоленская область', '68': 'Тамбовская область',
+        '69': 'Тверская область', '70': 'Томская область', '71': 'Тульская область',
+        '72': 'Тюменская область', '73': 'Ульяновская область', '74': 'Челябинская область',
+        '75': 'Забайкальский край', '76': 'Ярославская область', '77': 'Москва',
+        '78': 'Санкт-Петербург', '79': 'Еврейская автономная область',
+        '83': 'Ненецкий автономный округ', '86': 'Ханты-Мансийский автономный округ — Югра',
+        '87': 'Чукотский автономный округ', '89': 'Ямало-Ненецкий автономный округ',
+        '91': 'Республика Крым', '92': 'Севастополь'
+    };
+
+    function enrichRegion(data, headers) {
+        if (!isContractorDataAvailable()) {
+            return { skipped: true, note: 'Недоступно на данных UN Comtrade: нет ИНН получателя. Загрузите таможенную выгрузку.' };
+        }
+        var innCol = findAnyColumn(headers, INN_COLS);
+        if (!innCol) {
+            return { error: 'Не найден столбец «' + INN_COLS[0] + '» — регион определяется по ИНН.' };
+        }
+        if (headers.indexOf(COL_REGION) === -1) { headers.push(COL_REGION); }
+
+        var stats = {}, filled = 0, already = 0, unknown = 0;
+        data.forEach(function (row) {
+            var cur = String(row[COL_REGION] || '').trim();
+            if (cur) { stats[cur] = (stats[cur] || 0) + 1; already++; return; }
+
+            // ИНН может прийти числом — приводим к строке и убираем дробную часть
+            var inn = String(row[innCol] == null ? '' : row[innCol]).trim().split('.')[0];
+            var region = /^\d{2}/.test(inn) ? (REGION_BY_INN[inn.slice(0, 2)] || '') : '';
+            if (region) {
+                row[COL_REGION] = region;
+                stats[region] = (stats[region] || 0) + 1;
+                filled++;
+            } else {
+                row[COL_REGION] = '';
+                if (inn !== '') { unknown++; }
+            }
+        });
+
+        return { total: data.length, recognized: filled, already: already, stats: stats, unknown: unknown };
+    }
+
     // --- Реестр обогатителей ---
     var ENRICHERS = [
         {
@@ -7564,6 +7643,13 @@ document.addEventListener('DOMContentLoaded', function () {
             description: 'Опт / розница / производство / кондитерская / HoReCa / дистрибуция — по названию и словарю',
             adds: [COL_SEGMENT],
             run: enrichSegment
+        },
+        {
+            id: 'region',
+            label: 'Регион получателя (по ИНН)',
+            description: 'Субъект РФ по первым двум цифрам ИНН — для анализа продаж по регионам. Это регион налогового органа, обычно совпадает с местом компании',
+            adds: [COL_REGION],
+            run: enrichRegion
         },
         {
             id: 'holding',
@@ -7724,8 +7810,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var valEl = document.querySelector('.enrich-dict-value');
             var key = keyEl.value.trim();
             if (!key) { keyEl.focus(); return; }
-            // ИНН оставляем как есть, название — в верхний регистр (правила сравнивают так же)
-            segmentDict[/^\d+$/.test(key) ? key : key.toUpperCase()] = valEl.value;
+            // ИНН оставляем как есть, название — через ту же нормализацию, что и
+            // при обогащении, иначе ручная запись не совпадёт с данными
+            var dictKey = /^\d+$/.test(key) ? key : normalizeCompanyName(key);
+            if (!dictKey) { keyEl.focus(); return; }
+            segmentDict[dictKey] = valEl.value;
             saveSegmentDict();
             keyEl.value = '';
             renderSegmentDict();
