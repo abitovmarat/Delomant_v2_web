@@ -597,9 +597,13 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
     var comtradeStatus = document.querySelector('.comtrade-status');
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
+    var comtradeOriginalBtn = document.querySelector('.comtrade-original-btn');
 
     var comtradeCountries = [];
     var comtradeSelected = {}; // код страны → true
+    // Сырой ответ API — строки как пришли, до схлопывания в comtradeToRows.
+    // Храним, чтобы пользователь мог скачать оригинал выгрузки.
+    var comtradeRawRows = [];
 
     function loadComtradeCountries() {
         if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
@@ -920,6 +924,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         comtradeLoadBtn.disabled = true;
+        if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = true; }
+        comtradeRawRows = [];
         setComtradeStatus('Запрос 1 из ' + batches.length + '…', 'progress');
 
         var collected = [];
@@ -942,6 +948,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     setComtradeStatus('Comtrade не вернул данных по этому запросу. Проверьте коды ТН ВЭД и период.', 'error');
                     return;
                 }
+
+                // Сохраняем сырой ответ и открываем кнопку скачивания оригинала
+                comtradeRawRows = collected;
+                if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = false; }
 
                 var parsed = comtradeToRows(collected, params);
                 var label = 'UN Comtrade — ' +
@@ -996,6 +1006,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (comtradeLoadBtn) {
         comtradeLoadBtn.addEventListener('click', comtradeLoad);
+    }
+
+    /*
+     * Скачивание оригинала выгрузки Comtrade: строки как пришли от API,
+     * со всеми полями и без схлопывания. Колонки — объединение ключей
+     * всех строк (у разных строк набор полей может отличаться), порядок —
+     * по первому появлению.
+     */
+    function downloadComtradeOriginal() {
+        if (comtradeRawRows.length === 0) { return; }
+
+        var headers = [];
+        var seen = {};
+        comtradeRawRows.forEach(function (row) {
+            Object.keys(row).forEach(function (key) {
+                if (!seen[key]) { seen[key] = true; headers.push(key); }
+            });
+        });
+
+        var fileName = 'comtrade_original_' +
+            new Date().toISOString().slice(0, 10) + '.xlsx';
+        downloadXlsxData(comtradeRawRows, headers, 'Comtrade оригинал', fileName);
+    }
+
+    if (comtradeOriginalBtn) {
+        comtradeOriginalBtn.addEventListener('click', downloadComtradeOriginal);
     }
 
     /* ================================
