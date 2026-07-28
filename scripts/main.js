@@ -7908,6 +7908,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var presNextBtn = document.querySelector('.pres-next-slide');
     var presExportBtn = document.querySelector('.pres-export-pdf');
     var presExportPptxBtn = document.querySelector('.pres-export-pptx');
+    var presExportHtmlBtn = document.querySelector('.pres-export-html');
     var presClearBtn = document.querySelector('.pres-clear-btn');
     var presSettingsOverlay = document.querySelector('.pres-settings-overlay');
 
@@ -8081,6 +8082,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var len = presState.slides.length;
         presExportBtn.disabled = len === 0;
         presExportPptxBtn.disabled = len === 0;
+        if (presExportHtmlBtn) presExportHtmlBtn.disabled = len === 0;
         presPrevBtn.disabled = presState.activeIndex <= 0;
         presNextBtn.disabled = presState.activeIndex >= len - 1;
         presSlideIndicator.textContent = len > 0
@@ -10264,6 +10266,78 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Export PPTX
     presExportPptxBtn.addEventListener('click', exportPresPPTX);
+
+    // --- Export: самодостаточный HTML-дек ---
+    // Слайды уже рендерятся инлайновым SVG (векторно), поэтому дек полностью
+    // самодостаточен: встраиваем CSS приложения + логотип, добавляем навигацию
+    // и печать в PDF (@page landscape) — без растеризации и без сервера.
+    function buildDeckDocument(title, appCss, slidesBody) {
+        var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+        var deckCss = [
+            'html,body{margin:0!important;padding:0!important;height:auto!important;display:block!important;background:#20232B!important;overflow:auto!important}',
+            'body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}',
+            '.pres-slide{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif!important}',
+            '.deck-stage{width:100vw;height:calc(100vh - 66px);display:flex;align-items:center;justify-content:center;overflow:hidden}',
+            '.deck-slide{display:none;align-items:center;justify-content:center}',
+            '.deck-slide.on{display:flex}',
+            '.deck-slide .pres-slide{transform:scale(var(--s,0.9));box-shadow:0 20px 60px -20px rgba(0,0,0,.6)}',
+            '.deck-nav{height:66px;display:flex;align-items:center;justify-content:center;gap:14px;background:#171A21;color:#E8EAF0}',
+            '.deck-nav button{font:inherit;font-size:14px;font-weight:600;background:#252A34;color:#E8EAF0;border:1px solid #333A46;border-radius:8px;padding:8px 15px;cursor:pointer}',
+            '.deck-nav button:hover{border-color:#5E8DF6}',
+            '.deck-nav .c{min-width:56px;text-align:center;color:#AAB2C4}',
+            '.deck-nav .p{border-color:#5E8DF6;color:#9DBBFF}',
+            '@media print{@page{size:A4 landscape;margin:0}body{background:#fff!important}.deck-nav{display:none}',
+            '.deck-stage{display:block!important;width:auto;height:auto;overflow:visible}',
+            '.deck-slide{display:block!important;width:297mm;height:210mm;page-break-after:always;overflow:hidden;position:relative}',
+            '.deck-slide:last-child{page-break-after:auto}',
+            '.deck-slide .pres-slide{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1.169);box-shadow:none}}'
+        ].join('\n');
+        var js = '(function(){var s=[].slice.call(document.querySelectorAll(".deck-slide")),' +
+            'st=document.getElementById("deckStage"),c=document.getElementById("deckCounter"),i=0;' +
+            'function fit(){var aw=st.clientWidth-40,ah=st.clientHeight-40;document.documentElement.style.setProperty("--s",Math.min(aw/960,ah/540));}' +
+            'function go(n){i=Math.max(0,Math.min(s.length-1,n));s.forEach(function(e,k){e.classList.toggle("on",k===i);});c.textContent=(i+1)+" / "+s.length;fit();}' +
+            'document.getElementById("dPrev").onclick=function(){go(i-1);};document.getElementById("dNext").onclick=function(){go(i+1);};' +
+            'document.getElementById("dPrint").onclick=function(){window.print();};' +
+            'document.addEventListener("keydown",function(e){if(e.key==="ArrowRight"||e.key==="PageDown")go(i+1);else if(e.key==="ArrowLeft"||e.key==="PageUp")go(i-1);else if(e.key==="Home")go(0);else if(e.key==="End")go(s.length-1);});' +
+            'window.addEventListener("resize",fit);go(0);})();';
+        var nav = '<div class="deck-nav"><button id="dPrev">← Назад</button>' +
+            '<span class="c" id="deckCounter">1 / 1</span><button id="dNext">Вперёд →</button>' +
+            '<button class="p" id="dPrint">Скачать PDF (печать)</button></div>';
+        return '<!doctype html><html lang="ru"><head><meta charset="utf-8">' +
+            '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+            '<title>' + esc(title) + '</title><style>' + appCss + '\n' + deckCss + '</style></head><body>' +
+            '<div class="deck-stage" id="deckStage">' + slidesBody + '</div>' + nav +
+            '<scr' + 'ipt>' + js + '</scr' + 'ipt></body></html>';
+    }
+
+    function exportPresHTMLDeck() {
+        if (presState.slides.length === 0) return;
+        var data = getActiveData(), headers = getActiveHeaders();
+        var slidesHTML = '';
+        presState.slides.forEach(function (slide) {
+            var inner;
+            try { inner = renderPresSlideByType(slide, data, headers); }
+            catch (e) { inner = '<div class="pres-slide"><div class="pres-slide-header"><span class="pres-slide-header-text">' + (slide.title || 'Слайд') + '</span></div><div class="pres-slide-body"><p>Не удалось построить слайд.</p></div><div class="pres-slide-footer"><span>DELOMANT</span><span></span></div></div>'; }
+            slidesHTML += '<div class="deck-slide">' + inner + '</div>';
+        });
+        var titleRaw = (presState.slides[0] && presState.slides[0].title) || 'Презентация';
+        var docTitle = String(titleRaw).replace(/<[^>]*>/g, '').trim() || 'Презентация';
+
+        var cssP = fetch('styles/main.css').then(function (r) { return r.ok ? r.text() : ''; }).catch(function () { return ''; });
+        var logoP = fetch('data/Logo.png').then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) {
+            if (!b) return '';
+            return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.onerror = function () { res(''); }; fr.readAsDataURL(b); });
+        }).catch(function () { return ''; });
+
+        Promise.all([cssP, logoP]).then(function (arr) {
+            var body = arr[1] ? slidesHTML.split('data/Logo.png').join(arr[1]) : slidesHTML;
+            var doc = buildDeckDocument(docTitle, arr[0], body);
+            triggerDownload(new Blob([doc], { type: 'text/html;charset=utf-8' }),
+                'presentation_' + new Date().toISOString().slice(0, 10) + '.html');
+        });
+    }
+
+    if (presExportHtmlBtn) presExportHtmlBtn.addEventListener('click', exportPresHTMLDeck);
 
     // --- PPTX-экспорт через PptxGenJS ---
     function exportPresPPTX() {
