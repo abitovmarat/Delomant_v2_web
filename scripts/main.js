@@ -8610,7 +8610,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var commentary = opts.commentary || '';
         var html = '<div class="pres-slide">';
         html += '<div class="pres-slide-header">';
-        html += '<img src="data/Logo.png" class="pres-slide-logo" onerror="this.style.display=\'none\'">';
         html += '<span class="pres-slide-header-text" data-editable="title">' + headerText + '</span>';
         html += '</div>';
         if (commentary) {

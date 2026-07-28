@@ -6,6 +6,9 @@
     --color-primary: #2563EB;
     --color-primary-dark: #1D4ED8;
     --color-primary-light: #EFF6FF;
+    /* Фирменный кобальт Delomant — для слайдов презентации (эталон: обучение/pdf_pages) */
+    --pres-blue: #2F2BC7;
+    --pres-blue-deep: #211CB0;
     --color-success: #16A34A;
     --color-error: #DC2626;
     --color-warning: #F59E0B;
@@ -2293,12 +2296,12 @@ body {
 }
 
 .pres-slide-header {
-    background: #2563EB;
+    background: var(--pres-blue);
     color: #FFFFFF;
-    min-height: 44px;
+    min-height: 52px;
     display: flex;
     align-items: center;
-    padding: 0 28px;
+    padding: 14px 32px;
     gap: 12px;
     flex-shrink: 0;
 }
@@ -2307,12 +2310,12 @@ body {
     height: 24px;
 }
 
+/* Action-title: заголовок = вывод, переносится в несколько строк (эталон Delomant) */
 .pres-slide-header-text {
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.005em;
 }
 
 /* Inline editable hover */
@@ -2339,21 +2342,29 @@ body {
 }
 
 .pres-slide-footer {
-    height: 24px;
-    background: #F8FAFC;
-    border-top: 1px solid #E2E8F0;
+    height: 28px;
+    background: #FFFFFF;
+    border-top: 1px solid #E6E8F0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 28px;
+    padding: 0 32px;
     font-size: 9px;
-    color: #64748B;
+    color: #9AA0AE;
     flex-shrink: 0;
+}
+
+/* Фирменный словесный знак DELOMANT слева в подвале */
+.pres-slide-footer span:first-child {
+    color: var(--pres-blue);
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    font-size: 10px;
 }
 
 /* Title slide */
 .pres-slide-title-bg {
-    background: #2563EB;
+    background: linear-gradient(135deg, #2A26C0 0%, var(--pres-blue-deep) 60%, #1B18A0 100%);
     color: #FFFFFF;
     display: flex;
     flex-direction: column;
@@ -2407,7 +2418,7 @@ body {
 .pres-slide-divider-bg .pres-divider-num {
     font-size: 120px;
     font-weight: 700;
-    color: #2563EB;
+    color: var(--pres-blue);
     opacity: 0.15;
     position: absolute;
     right: 60px;
@@ -2419,7 +2430,7 @@ body {
 .pres-slide-divider-bg .pres-divider-text {
     font-size: 24px;
     font-weight: 700;
-    color: #2563EB;
+    color: var(--pres-blue);
     text-transform: uppercase;
     max-width: 600px;
 }
@@ -2475,12 +2486,12 @@ body {
 
 .pres-text-card {
     padding: 8px 12px 8px 14px;
-    border-left: 3px solid #2563EB;
-    background: #F1F5F9;
+    border-left: 3px solid var(--pres-blue);
+    background: #F5F6FC;
     border-radius: 0 6px 6px 0;
     font-size: 12px;
     line-height: 1.55;
-    color: #1E293B;
+    color: #23262F;
 }
 
 /* TOC slide */
@@ -2499,7 +2510,8 @@ body {
 }
 
 .pres-toc-list li .pres-toc-num {
-    color: var(--color-text-muted);
+    color: var(--pres-blue);
+    font-weight: 700;
     min-width: 30px;
 }
 
@@ -2643,7 +2655,7 @@ body {
 .pres-col-comment .pres-comment-title {
     font-size: 9px;
     font-weight: 700;
-    color: #2563EB;
+    color: var(--pres-blue);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     margin: 0 0 3px 0;
@@ -2652,12 +2664,12 @@ body {
 
 .pres-comment-card {
     padding: 6px 10px 6px 10px;
-    border-left: 2px solid #2563EB;
-    background: #F8FAFC;
+    border-left: 2px solid var(--pres-blue);
+    background: #F5F6FC;
     border-radius: 0 5px 5px 0;
     font-size: 9.5px;
     line-height: 1.5;
-    color: #1E293B;
+    color: #23262F;
     flex-shrink: 0;
 }
 
@@ -2721,7 +2733,7 @@ body {
 
 /* Contacts slide */
 .pres-contacts-bg {
-    background: #2563EB;
+    background: linear-gradient(135deg, #2A26C0 0%, var(--pres-blue-deep) 60%, #1B18A0 100%);
     color: #FFFFFF;
     display: flex;
     flex-direction: column;
