@@ -8357,6 +8357,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     } else if (field === 'subtitle') {
                         if (!s.opts) s.opts = {};
                         s.opts.subtitle = value;
+                    } else if (field === 'tagline') {
+                        if (!s.opts) s.opts = {};
+                        s.opts.tagline = value;
                     } else if (field === 'bullet-new') {
                         if (!s.opts) s.opts = {};
                         if (value) {
@@ -8641,35 +8644,64 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Статические рендереры ---
 
+    // Геометрический узор-лепестки Delomant (правая часть обложки, эталон)
+    function presCoverPattern() {
+        return '<svg class="pres-title-pattern" viewBox="0 0 460 560" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">' +
+            '<g fill="#FFFFFF" fill-opacity="0.06">' +
+            '<path d="M120 40h100v100a100 100 0 0 1-100-100z"/>' +
+            '<path d="M340 40v100a100 100 0 0 1-100-100z"/>' +
+            '<path d="M240 260a100 100 0 0 1 100-100v100z"/>' +
+            '<path d="M120 260a100 100 0 0 0 100 100V260z"/>' +
+            '<path d="M340 380h100v100a100 100 0 0 1-100-100z"/>' +
+            '<path d="M240 480a100 100 0 0 1 100-100v100z"/>' +
+            '<circle cx="180" cy="430" r="72"/></g>' +
+            '<rect x="242" y="262" width="96" height="96" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.5" stroke-dasharray="4 5"/></svg>';
+    }
+
     function renderPresTitle(slide) {
+        var tagline = (slide.opts && slide.opts.tagline) ||
+            'Аналитическая справка\nпо итогам маркетингового исследования';
+        var tagHtml = tagline.split('\n').map(function (l) { return l.trim(); }).join('<br>');
         var html = '<div class="pres-slide">';
         html += '<div class="pres-slide-title-bg">';
+        html += presCoverPattern();
+        html += '<div class="pres-title-top">';
         html += '<img src="data/Logo.png" class="pres-title-logo" onerror="this.style.display=\'none\'">';
+        html += '<div class="pres-title-tag" data-editable="tagline">' + tagHtml + '</div>';
+        html += '</div>';
+        html += '<div class="pres-title-body">';
         html += '<div class="pres-title-main" data-editable="title">' + (slide.title || 'Аналитическая справка') + '</div>';
         if (slide.opts && slide.opts.subtitle) {
             html += '<div class="pres-title-sub" data-editable="subtitle">' + slide.opts.subtitle + '</div>';
         } else {
             html += '<div class="pres-title-sub" data-editable="subtitle" style="opacity:0.4">Подзаголовок (двойной клик)</div>';
         }
+        html += '</div>';
         html += '<div class="pres-title-footer"><span>delomant.ru</span><span>' + new Date().getFullYear() + '</span></div>';
         html += '</div></div>';
         return html;
     }
 
     function renderPresTOC() {
-        var body = '<h3>\u041e\u0433\u043b\u0430\u0432\u043b\u0435\u043d\u0438\u0435</h3>';
-        body += '<ul class="pres-toc-list">';
+        var items = '';
         var num = 1;
         presState.slides.forEach(function (s, idx) {
             if (s.type === 'toc') return;
             var block = findPresBlock(s.type);
             var label = s.title || (block ? block.label : '');
             if (s.hsFilter) label += ' (' + s.hsFilter + ')';
-            body += '<li><span class="pres-toc-num">' + num + '</span><span style="flex:1">' + label + '</span><span>' + (idx + 1) + '</span></li>';
+            items += '<li><span class="pres-toc-num">' + num + '</span>' +
+                '<span class="pres-toc-label">' + label + '</span>' +
+                '<span class="pres-toc-pg">' + (idx + 1) + '</span></li>';
             num++;
         });
-        body += '</ul>';
-        return slideWrapper('\u0421\u043e\u0434\u0435\u0440\u0436\u0430\u043d\u0438\u0435', body, {});
+        var html = '<div class="pres-slide"><div class="pres-toc-bg">';
+        html += '<div class="pres-toc-kicker">DELOMANT GROUP</div>';
+        html += '<ul class="pres-toc-list">' + items + '</ul>';
+        html += '<div class="pres-toc-big">\u041e\u0433\u043b\u0430\u0432\u043b\u0435\u043d\u0438\u0435</div>';
+        html += '<div class="pres-toc-foot"><span>DELOMANT</span><span>delomant.ru</span></div>';
+        html += '</div></div>';
+        return html;
     }
 
     function renderPresText(slide) {
