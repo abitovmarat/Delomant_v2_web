@@ -2364,7 +2364,8 @@ body {
 
 /* Title slide (обложка — эталон Delomant) */
 .pres-slide-title-bg {
-    background: linear-gradient(135deg, #2A26C0 0%, var(--pres-blue-deep) 60%, #1B18A0 100%);
+    /* ровный насыщенный кобальт с лёгким высветлением вверху-справа (под узором) */
+    background: radial-gradient(130% 105% at 84% -5%, #3A34D6 0%, #2A22C6 46%, #211CB6 100%);
     color: #EEF1FF;
     position: relative;
     display: flex;
@@ -2394,7 +2395,7 @@ body {
 }
 
 .pres-slide-title-bg .pres-title-logo {
-    height: 46px;
+    height: 50px;
     flex-shrink: 0;
 }
 
@@ -2413,11 +2414,11 @@ body {
 }
 
 .pres-slide-title-bg .pres-title-main {
-    font-size: 34px;
+    font-size: 37px;
     font-weight: 800;
-    line-height: 1.1;
+    line-height: 1.12;
     letter-spacing: -0.015em;
-    max-width: 74%;
+    max-width: 76%;
 }
 
 .pres-slide-title-bg .pres-title-sub {
