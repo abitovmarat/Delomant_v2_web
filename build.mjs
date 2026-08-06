@@ -47,6 +47,10 @@ const ASSETS = [
     ['data/cbr_rates.json',          'assets/cbr_rates.dat'],
     ['data/company_dictionary.json', 'assets/company_dictionary.dat'],
     ['data/comtrade_countries.json', 'assets/comtrade_countries.dat'],
+    ['scripts/foreign_customs.js',   'assets/foreign_customs.js.dat'],
+    ['data/foreign/hs_names_ru.json','assets/fc_hs_names.dat'],
+    ['data/foreign/co_aggregate.json','assets/fc_co.dat'],
+    ['data/foreign/pe_aggregate.json','assets/fc_pe.dat'],
 ];
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');
