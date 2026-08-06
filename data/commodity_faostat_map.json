@@ -1,0 +1,44 @@
+{
+  "_meta": {
+    "purpose": "Универсальный маппинг HS (ТН ВЭД / Comtrade) → позиция FAOSTAT. Не фиксированный список товаров, а таблица по префиксам HS + правило longest-prefix. Резолвер берёт код любой длины (2–6), ищет самый длинный совпавший префикс. Общий артефакт слоёв Comtrade и FAOSTAT (память: faostat-context-layer, report-source-provenance).",
+    "source_version": null,
+    "fetched_at": null,
+    "faostat_domain": "QCL (Crops and livestock products)",
+    "resolver": [
+      "1. Нормализовать вход: только цифры, длина 2..6.",
+      "2. Искать в map[] запись с самым длинным hs_prefix, являющимся префиксом входа.",
+      "3. Найдено → вернуть {faostat_item, match, из какой записи}. match говорит о качестве сшивки.",
+      "4. Не найдено, но chapter ∈ {07,08} → вернуть fallback этой главы, match='chapter'.",
+      "5. Иначе → out_of_scope: контекста производства нет (напр. переработка, непищёвка)."
+    ],
+    "match_levels": {
+      "exact": "hs6 ≈ одна культура FAOSTAT 1:1",
+      "narrow": "префикс короче культуры, но однозначно та же культура",
+      "aggregate": "FAOSTAT шире HS (напр. 'Fruit fresh nes' покрывает несколько кодов)",
+      "chapter": "точной культуры нет, отдаём агрегат по главе 07/08",
+      "none": "аналога производства нет (переработка/заморозка/соки)"
+    },
+    "verify": "verified=false, пока цифры руками не сверены по порядку величины на одном годе (импорт РФ Comtrade vs производство РФ FAOSTAT). unit: торговля kg, производство t → ×1000.",
+    "caveat_faostat_vs_domestic": "ВАЖНО: производство FAOSTAT включает ЛПХ/хозяйства населения и заметно выше российской ведомственной статистики. Яблоки 2022: FAOSTAT ~2.38 млн т vs Россельхознадзор ~1.2 млн т (товарное) — расхождение ~2x. При расчёте самообеспеченности/долей ОБЯЗАТЕЛЬНО указывать источник производства и не смешивать FAOSTAT с ФТС в одной дроби без оговорки.",
+    "verify_note_apples_2022": "Импорт РФ ~592-615 тыс. т, производство FAOSTAT ~2.38 млн т — по порядку сшивается. Зеркалить импорт: partnerCode=643, reporterCode=мир, flowCode=X (РФ как reporter пусто с 2022)."
+  },
+  "chapters": {
+    "07": { "name_ru": "Овощи", "faostat_fallback": null, "note": "нет единого агрегата 'все овощи' в QCL; при chapter-fallback отдавать сумму по items главы или помечать none" },
+    "08": { "name_ru": "Фрукты и орехи", "faostat_fallback": null, "note": "аналогично; орехи (0801-0802) и цитрусовые считать раздельно" }
+  },
+  "map": [
+    { "hs_prefix": "080810", "name_ru": "Яблоки свежие",      "faostat_item": 515, "faostat_name": "Apples",   "match": "exact",    "verified": true },
+    { "hs_prefix": "080830", "name_ru": "Груши свежие",       "faostat_item": 521, "faostat_name": "Pears",    "match": "exact",    "verified": false },
+    { "hs_prefix": "080510", "name_ru": "Апельсины",          "faostat_item": 490, "faostat_name": "Oranges",  "match": "exact",    "verified": false },
+    { "hs_prefix": "080520", "name_ru": "Мандарины/цитрусы",  "faostat_item": 495, "faostat_name": "Tangerines, mandarins", "match": "exact", "verified": false },
+    { "hs_prefix": "0803",   "name_ru": "Бананы",             "faostat_item": 486, "faostat_name": "Bananas",  "match": "narrow",   "verified": false },
+    { "hs_prefix": "080610", "name_ru": "Виноград свежий",    "faostat_item": 560, "faostat_name": "Grapes",   "match": "exact",    "verified": false },
+    { "hs_prefix": "070200", "name_ru": "Томаты свежие",      "faostat_item": 388, "faostat_name": "Tomatoes", "match": "exact",    "verified": false },
+    { "hs_prefix": "070190", "name_ru": "Картофель свежий",   "faostat_item": 116, "faostat_name": "Potatoes", "match": "exact",    "verified": false },
+    { "hs_prefix": "070310", "name_ru": "Лук и лук-шалот",    "faostat_item": 403, "faostat_name": "Onions, dry", "match": "narrow", "verified": false },
+    { "hs_prefix": "070610", "name_ru": "Морковь и репа",     "faostat_item": 426, "faostat_name": "Carrots and turnips", "match": "narrow", "verified": false },
+    { "hs_prefix": "0710",   "name_ru": "Овощи замороженные", "faostat_item": null, "faostat_name": "переработка — аналога нет", "match": "none", "verified": false },
+    { "hs_prefix": "0811",   "name_ru": "Фрукты замороженные","faostat_item": null, "faostat_name": "переработка — аналога нет", "match": "none", "verified": false },
+    { "hs_prefix": "2009",   "name_ru": "Соки",               "faostat_item": null, "faostat_name": "переработка — аналога нет", "match": "none", "verified": false }
+  ]
+}
