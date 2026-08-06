@@ -8683,17 +8683,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderPresTOC() {
-        var items = '';
-        var num = 1;
+        // Считаем пункты заранее, чтобы подобрать плотность под их количество
+        var entries = [];
         presState.slides.forEach(function (s, idx) {
             if (s.type === 'toc') return;
             var block = findPresBlock(s.type);
             var label = s.title || (block ? block.label : '');
             if (s.hsFilter) label += ' (' + s.hsFilter + ')';
-            items += '<li><span class="pres-toc-num">' + num + '</span>' +
-                '<span class="pres-toc-label">' + label + '</span>' +
-                '<span class="pres-toc-pg">' + (idx + 1) + '</span></li>';
-            num++;
+            entries.push({ label: label, pg: idx + 1 });
+        });
+        // Адаптивная высота строки: список всегда вписывается в рамку слайда.
+        // Внутренняя высота под список ≈ 400px (540 − паддинги − кикер).
+        var n = Math.max(1, entries.length);
+        var rowH = Math.min(42, Math.floor(400 / n));
+        var fs = Math.max(11, Math.min(15, Math.round(rowH * 0.42)));
+        var pad = Math.max(2, Math.floor((rowH - fs * 1.35 - 1) / 2));
+        var liStyle = 'padding:' + pad + 'px 0;font-size:' + fs + 'px';
+        var items = '';
+        entries.forEach(function (e, i) {
+            items += '<li style="' + liStyle + '"><span class="pres-toc-num">' + (i + 1) + '</span>' +
+                '<span class="pres-toc-label">' + e.label + '</span>' +
+                '<span class="pres-toc-pg">' + e.pg + '</span></li>';
         });
         var html = '<div class="pres-slide"><div class="pres-toc-bg">';
         html += '<div class="pres-toc-kicker">DELOMANT GROUP</div>';
