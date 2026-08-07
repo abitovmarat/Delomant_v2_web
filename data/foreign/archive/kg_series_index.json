@@ -1,0 +1,77 @@
+{
+  "years": [
+    {
+      "year": "2019",
+      "period": "январь–декабрь 2019",
+      "partial": false,
+      "records": 16106,
+      "import_usd": 4984046066,
+      "official_total": 4989013739,
+      "coverage_pct": 99.9
+    },
+    {
+      "year": "2020",
+      "period": "январь–декабрь 2020",
+      "partial": false,
+      "records": 15511,
+      "import_usd": 3712393998,
+      "official_total": 3718850895,
+      "coverage_pct": 99.83
+    },
+    {
+      "year": "2021",
+      "period": "январь–декабрь 2021",
+      "partial": false,
+      "records": 15179,
+      "import_usd": 5562758593,
+      "official_total": 5580207282,
+      "coverage_pct": 99.69
+    },
+    {
+      "year": "2022",
+      "period": "январь–декабрь 2022",
+      "partial": false,
+      "records": 17222,
+      "import_usd": 9790058400,
+      "official_total": 9803159382,
+      "coverage_pct": 99.87
+    },
+    {
+      "year": "2023",
+      "period": "январь–декабрь 2023",
+      "partial": false,
+      "records": 18830,
+      "import_usd": 12281551908,
+      "official_total": 12517912380,
+      "coverage_pct": 98.11
+    },
+    {
+      "year": "2024",
+      "period": "январь–декабрь 2024",
+      "partial": false,
+      "records": 19567,
+      "import_usd": 12290063947,
+      "official_total": 12489267311,
+      "coverage_pct": 98.41
+    },
+    {
+      "year": "2025",
+      "period": "январь–декабрь 2025",
+      "partial": false,
+      "records": 19365,
+      "import_usd": 13447330073,
+      "official_total": 13666506216,
+      "coverage_pct": 98.4
+    },
+    {
+      "year": "2026",
+      "period": "январь–май 2026",
+      "partial": true,
+      "records": 14260,
+      "import_usd": 5319230136,
+      "official_total": 5409899745,
+      "coverage_pct": 98.32
+    }
+  ],
+  "records": 136040
+}

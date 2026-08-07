@@ -10,3 +10,10 @@ scripts/fetch_cbr_rates.js
 dist/
 
 __pycache__/
+
+# Сырьё зарубежных архивов: качается fetch_foreign_archives.py, разбирается
+# parse_*_series.py. В репозиторий идут только готовые снимки data/foreign/*.json
+# (манифест и индекс ряда — исключения ниже: они описывают, что было выгружено).
+data/foreign/archive/*.jsonl
+!data/foreign/archive/manifest.json
+!data/foreign/archive/*_index.json
