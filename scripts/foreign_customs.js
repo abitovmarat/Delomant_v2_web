@@ -80,15 +80,17 @@
         '#foreign .fc-btn{padding:9px 14px;border:1px solid var(--fc-cob);border-radius:9px;background:var(--fc-cob);color:#fff;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap}' +
         '#foreign .fc-cnt{color:var(--fc-mut);font-size:13px;white-space:nowrap}' +
         '#foreign .fc-wrap{overflow-x:auto;border:1px solid var(--fc-line);border-radius:12px}' +
-        '#foreign table.fc-tbl{border-collapse:collapse;width:100%;font-size:13px;min-width:720px}' +
-        '#foreign .fc-tbl th,.fc-tbl td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--fc-line);white-space:nowrap}' +
+        // table-layout:fixed — иначе браузер тянет таблицу под самую длинную ячейку
+        // (в статистике КЗ описания товара доходят до ~1000 знаков) и она выходит за экран
+        '#foreign table.fc-tbl{border-collapse:collapse;width:100%;font-size:13px;min-width:720px;table-layout:fixed}' +
+        '#foreign .fc-tbl th,.fc-tbl td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--fc-line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
         '#foreign .fc-tbl th{position:sticky;top:0;background:var(--fc-tile);cursor:pointer;user-select:none;font-size:12px}' +
         '#foreign .fc-tbl th.num,.fc-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}' +
         '#foreign .fc-tbl tbody tr{cursor:default}' +
         '#foreign .fc-tbl tbody tr[data-id]{cursor:pointer}' +
         '#foreign .fc-tbl tbody tr:hover{background:var(--fc-tile)}' +
         '#foreign .fc-hs{color:var(--fc-cob);font-weight:600}' +
-        '#foreign .fc-prod{color:var(--fc-mut);max-width:280px;overflow:hidden;text-overflow:ellipsis}' +
+        '#foreign .fc-prod{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
         '#foreign .fc-foot{color:var(--fc-mut);font-size:12px;margin-top:10px}' +
         // журнал источника (провенанс)
         '#foreign .fc-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:1px}' +
@@ -96,18 +98,22 @@
         '#foreign .fc-badge.warn{background:#fef3c7;color:#92400e}' +
         '@media(prefers-color-scheme:dark){#foreign .fc-badge.ok{background:#14532d;color:#bbf7d0}' +
         '#foreign .fc-badge.warn{background:#78350f;color:#fde68a}}' +
-        '#foreign .fc-prov{margin-top:.5em}' +
-        '#foreign .fc-prov summary{cursor:pointer;color:var(--fc-cob);font-weight:600;font-size:12px}' +
-        '#foreign .fc-prov dl{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:4px 14px;margin:.7em 0 0;font-size:12px}' +
-        '#foreign .fc-prov dt{color:var(--fc-mut);font-weight:600}' +
+        '#foreign .fc-prov{margin-top:.6em}' +
+        '#foreign .fc-prov summary{cursor:pointer;color:var(--fc-cob);font-weight:600;font-size:13px}' +
+        '#foreign .fc-prov dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:7px 16px;' +
+            'margin:.8em 0 0;font-size:13px;line-height:1.5;padding:12px 14px;border:1px solid var(--fc-line);' +
+            'border-radius:10px;background:var(--fc-tile)}' +
+        '#foreign .fc-prov dt{color:var(--fc-lbl);font-weight:600}' +
         '#foreign .fc-prov dd{margin:0;color:var(--fc-fg)}' +
         '#foreign .fc-prov a{color:var(--fc-cob)}' +
         '#foreign .fc-drill{border:1px solid var(--fc-cob);border-radius:12px;padding:14px 16px;margin-bottom:16px;background:var(--fc-tile)}' +
         '#foreign .fc-drill h4{margin:0 0 .2em;font-size:16px}' +
         '#foreign .fc-drill .close{float:right;cursor:pointer;color:var(--fc-mut);font-size:20px;line-height:1}' +
         // палитра (с учётом тёмной темы приложения, если она есть)
-        '#foreign{--fc-bg:#fff;--fc-fg:#0f172a;--fc-mut:#64748b;--fc-line:#e2e8f0;--fc-cob:#2563eb;--fc-tile:#f1f5f9}' +
-        '@media(prefers-color-scheme:dark){#foreign{--fc-bg:#0b1220;--fc-fg:#e5e9f0;--fc-mut:#94a3b8;--fc-line:#1e293b;--fc-cob:#3b82f6;--fc-tile:#111a2e}}';
+        // --fc-mut — только для второстепенных подписей; --fc-lbl потемнее,
+        // для названий полей в журнале источника, чтобы они читались, а не бледнели
+        '#foreign{--fc-bg:#fff;--fc-fg:#0f172a;--fc-mut:#57647a;--fc-lbl:#334155;--fc-line:#e2e8f0;--fc-cob:#2563eb;--fc-tile:#f1f5f9}' +
+        '@media(prefers-color-scheme:dark){#foreign{--fc-bg:#0b1220;--fc-fg:#e5e9f0;--fc-mut:#a9b7ca;--fc-lbl:#cbd5e1;--fc-line:#1e293b;--fc-cob:#3b82f6;--fc-tile:#111a2e}}';
         var el = document.createElement('style');
         el.id = 'fc-style';
         el.textContent = css;
@@ -152,37 +158,39 @@
 
     // Описание колонок текущей модели: k — индекс в rows (null = вычисляемая),
     // num — числовая, cell — как отрисовать ячейку.
+    // w — доля ширины таблицы: при table-layout:fixed колонки надо задать явно,
+    // иначе длинное описание товара перетянет одеяло на себя.
     function columns() {
         var s = src();
         if (s.kind === 'firm') {
             return [
-                { t: 'Импортёр', k: 1, cell: function (r) { return esc(r[1]); } },
-                { t: 'HS6', k: 2, cls: 'fc-hs', cell: function (r) { return r[2]; } },
-                { t: 'Товар', k: null, cell: prodCell },
-                { t: 'Позиций', k: 3, num: true, cell: function (r) { return fmt(r[3]); } },
-                { t: 'Нетто, т', k: 4, num: true, cell: function (r) { return fmt(r[4] / 1000); } },
-                { t: 'CIF, USD', k: 5, num: true, cell: function (r) { return fmt(r[5]); } },
-                { t: 'FOB, USD', k: 6, num: true, cell: function (r) { return fmt(r[6]); } }
+                { t: 'Импортёр', k: 1, w: '22%', cell: function (r) { return esc(r[1]); } },
+                { t: 'HS6', k: 2, w: '8%', cls: 'fc-hs', cell: function (r) { return r[2]; } },
+                { t: 'Товар', k: null, w: '26%', cell: prodCell },
+                { t: 'Позиций', k: 3, w: '9%', num: true, cell: function (r) { return fmt(r[3]); } },
+                { t: 'Нетто, т', k: 4, w: '11%', num: true, cell: function (r) { return fmt(r[4] / 1000); } },
+                { t: 'CIF, USD', k: 5, w: '12%', num: true, cell: function (r) { return fmt(r[5]); } },
+                { t: 'FOB, USD', k: 6, w: '12%', num: true, cell: function (r) { return fmt(r[6]); } }
             ];
         }
         if (state.country === 'KZ') {
             return [
-                { t: 'Код ТН ВЭД', k: 0, cls: 'fc-hs', cell: function (r) { return r[0]; } },
-                { t: 'Товар', k: 1, cell: prodCell },
-                { t: 'Партнёр', k: 2, cell: function (r) { return esc(r[2]); } },
-                { t: 'Экспорт, т', k: 3, num: true, cell: function (r) { return fmt(r[3]); } },
-                { t: 'Экспорт, USD', k: 4, num: true, cell: function (r) { return fmt(r[4]); } },
-                { t: 'Импорт, т', k: 5, num: true, cell: function (r) { return fmt(r[5]); } },
-                { t: 'Импорт, USD', k: 6, num: true, cell: function (r) { return fmt(r[6]); } }
+                { t: 'Код ТН ВЭД', k: 0, w: '10%', cls: 'fc-hs', cell: function (r) { return r[0]; } },
+                { t: 'Товар', k: 1, w: '30%', cell: prodCell },
+                { t: 'Партнёр', k: 2, w: '12%', cell: function (r) { return esc(r[2]); } },
+                { t: 'Экспорт, т', k: 3, w: '11%', num: true, cell: function (r) { return fmt(r[3]); } },
+                { t: 'Экспорт, USD', k: 4, w: '13%', num: true, cell: function (r) { return fmt(r[4]); } },
+                { t: 'Импорт, т', k: 5, w: '11%', num: true, cell: function (r) { return fmt(r[5]); } },
+                { t: 'Импорт, USD', k: 6, w: '13%', num: true, cell: function (r) { return fmt(r[6]); } }
             ];
         }
         return [   // KG: только импорт, натуральный объём в своей единице
-            { t: 'Код ТН ВЭД', k: 0, cls: 'fc-hs', cell: function (r) { return r[0]; } },
-            { t: 'Товар', k: 1, cell: prodCell },
-            { t: 'Партнёр', k: 2, cell: function (r) { return esc(r[2]); } },
-            { t: 'Количество', k: 3, num: true, cell: function (r) { return fmt(r[3]); } },
-            { t: 'Единица', k: 4, cell: function (r) { return esc(r[4]); } },
-            { t: 'Импорт, USD', k: 5, num: true, cell: function (r) { return fmt(r[5]); } }
+            { t: 'Код ТН ВЭД', k: 0, w: '10%', cls: 'fc-hs', cell: function (r) { return r[0]; } },
+            { t: 'Товар', k: 1, w: '38%', cell: prodCell },
+            { t: 'Партнёр', k: 2, w: '14%', cell: function (r) { return esc(r[2]); } },
+            { t: 'Количество', k: 3, w: '13%', num: true, cell: function (r) { return fmt(r[3]); } },
+            { t: 'Единица', k: 4, w: '11%', cell: function (r) { return esc(r[4]); } },
+            { t: 'Импорт, USD', k: 5, w: '14%', num: true, cell: function (r) { return fmt(r[5]); } }
         ];
     }
 
@@ -196,9 +204,10 @@
     function renderHead() {
         var cols = columns();
         document.getElementById('fc-th').innerHTML = '<tr>' + cols.map(function (c, i) {
+            var w = c.w ? ' style="width:' + c.w + '"' : '';
             return c.k === null
-                ? '<th>' + c.t + '</th>'
-                : '<th data-i="' + i + '"' + (c.num ? ' class="num"' : '') + '>' + c.t + '</th>';
+                ? '<th' + w + '>' + c.t + '</th>'
+                : '<th data-i="' + i + '"' + (c.num ? ' class="num"' : '') + w + '>' + c.t + '</th>';
         }).join('') + '</tr>';
         document.querySelectorAll('#fc-th th[data-i]').forEach(function (th) {
             th.addEventListener('click', function () {
