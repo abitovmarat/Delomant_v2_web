@@ -2,19 +2,23 @@
  * Модуль «Зарубежная таможня» — импорт по данным зарубежных таможен и статведомств.
  * Самодостаточный, не зависит от main.js.
  *
- * Два РАЗНЫХ типа источников, у каждого своя таблица (см. `kind`):
+ * Три РАЗНЫХ типа источников, у каждого своя таблица (см. `kind`):
  *   kind:'firm'    — контрагентская модель, импортёр×HS6 (Колумбия DIAN, Перу SUNAT).
  *   kind:'country' — страновая модель, товар×страна-партнёр, без компаний
  *                    (Казахстан stat.gov.kz, Кыргызстан stat.gov.kg — публикации
  *                    статведомств по кодам, названий компаний там нет в принципе).
+ *   kind:'series'  — то же по смыслу, но строка несёт ВЕКТОР значений по периодам,
+ *                    а не одно число: отсюда селектор периода, колонка Δ и спарклайн.
  *
- * Данные готовит офлайн-пайплайн (scripts/parse_*.py + scripts/prep_foreign_data.py).
- * Загружаются лениво при первом открытии раздела.
+ * Данные готовит офлайн-пайплайн (scripts/parse_*.py + scripts/prep_foreign_data.py,
+ * ряды — scripts/prep_foreign_series.py). Загружаются лениво при первом открытии.
  *
  *   data/foreign/co_aggregate.json  — Колумбия, импортёр×HS6 (только юрлица)
  *   data/foreign/pe_aggregate.json  — Перу, импортёр×HS6 (только юрлица)
  *   data/foreign/kz_aggregate.json  — Казахстан, товар×партнёр, экспорт+импорт
  *   data/foreign/kg_aggregate.json  — Кыргызстан, товар×партнёр, только импорт
+ *   data/foreign/kg_series.json     — Кыргызстан, ряд 2019–2026 (последний неполный)
+ *   data/foreign/kz_series.json     — Казахстан, помесячно за 2025
  *   data/foreign/hs_names_ru.json   — HS6/HS4 → рус. название (из статистики КЗ/КГ)
  *
  * Только импортёры-юрлица (NIT 8/9 / RUC 20) — персональные данные физлиц отфильтрованы.
@@ -37,7 +41,13 @@
         KZ: { file: 'data/foreign/kz_aggregate.json', kind: 'country', sortDefault: 6,
               tab: '🇰🇿 Казахстан' },
         KG: { file: 'data/foreign/kg_aggregate.json', kind: 'country', sortDefault: 5,
-              tab: '🇰🇬 Кыргызстан' }
+              tab: '🇰🇬 Кыргызстан' },
+        // Ряды — отдельная модель: строка несёт вектор значений по периодам,
+        // а не одно число, поэтому и таблица, и сортировка у них свои.
+        KGS: { file: 'data/foreign/kg_series.json', kind: 'series', flow: 'import',
+               tab: '📈 Кыргызстан: динамика' },
+        KZS: { file: 'data/foreign/kz_series.json', kind: 'series', flow: 'both',
+               tab: '📈 Казахстан: помесячно' }
     };
 
     var CATEGORY = {
@@ -48,12 +58,24 @@
 
     function src() { return SOURCES[state.country]; }
     function isCountry() { return src().kind === 'country'; }
+    function isSeries() { return src().kind === 'series'; }
+    // Индекс периода, по которому ряд сортируется и рисуется таблица.
+    // По умолчанию — последний ПОЛНЫЙ период: неполный (текущий) занижен,
+    // и топ по нему вводил бы в заблуждение.
+    function lastFull(meta) {
+        for (var i = meta.periods.length - 1; i >= 0; i--) {
+            if (!meta.partial[i]) { return i; }
+        }
+        return meta.periods.length - 1;
+    }
 
     var names = null;          // {hs6:{}, hs4:{}}
     var cache = {};            // код страны -> {cols, meta, rows}
     // sortK — индекс колонки в rows; у двух моделей он разный, поэтому при смене
     // страны сбрасывается на «оборот по убыванию» (CIF у firm, импорт USD у country).
-    var state = { country: 'CO', sortK: 5, dir: -1, drill: null };
+    // sortV — индекс колонки-ВЕКТОРА (только в рядах), periodIdx — какой период
+    // из вектора показываем; в остальных моделях они не используются.
+    var state = { country: 'CO', sortK: 5, sortV: null, periodIdx: 0, dir: -1, drill: null };
 
     // Колонка оборота для сортировки по умолчанию: CIF (firm), импорт USD (country).
     function defaultSort() { return src().sortDefault; }
@@ -92,6 +114,12 @@
         '#foreign .fc-hs{color:var(--fc-cob);font-weight:600}' +
         '#foreign .fc-prod{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
         '#foreign .fc-foot{color:var(--fc-mut);font-size:12px;margin-top:10px}' +
+        // ряды: селектор периода, дельта, спарклайн
+        '#foreign .fc-sel{padding:9px 12px;border:1px solid var(--fc-line);border-radius:9px;background:var(--fc-bg);color:var(--fc-fg);font-size:13px;font-weight:600}' +
+        '#foreign .fc-d{font-weight:600}' +
+        '#foreign .fc-d.up{color:#15803d}#foreign .fc-d.down{color:#b91c1c}' +
+        '@media(prefers-color-scheme:dark){#foreign .fc-d.up{color:#4ade80}#foreign .fc-d.down{color:#f87171}}' +
+        '#foreign .fc-spark{color:var(--fc-cob);vertical-align:middle;display:block}' +
         // журнал источника (провенанс)
         '#foreign .fc-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:1px}' +
         '#foreign .fc-badge.ok{background:#dcfce7;color:#166534}' +
@@ -132,6 +160,7 @@
         '<div class="fc-ctrl">' +
             '<input id="fc-q" type="search" autocomplete="off">' +
             '<input id="fc-qhs" type="search" autocomplete="off">' +
+            '<select id="fc-period" class="fc-sel" hidden></select>' +
             '<button class="fc-btn" id="fc-xlsx">Экспорт в Excel</button>' +
             '<button class="fc-btn" id="fc-use" hidden>Использовать как данные</button>' +
             '<span class="fc-cnt" id="fc-cnt"></span>' +
@@ -142,20 +171,35 @@
 
         root.querySelectorAll('.fc-tab').forEach(function (b) {
             b.addEventListener('click', function () {
-                if (state.country === b.dataset.c) { return; }
-                state.country = b.dataset.c;
-                state.drill = null;
-                state.sortK = defaultSort();
-                state.dir = -1;
-                root.querySelector('#fc-q').value = '';
-                root.querySelector('#fc-qhs').value = '';
-                renderAll();
+                var c = b.dataset.c;
+                if (state.country === c) { return; }
+                ensureLoaded(c, function () {
+                    state.country = c;
+                    state.drill = null;
+                    if (SOURCES[c].kind === 'series') {
+                        state.periodIdx = lastFull(cache[c].meta);
+                        state.sortV = SOURCES[c].flow === 'both' ? 3 : 2;
+                        state.sortK = null;
+                    } else {
+                        state.sortK = defaultSort();
+                        state.sortV = null;
+                    }
+                    state.dir = -1;
+                    root.querySelector('#fc-q').value = '';
+                    root.querySelector('#fc-qhs').value = '';
+                    renderAll();
+                });
             });
         });
         root.querySelector('#fc-q').addEventListener('input', renderTable);
         root.querySelector('#fc-qhs').addEventListener('input', renderTable);
         root.querySelector('#fc-xlsx').addEventListener('click', exportXlsx);
         root.querySelector('#fc-use').addEventListener('click', sendToApp);
+        root.querySelector('#fc-period').addEventListener('change', function () {
+            state.periodIdx = +this.value;
+            renderHead();      // подпись колонки несёт выбранный период
+            renderTable();
+        });
     }
 
     // Описание колонок текущей модели: k — индекс в rows (null = вычисляемая),
@@ -164,6 +208,7 @@
     // иначе длинное описание товара перетянет одеяло на себя.
     function columns() {
         var s = src();
+        if (s.kind === 'series') { return seriesColumns(); }
         if (s.kind === 'firm') {
             return [
                 { t: 'Импортёр', k: 1, w: '22%', cell: function (r) { return esc(r[1]); } },
@@ -196,6 +241,64 @@
         ];
     }
 
+    /*
+     * Колонки ряда. Значение показываем за выбранный период (state.periodIdx),
+     * рядом — изменение к предыдущему и спарклайн по всем периодам, чтобы
+     * тренд читался, не открывая карточку.
+     * Индексы в строке: KG [code, partner, usd[], qty[]]
+     *                   KZ [code, partner, exp_usd[], imp_usd[], exp_t[], imp_t[]]
+     */
+    function seriesColumns() {
+        var m = current().meta, i = state.periodIdx;
+        var vi = src().flow === 'both' ? 3 : 2;      // колонка импорта в USD
+        var lbl = m.period_labels[i];
+        var cols = [
+            { t: 'Код ТН ВЭД', k: 0, w: '10%', cls: 'fc-hs', cell: function (r) { return r[0]; } },
+            { t: 'Товар', k: null, w: '26%', cell: function (r) {
+                var nm = m.names[r[0]] || '';
+                return '<span class="fc-prod" title="' + esc(nm) + '">' + esc(nm || '—') + '</span>'; } },
+            { t: 'Партнёр', k: 1, w: '13%', cell: function (r) { return esc(r[1]); } },
+            { t: 'Импорт, USD · ' + lbl, kv: vi, w: '14%', num: true,
+              cell: function (r) { return r[vi][i] == null ? '—' : fmt(r[vi][i]); } },
+            { t: 'Δ к пред.', w: '10%', num: true, cell: function (r) { return delta(r[vi], i); } },
+            { t: 'Динамика', w: '15%', cell: function (r) { return spark(r[vi]); } }
+        ];
+        if (src().flow === 'both') {
+            cols.splice(4, 0, { t: 'Экспорт, USD · ' + lbl, kv: 2, w: '14%', num: true,
+                cell: function (r) { return r[2][i] == null ? '—' : fmt(r[2][i]); } });
+        }
+        return cols;
+    }
+
+    // Изменение к предыдущему периоду. Нет базы или она нулевая — прочерк:
+    // рост «с нуля» в процентах не выражается.
+    function delta(v, i) {
+        if (i < 1 || v[i] == null || !v[i - 1]) { return '<span class="fc-mut">—</span>'; }
+        var p = (v[i] - v[i - 1]) / v[i - 1] * 100;
+        var cls = p > 0 ? 'up' : p < 0 ? 'down' : '';
+        return '<span class="fc-d ' + cls + '">' + (p > 0 ? '+' : '') + p.toFixed(0) + '%</span>';
+    }
+
+    // Спарклайн: inline-SVG без библиотек. Неполный период рисуем пунктиром —
+    // иначе недобранные месяцы выглядят как обвал.
+    function spark(v) {
+        var m = current().meta, n = v.length, w = 92, h = 22, pad = 2;
+        var vals = v.map(function (x) { return x == null ? 0 : x; });
+        var max = Math.max.apply(null, vals) || 1;
+        var pts = vals.map(function (x, i) {
+            return [pad + i * (w - 2 * pad) / Math.max(1, n - 1),
+                    h - pad - (x / max) * (h - 2 * pad)];
+        });
+        var solid = pts, dashed = null;
+        if (m.partial[n - 1]) { solid = pts.slice(0, n - 1); dashed = pts.slice(n - 2); }
+        function d(p) { return p.map(function (q, i) { return (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1); }).join(''); }
+        var last = pts[n - 1];
+        return '<svg class="fc-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' +
+            '<path d="' + d(solid) + '" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+            (dashed ? '<path d="' + d(dashed) + '" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2" opacity=".65"/>' : '') +
+            '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="2" fill="currentColor"/></svg>';
+    }
+
     // У firm-источников названия товара в строке нет — берём из словаря по HS.
     // У country-источников товар подписан в самом источнике (колонка 1).
     function prodCell(r) {
@@ -207,15 +310,21 @@
         var cols = columns();
         document.getElementById('fc-th').innerHTML = '<tr>' + cols.map(function (c, i) {
             var w = c.w ? ' style="width:' + c.w + '"' : '';
-            return c.k === null
-                ? '<th' + w + '>' + c.t + '</th>'
-                : '<th data-i="' + i + '"' + (c.num ? ' class="num"' : '') + w + '>' + c.t + '</th>';
+            var sortable = c.k != null || c.kv != null;
+            return sortable
+                ? '<th data-i="' + i + '"' + (c.num ? ' class="num"' : '') + w + '>' + c.t + '</th>'
+                : '<th' + w + '>' + c.t + '</th>';
         }).join('') + '</tr>';
         document.querySelectorAll('#fc-th th[data-i]').forEach(function (th) {
             th.addEventListener('click', function () {
                 var c = cols[+th.dataset.i];
-                if (state.sortK === c.k) { state.dir *= -1; }
-                else { state.sortK = c.k; state.dir = c.num ? -1 : 1; }
+                if (c.kv != null) {                 // вектор по периодам
+                    if (state.sortV === c.kv) { state.dir *= -1; }
+                    else { state.sortV = c.kv; state.sortK = null; state.dir = -1; }
+                } else {
+                    if (state.sortK === c.k && state.sortV == null) { state.dir *= -1; }
+                    else { state.sortK = c.k; state.sortV = null; state.dir = c.num ? -1 : 1; }
+                }
                 renderTable();
             });
         });
@@ -223,24 +332,50 @@
 
     function current() { return cache[state.country]; }
 
+    // Догружает снимок вкладки, если он ещё не в кэше (так грузятся ряды).
+    function ensureLoaded(code, done) {
+        if (cache[code]) { done(); return; }
+        var cnt = document.getElementById('fc-cnt');
+        if (cnt) { cnt.textContent = 'Загрузка…'; }
+        fetchJson(SOURCES[code].file).then(function (d) {
+            cache[code] = d;
+            done();
+        }).catch(function (e) {
+            if (cnt) { cnt.textContent = ''; }
+            alert('Не удалось загрузить данные вкладки: ' + e.message);
+        });
+    }
+
     // Левый поиск: импортёр (firm) / страна-партнёр (country).
     // Правый поиск: код или название товара — в обеих моделях.
     function filtered() {
         var d = current(); if (!d) { return []; }
         var q = (document.getElementById('fc-q').value || '').trim().toUpperCase();
         var h = (document.getElementById('fc-qhs').value || '').trim().toUpperCase();
-        var ctry = isCountry();
-        var nameI = ctry ? 2 : 1;      // колонка «кто» (партнёр / импортёр)
-        var codeI = ctry ? 0 : 2;      // колонка кода ТН ВЭД
+        var ctry = isCountry(), ser = isSeries();
+        // колонка «кто» и колонка кода различаются у трёх моделей
+        var nameI = ser ? 1 : ctry ? 2 : 1;
+        var codeI = ser ? 0 : ctry ? 0 : 2;
         var rows = d.rows;
         if (q) { rows = rows.filter(function (r) { return String(r[nameI]).toUpperCase().indexOf(q) >= 0; }); }
         if (h) {
             rows = rows.filter(function (r) {
-                var nm = ctry ? r[1] : hsName(r[2]);
+                var nm = ser ? (d.meta.names[r[0]] || '') : ctry ? r[1] : hsName(r[2]);
                 return String(r[codeI]).indexOf(h) === 0 || String(nm).toUpperCase().indexOf(h) >= 0;
             });
         }
         var k = state.sortK, dir = state.dir;
+        // В рядах числовая колонка — вектор по периодам: сравниваем значение
+        // выбранного периода, а не массивы (иначе сортировка идёт по строке).
+        if (isSeries() && state.sortV != null) {
+            var vi = state.sortV, pi = state.periodIdx;
+            return rows.slice().sort(function (a, b) {
+                var x = a[vi][pi], y = b[vi][pi];
+                if (x == null) { x = -Infinity; }
+                if (y == null) { y = -Infinity; }
+                return (x < y ? -1 : x > y ? 1 : 0) * dir;
+            });
+        }
         return rows.slice().sort(function (a, b) { return (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0) * dir; });
     }
 
@@ -286,6 +421,22 @@
     }
 
     function tiles(m) {
+        if (isSeries()) {
+            var i = state.periodIdx, iv = m.import_usd[i];
+            var t = [['Период', esc(m.period_labels[i]) + (m.partial[i] ? ' (неполный)' : '')],
+                     ['Импорт, USD', fmt(iv)],
+                     ['Товарных кодов', fmt(m.codes)],
+                     ['Стран-партнёров', fmt(m.partners)]];
+            if (m.export_usd) { t.splice(2, 0, ['Экспорт, USD', fmt(m.export_usd[i])]); }
+            if (i > 0 && m.import_usd[i - 1]) {
+                var g = (iv - m.import_usd[i - 1]) / m.import_usd[i - 1] * 100;
+                t.push(['Импорт к пред. периоду', (g > 0 ? '+' : '') + g.toFixed(1) + '%']);
+            }
+            if (m.coverage_pct && m.coverage_pct[i]) {
+                t.push(['Охват итога публикации', m.coverage_pct[i].toFixed(1) + '%']);
+            }
+            return t;
+        }
         if (!isCountry()) {
             return [['Импортёров', fmt(m.importers)], ['Пар импортёр×HS6', fmt(m.pairs)],
                     ['Товарных кодов', fmt(m.hs6)], ['Сумма CIF, USD', fmt(m.cif)],
@@ -333,15 +484,26 @@
         // Передача в приложение возможна только для контрагентской модели —
         // см. пояснение в toAppRows()
         var use = document.getElementById('fc-use');
-        use.hidden = ctry;
+        use.hidden = ctry || isSeries();
         use.title = 'Загрузить снимок как активную таблицу приложения ' +
                     '(разделы «Обработка», «Анализ», «Презентация»)';
-        document.getElementById('fc-q').placeholder = ctry ? 'Поиск по стране-партнёру…' : 'Поиск по импортёру…';
+        var ser = isSeries();
+        // Селектор периода — только у рядов; по умолчанию последний полный
+        var sel = document.getElementById('fc-period');
+        sel.hidden = !ser;
+        if (ser) {
+            sel.innerHTML = d.meta.periods.map(function (p, i) {
+                return '<option value="' + i + '"' + (i === state.periodIdx ? ' selected' : '') + '>' +
+                    esc(d.meta.period_labels[i]) + (d.meta.partial[i] ? ' — неполный' : '') + '</option>';
+            }).join('');
+        }
+        document.getElementById('fc-q').placeholder = (ctry || ser) ? 'Поиск по стране-партнёру…' : 'Поиск по импортёру…';
         document.getElementById('fc-qhs').placeholder =
-            (ctry ? (d.meta.hs_level === 4 ? 'HS4' : 'HS6') : 'HS6') + ' или название товара…';
+            ((ctry || ser) ? (d.meta.hs_level === 4 ? 'HS4' : 'HS6') : 'HS6') + ' или название товара…';
         document.getElementById('fc-foot').textContent = 'Показаны топ-300 по текущему фильтру и сортировке. ' +
-            (ctry ? 'Детализация до контрагента невозможна: в источнике только коды.'
-                  : 'Клик по строке — все коды этого импортёра.') +
+            (ser ? 'Значения — за выбранный период; спарклайн — за все периоды, пунктиром отмечен неполный. Δ считается к предыдущему периоду.'
+                 : ctry ? 'Детализация до контрагента невозможна: в источнике только коды.'
+                        : 'Клик по строке — все коды этого импортёра.') +
             ' Клик по заголовку — сортировка.';
         document.getElementById('fc-tiles').innerHTML = tiles(d.meta).map(function (t) {
             return '<div class="fc-tile"><div class="v">' + t[1] + '</div><div class="l">' + t[0] + '</div></div>';
@@ -353,7 +515,21 @@
     function exportXlsx() {
         if (typeof XLSX === 'undefined') { alert('Библиотека экспорта недоступна'); return; }
         var s = src(), rows;
-        if (isCountry()) {
+        if (isSeries()) {
+            // В выгрузку идут ВСЕ периоды: колонка на период — иначе теряется
+            // ровно то, ради чего ряд собирался.
+            var m = current().meta, vi = s.flow === 'both' ? 3 : 2;
+            rows = filtered().map(function (r) {
+                var o = { 'Код ТН ВЭД': r[0], 'Товар': m.names[r[0]] || '', 'Партнёр': r[1] };
+                if (m.units) { o['Единица'] = m.units[r[0]] || ''; }
+                m.periods.forEach(function (p, i) {
+                    var lab = m.period_labels[i] + (m.partial[i] ? ' (неполный)' : '');
+                    if (s.flow === 'both') { o['Экспорт USD · ' + lab] = r[2][i]; }
+                    o['Импорт USD · ' + lab] = r[vi][i];
+                });
+                return o;
+            });
+        } else if (isCountry()) {
             rows = filtered().map(function (r) {
                 var o = { 'Код ТН ВЭД': r[0], 'Товар': r[1], 'Партнёр': r[2] };
                 if (state.country === 'KZ') {
@@ -468,7 +644,10 @@
         if (!root || root.getAttribute('data-loaded') === '1' || initing) { return; }
         initing = true;
         root.innerHTML = '<p class="fc-note">Загрузка данных…</p>';
-        var codes = Object.keys(SOURCES);
+        // Ряды (~6 МБ на двоих) при старте не тянем — они грузятся по клику на
+        // свою вкладку. Иначе каждое открытие раздела платит за данные, которые
+        // нужны не всегда.
+        var codes = Object.keys(SOURCES).filter(function (c) { return SOURCES[c].kind !== 'series'; });
         Promise.all([fetchJson('data/foreign/hs_names_ru.json')].concat(
             codes.map(function (c) { return fetchJson(SOURCES[c].file); })
         )).then(function (res) {

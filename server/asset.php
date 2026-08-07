@@ -38,6 +38,8 @@ $map = [
     'fcpe' => ['fc_pe.dat',                 'application/json; charset=UTF-8'],
     'fckz' => ['fc_kz.dat',                 'application/json; charset=UTF-8'],
     'fckg' => ['fc_kg.dat',                 'application/json; charset=UTF-8'],
+    'fckgs'=> ['fc_kgs.dat',                'application/json; charset=UTF-8'],
+    'fckzs'=> ['fc_kzs.dat',                'application/json; charset=UTF-8'],
 ];
 
 $key = (string)($_GET['f'] ?? '');

@@ -53,6 +53,8 @@ const ASSETS = [
     ['data/foreign/pe_aggregate.json','assets/fc_pe.dat'],
     ['data/foreign/kz_aggregate.json','assets/fc_kz.dat'],
     ['data/foreign/kg_aggregate.json','assets/fc_kg.dat'],
+    ['data/foreign/kg_series.json',   'assets/fc_kgs.dat'],
+    ['data/foreign/kz_series.json',   'assets/fc_kzs.dat'],
 ];
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');

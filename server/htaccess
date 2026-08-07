@@ -21,6 +21,8 @@ RewriteRule ^data/foreign/co_aggregate\.json$ asset.php?f=fcco [L]
 RewriteRule ^data/foreign/pe_aggregate\.json$ asset.php?f=fcpe [L]
 RewriteRule ^data/foreign/kz_aggregate\.json$ asset.php?f=fckz [L]
 RewriteRule ^data/foreign/kg_aggregate\.json$ asset.php?f=fckg [L]
+RewriteRule ^data/foreign/kg_series\.json$    asset.php?f=fckgs [L]
+RewriteRule ^data/foreign/kz_series\.json$    asset.php?f=fckzs [L]
 
 # Корень сайта → форма входа / приложение
 RewriteRule ^$ index.php [L]
