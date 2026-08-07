@@ -60,18 +60,32 @@ def build_kg():
     years = [y["year"] for y in idx["years"]]
     pos = {y: i for i, y in enumerate(years)}
 
+    # ВАЖНО: пара «код × партнёр» встречается в бюллетене НЕСКОЛЬКО раз, когда
+    # товар учитывается в разных единицах (напр. 0407 «Яйца» из России — строка
+    # в тыс. штук и строка в штуках). Стоимость таких строк СКЛАДЫВАЕМ, иначе
+    # снимок теряет часть импорта: присваивание вместо сложения занижало 2026-й
+    # на 955 млн USD (1353 пары из 12 743).
+    # Количество не складываем — разные единицы не суммируются; когда единиц
+    # больше одной, пишем null и помечаем единицу как «разные».
     rows = {}
     names, units = {}, {}
+    unit_seen = {}
     for r in jl(src):
         key = (r["hs4"], r["partner"])
         d = rows.setdefault(key, {"usd": [None] * len(years), "qty": [None] * len(years)})
         i = pos.get(r["year"])
         if i is None:
             continue
-        d["usd"][i] = round(r["import_usd"])
-        d["qty"][i] = round(r["qty"], 1)
+        d["usd"][i] = round(r["import_usd"]) + (d["usd"][i] or 0)
+        u = (r["unit"] or "").strip()
+        seen = unit_seen.setdefault(key, set())
+        seen.add(u)
+        if len(seen) > 1:
+            d["qty"][i] = None            # сложить разные единицы нельзя
+        else:
+            d["qty"][i] = round(r["qty"], 1) + (d["qty"][i] or 0)
         names.setdefault(r["hs4"], (r["product"] or "").strip())
-        units.setdefault(r["hs4"], (r["unit"] or "").strip())
+        units.setdefault(r["hs4"], u)
 
     out = [[c, p, v["usd"], v["qty"]] for (c, p), v in rows.items()]
     # сортируем по обороту за последний полный период — витрина показывает топ
