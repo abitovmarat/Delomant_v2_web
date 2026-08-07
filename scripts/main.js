@@ -30,9 +30,15 @@ document.addEventListener('DOMContentLoaded', function () {
      * своей выгрузке пользователь и так знает, откуда данные.
      */
     function dataSourceNote() {
-        return appState.dataSource === 'comtrade'
-            ? 'Источник: UN Comtrade, зеркальная статистика стран-партнёров'
-            : '';
+        if (appState.dataSource === 'comtrade') {
+            return 'Источник: UN Comtrade, зеркальная статистика стран-партнёров';
+        }
+        // Зарубежная таможня: журнал источника кладёт сюда сам модуль —
+        // такие данные тоже обязаны называть происхождение в материалах наружу
+        if (appState.dataSource === 'foreign') {
+            return appState.sourceNote || 'Источник: зарубежная таможенная статистика';
+        }
+        return '';
     }
 
     function renderContractorUnavailable() {
@@ -482,6 +488,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    /*
+     * Единственная точка, через которую внешние модули (сейчас — «Зарубежная
+     * таможня») отдают приложению готовую таблицу. Не расширять произвольно:
+     * это узкий контракт, а не публичный API всего main.js.
+     */
+    window.DelomantData = {
+        apply: function (label, parsed, source, note) {
+            applyParsedData({ name: label }, parsed, source || 'file');
+            appState.sourceNote = note || '';
+        },
+        hasData: function () { return getActiveData().length > 0; }
+    };
+
     function applyParsedData(file, parsed, source) {
         appState.rawData = parsed.rows;
         appState.headers = parsed.headers;
@@ -489,6 +508,7 @@ document.addEventListener('DOMContentLoaded', function () {
         appState.processedData = [];
         appState.isProcessed = false;
         appState.dataSource = source || 'file';
+        appState.sourceNote = '';   // задаётся после вызова, если источник его несёт
 
         console.log('[Delomant] Данные загружены:', parsed.rows.length, 'строк,', parsed.headers.length, 'столбцов');
 

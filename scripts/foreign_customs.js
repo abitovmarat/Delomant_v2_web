@@ -133,6 +133,7 @@
             '<input id="fc-q" type="search" autocomplete="off">' +
             '<input id="fc-qhs" type="search" autocomplete="off">' +
             '<button class="fc-btn" id="fc-xlsx">Экспорт в Excel</button>' +
+            '<button class="fc-btn" id="fc-use" hidden>Использовать как данные</button>' +
             '<span class="fc-cnt" id="fc-cnt"></span>' +
         '</div>' +
         '<div class="fc-wrap"><table class="fc-tbl">' +
@@ -154,6 +155,7 @@
         root.querySelector('#fc-q').addEventListener('input', renderTable);
         root.querySelector('#fc-qhs').addEventListener('input', renderTable);
         root.querySelector('#fc-xlsx').addEventListener('click', exportXlsx);
+        root.querySelector('#fc-use').addEventListener('click', sendToApp);
     }
 
     // Описание колонок текущей модели: k — индекс в rows (null = вычисляемая),
@@ -328,6 +330,12 @@
             b.classList.toggle('on', b.dataset.c === state.country);
         });
         document.getElementById('fc-drill').innerHTML = '';
+        // Передача в приложение возможна только для контрагентской модели —
+        // см. пояснение в toAppRows()
+        var use = document.getElementById('fc-use');
+        use.hidden = ctry;
+        use.title = 'Загрузить снимок как активную таблицу приложения ' +
+                    '(разделы «Обработка», «Анализ», «Презентация»)';
         document.getElementById('fc-q').placeholder = ctry ? 'Поиск по стране-партнёру…' : 'Поиск по импортёру…';
         document.getElementById('fc-qhs').placeholder =
             (ctry ? (d.meta.hs_level === 4 ? 'HS4' : 'HS6') : 'HS6') + ' или название товара…';
@@ -384,6 +392,61 @@
         ];
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), 'Источник');
         XLSX.writeFile(wb, 'foreign_customs_' + state.country + '.xlsx');
+    }
+
+    /*
+     * Передача снимка в приложение как активной таблицы.
+     *
+     * Работает только для контрагентской модели (Колумбия, Перу): её поля
+     * ложатся на канонические колонки приложения один в один, и после
+     * загрузки доступны все обычные анализы и слайды презентации.
+     *
+     * Для КЗ/КГ передача сознательно не делается: там нет получателя,
+     * у КЗ два потока в одной строке (пришлось бы её раздваивать, и суммы
+     * разошлись бы с журналом источника), у КГ 5 023 строки из 14 260
+     * измеряются не в тоннах — колонку веса заполнить нечем. Витрина для
+     * них остаётся единственным честным представлением.
+     */
+    function toAppRows() {
+        var d = current(), s = src(), p = d.meta.source;
+        var headers = ['Дата регистрации', 'Год', 'Страна отправления',
+                       'Наименование получателя', s.idLabel, 'Код товара по ТН ВЭД',
+                       'Наименование и характеристики товаров', 'Вес нетто, кг',
+                       'Статистическая стоимость, USD', 'Фактурная стоимость'];
+        // Период снимка — одна дата на все строки: агрегат помесячной разбивки
+        // не содержит, выдумывать её нельзя.
+        var period = String(p.period || '');
+        var year = period.slice(0, 4);
+        var date = /^\d{4}-\d{2}$/.test(period) ? period + '-01' : (year ? year + '-01-01' : '');
+        var country = (p.title || '').split(' — ')[0];
+        var rows = d.rows.map(function (r) {
+            return [date, year, country, r[1], r[0], r[2], hsName(r[2]), r[4], r[5], r[6]];
+        });
+        return { headers: headers, rows: rows };
+    }
+
+    function sendToApp() {
+        if (isCountry()) { return; }
+        if (!window.DelomantData) {
+            alert('Модуль данных приложения недоступен.');
+            return;
+        }
+        var d = current(), p = d.meta.source;
+        var label = p.title + ' — ' + p.period_label;
+        if (window.DelomantData.hasData() &&
+            !confirm('Загруженные данные будут заменены на «' + label + '».\n\nПродолжить?')) {
+            return;
+        }
+        var parsed = toAppRows();
+        var note = 'Источник: ' + p.agency + ' (' + p.dataset + '), ' + p.period_label +
+                   '; выгрузка ' + p.retrieved +
+                   (p.category === 'unofficial' ? '; данные без статистической валидации' : '');
+        window.DelomantData.apply(label, parsed, 'foreign', note);
+        var link = document.querySelector('.sidebar-nav-item[href="#data"]');
+        if (link) { link.click(); }
+        alert('Загружено строк: ' + fmt(parsed.rows.length) + '.\n\n' +
+              'Данные доступны в разделах «Обработка», «Анализ» и «Презентация».\n' +
+              'Источник: ' + p.agency + ', ' + p.period_label + '.');
     }
 
     function esc(s) {
