@@ -19,6 +19,8 @@ RewriteRule ^scripts/foreign_customs\.js$    asset.php?f=fcjs [L]
 RewriteRule ^data/foreign/hs_names_ru\.json$ asset.php?f=fchs [L]
 RewriteRule ^data/foreign/co_aggregate\.json$ asset.php?f=fcco [L]
 RewriteRule ^data/foreign/pe_aggregate\.json$ asset.php?f=fcpe [L]
+RewriteRule ^data/foreign/kz_aggregate\.json$ asset.php?f=fckz [L]
+RewriteRule ^data/foreign/kg_aggregate\.json$ asset.php?f=fckg [L]
 
 # Корень сайта → форма входа / приложение
 RewriteRule ^$ index.php [L]

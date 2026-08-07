@@ -8,3 +8,5 @@ scripts/fetch_cbr_rates.js
 1234.md
 
 dist/
+
+__pycache__/
