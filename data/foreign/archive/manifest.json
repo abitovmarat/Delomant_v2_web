@@ -152,5 +152,61 @@
       "archive_page": "https://stat.gov.kg/ru/publications/vneshnyaya-i-vzaimnaya-torgovlya-tovarami-kyrgyzskoj-respubliki/"
     }
   },
-  "kz": {}
+  "kz": {
+    "kz_trade_country_2025.xlsx": {
+      "file": "kz/kz_trade_country_2025.xlsx",
+      "title": "Экспорт и импорт РК со странами ЕАЭС по 4/6/10 знакам ТН ВЭД, разрез «товар-страна»",
+      "coverage": "2025 год помесячно",
+      "sheets": [
+        "Обложка",
+        "Метаданные",
+        "Содержание",
+        "4 знака ТН ВЭД",
+        "6 знаков ТН ВЭД",
+        "10 знаков ТН ВЭД"
+      ],
+      "url": "https://stat.gov.kz/api/iblock/element/347505/file/ru/",
+      "catalog_page": "https://stat.gov.kz/ru/industries/economy/foreign-market/spreadsheets/"
+    },
+    "kz_dynamic_import_by_region.xlsx": {
+      "file": "kz/kz_dynamic_import_by_region.xlsx",
+      "title": "Динамические ряды: товарооборот в иностранной валюте (импорт), разрез по регионам РК",
+      "coverage": "2019–2026, помесячно",
+      "sheets": [
+        "Метаданные",
+        "Условные обозначения",
+        "Показатель",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "январь-декабрь 2025",
+        "январь-май 2026"
+      ],
+      "url": "https://stat.gov.kz/api/iblock/element/446906/file/ru/",
+      "catalog_page": "https://stat.gov.kz/ru/industries/economy/foreign-market/dynamic-tables/"
+    },
+    "kz_dynamic_export_by_region.xlsx": {
+      "file": "kz/kz_dynamic_export_by_region.xlsx",
+      "title": "Динамические ряды: товарооборот в иностранной валюте (экспорт), разрез по регионам РК",
+      "coverage": "2019–2026, помесячно",
+      "sheets": [
+        "Метаданные",
+        "Условные обозначения",
+        "Показатель",
+        "2019",
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "январь-декабрь 2025 года",
+        "январь-май 2026 года"
+      ],
+      "url": "https://stat.gov.kz/api/iblock/element/446905/file/ru/",
+      "catalog_page": "https://stat.gov.kz/ru/industries/economy/foreign-market/dynamic-tables/"
+    }
+  }
 }

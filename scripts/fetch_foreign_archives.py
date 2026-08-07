@@ -127,7 +127,18 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     print("каталог:", outdir)
 
+    # Манифест ДОПОЛНЯЕМ, а не перезаписываем: запуск с --only kz не должен
+    # стирать секцию kg (и наоборот) — иначе парсер ряда перестаёт видеть годы,
+    # файлы которых лежат на диске.
+    mpath = os.path.join(outdir, "manifest.json")
     manifest = {"retrieved": time.strftime("%Y-%m-%d"), "kg": {}, "kz": {}}
+    if os.path.isfile(mpath):
+        try:
+            old = json.load(io.open(mpath, encoding="utf-8"))
+            manifest["kg"] = old.get("kg", {})
+            manifest["kz"] = old.get("kz", {})
+        except Exception as e:
+            print("  ! манифест повреждён, пересоздаю:", e)
 
     if only in (None, "kg"):
         print("\n=== Кыргызстан (stat.gov.kg), архив бюллетеней ===")
@@ -160,7 +171,6 @@ def main():
                     "catalog_page": KZ_DYNAMIC_PAGE if "dynamic" in name else KZ_CATALOG_PAGE,
                 }
 
-    mpath = os.path.join(outdir, "manifest.json")
     io.open(mpath, "w", encoding="utf-8").write(
         json.dumps(manifest, ensure_ascii=False, indent=2))
     print("\nманифест:", mpath)
