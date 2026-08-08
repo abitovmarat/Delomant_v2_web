@@ -595,6 +595,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var COMTRADE_PROXY_URL = 'comtrade.php';
     var COMTRADE_COUNTRIES_URL = 'data/comtrade_countries.json';
+    var COMTRADE_REGIONS_URL = 'data/comtrade_regions.json';
     var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries';
     var COMTRADE_RF_CODE = 643;
 
@@ -613,6 +614,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeForm = document.querySelector('.comtrade-form');
     var comtradeToggle = document.querySelector('.comtrade-toggle');
     var comtradeCountriesBox = document.querySelector('.comtrade-countries');
+    var comtradeRegionsBox = document.querySelector('.comtrade-regions');
     var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
     var comtradeStatus = document.querySelector('.comtrade-status');
@@ -621,6 +623,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradePresentationBtn = document.querySelector('.comtrade-presentation-btn');
 
     var comtradeCountries = [];
+    var comtradeRegions = [];
     var comtradeSelected = {}; // код страны → true
     // Сырой ответ API — строки как пришли, до схлопывания в comtradeToRows.
     // Храним, чтобы пользователь мог скачать оригинал выгрузки.
@@ -653,6 +656,90 @@ document.addEventListener('DOMContentLoaded', function () {
                 comtradeCountries = [];
                 return comtradeCountries;
             });
+    }
+
+    /*
+     * Регион — это не код Comtrade, а именованный набор стран.
+     *
+     * Групповые записи API (isGroup) существуют только как партнёр, а у нас
+     * партнёр всегда РФ, поэтому «Европу» одним reporter-кодом не запросить.
+     * Кнопка региона просто отмечает входящие в него страны — дальше всё
+     * идёт обычным путём, включая разбивку на пачки по COMTRADE_MAX_REPORTERS.
+     */
+    function loadComtradeRegions() {
+        if (comtradeRegions.length > 0) { return Promise.resolve(comtradeRegions); }
+
+        return fetch(COMTRADE_REGIONS_URL)
+            .then(function (resp) { return resp.ok ? resp.json() : []; })
+            .then(function (json) {
+                comtradeRegions = Array.isArray(json) ? json : [];
+                return comtradeRegions;
+            })
+            .catch(function () {
+                // Без регионов форма остаётся рабочей — страны выбираются вручную
+                comtradeRegions = [];
+                return comtradeRegions;
+            });
+    }
+
+    /** Коды региона, оставляя только те, что есть в справочнике стран. */
+    function comtradeRegionCodes(region) {
+        var known = {};
+        comtradeCountries.forEach(function (c) { known[c.code] = true; });
+        return region.codes.filter(function (code) { return known[code]; });
+    }
+
+    /** Регион отмечен полностью, частично или совсем не отмечен. */
+    function comtradeRegionState(region) {
+        var codes = comtradeRegionCodes(region);
+        if (codes.length === 0) { return 'none'; }
+
+        var picked = codes.filter(function (code) { return comtradeSelected[code]; }).length;
+        if (picked === 0) { return 'none'; }
+        return picked === codes.length ? 'all' : 'some';
+    }
+
+    function renderComtradeRegions() {
+        if (!comtradeRegionsBox) { return; }
+
+        var html = '';
+        var lastGroup = '';
+
+        comtradeRegions.forEach(function (region) {
+            if (region.group !== lastGroup) {
+                html += '<span class="comtrade-region-group">' + region.group + '</span>';
+                lastGroup = region.group;
+            }
+            var state = comtradeRegionState(region);
+            html += '<button type="button" class="comtrade-region comtrade-region-' + state + '"' +
+                ' data-region="' + region.id + '" aria-pressed="' + (state === 'all') + '">' +
+                region.name +
+                '</button>';
+        });
+
+        comtradeRegionsBox.innerHTML = html;
+    }
+
+    /*
+     * Клик по региону: если он отмечен целиком — снимаем, иначе дожимаем до
+     * полного. Частично отмеченный регион по клику доотмечается, а не
+     * сбрасывается, — так кнопка не стирает страны, выбранные вручную.
+     */
+    function toggleComtradeRegion(regionId) {
+        var region = null;
+        comtradeRegions.forEach(function (r) { if (r.id === regionId) { region = r; } });
+        if (!region) { return; }
+
+        var codes = comtradeRegionCodes(region);
+        var turnOff = comtradeRegionState(region) === 'all';
+
+        codes.forEach(function (code) {
+            if (turnOff) {
+                delete comtradeSelected[code];
+            } else {
+                comtradeSelected[code] = true;
+            }
+        });
     }
 
     function renderComtradeCountries(filter) {
@@ -1012,10 +1099,13 @@ document.addEventListener('DOMContentLoaded', function () {
             comtradeToggle.textContent = opened ? 'Открыть' : 'Свернуть';
 
             if (!opened && comtradeCountries.length === 0) {
-                loadComtradeCountries().then(function () {
-                    renderComtradeCountries('');
-                    updateComtradeSelectedHint();
-                });
+                // Регионы ссылаются на коды стран, поэтому ждём оба справочника
+                Promise.all([loadComtradeCountries(), loadComtradeRegions()])
+                    .then(function () {
+                        renderComtradeCountries('');
+                        renderComtradeRegions();
+                        updateComtradeSelectedHint();
+                    });
             }
         });
     }
@@ -1030,6 +1120,21 @@ document.addEventListener('DOMContentLoaded', function () {
         comtradeCountriesBox.addEventListener('change', function (e) {
             if (e.target.type !== 'checkbox') { return; }
             comtradeSelected[e.target.value] = e.target.checked;
+            // Регион мог стать полным или перестать им быть
+            renderComtradeRegions();
+            updateComtradeSelectedHint();
+        });
+    }
+
+    if (comtradeRegionsBox) {
+        comtradeRegionsBox.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.comtrade-region') : null;
+            if (!btn) { return; }
+
+            toggleComtradeRegion(btn.getAttribute('data-region'));
+            // Список стран мог быть отфильтрован поиском — сохраняем фильтр
+            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+            renderComtradeRegions();
             updateComtradeSelectedHint();
         });
     }

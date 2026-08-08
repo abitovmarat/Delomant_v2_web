@@ -32,6 +32,7 @@ $map = [
     'cbr'  => ['cbr_rates.dat',             'application/json; charset=UTF-8'],
     'dict' => ['company_dictionary.dat',    'application/json; charset=UTF-8'],
     'ctry' => ['comtrade_countries.dat',    'application/json; charset=UTF-8'],
+    'creg' => ['comtrade_regions.dat',      'application/json; charset=UTF-8'],
     'fcjs' => ['foreign_customs.js.dat',    'application/javascript; charset=UTF-8'],
     'fchs' => ['fc_hs_names.dat',           'application/json; charset=UTF-8'],
     'fcco' => ['fc_co.dat',                 'application/json; charset=UTF-8'],

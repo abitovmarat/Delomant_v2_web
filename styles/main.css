@@ -2946,6 +2946,60 @@ body {
     margin-bottom: 8px;
 }
 
+.comtrade-regions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.comtrade-region-group {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+    margin-right: 2px;
+}
+
+/* Не первая группа в ряду — отбиваем от предыдущих кнопок */
+.comtrade-region + .comtrade-region-group {
+    margin-left: 8px;
+}
+
+.comtrade-region {
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--color-text);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.comtrade-region:hover {
+    border-color: var(--color-primary);
+}
+
+.comtrade-region:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+/* Регион выбран целиком */
+.comtrade-region-all {
+    color: #fff;
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Часть стран региона выбрана — например, пересекающийся блок */
+.comtrade-region-some {
+    border-color: var(--color-primary);
+    background-color: var(--color-primary-light);
+}
+
 .comtrade-hint {
     font-size: 12px;
     color: var(--color-text-secondary);
