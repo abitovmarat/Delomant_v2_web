@@ -15,5 +15,6 @@ __pycache__/
 # parse_*_series.py. В репозиторий идут только готовые снимки data/foreign/*.json
 # (манифест и индекс ряда — исключения ниже: они описывают, что было выгружено).
 data/foreign/archive/*.jsonl
+data/foreign/archive/**/*.zip
 !data/foreign/archive/manifest.json
 !data/foreign/archive/*_index.json
