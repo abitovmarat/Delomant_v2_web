@@ -49,7 +49,11 @@
         KGS: { file: 'data/foreign/kg_series.json', kind: 'series', flow: 'import',
                tab: '🇰🇬 Кыргызстан: 2019–2026' },
         KZS: { file: 'data/foreign/kz_series.json', kind: 'series', flow: 'both',
-               tab: '🇰🇿 Казахстан: 2025 помесячно' }
+               tab: '🇰🇿 Казахстан: 2025 помесячно' },
+        // Ряд без партнёра: источник (динамические ряды) даёт разрез по областям
+        // РК, они свёрнуты в итог по стране. Колонки «Партнёр» здесь нет.
+        KZD: { file: 'data/foreign/kz_dynamic.json', kind: 'series', flow: 'both',
+               noPartner: true, tab: '🇰🇿 Казахстан: 2019–2026' }
     };
 
     var CATEGORY = {
@@ -259,7 +263,7 @@
             { t: 'Товар', k: null, w: '26%', cell: function (r) {
                 var nm = m.names[r[0]] || '';
                 return '<span class="fc-prod" title="' + esc(nm) + '">' + esc(nm || '—') + '</span>'; } },
-            { t: 'Партнёр', k: 1, w: '13%', cell: function (r) { return esc(r[1]); } },
+            { t: 'Партнёр', k: 1, w: '13%', partner: true, cell: function (r) { return esc(r[1]); } },
             { t: 'Импорт, USD · ' + lbl, kv: vi, w: '14%', num: true,
               cell: function (r) { return r[vi][i] == null ? '—' : fmt(r[vi][i]); } },
             { t: 'Δ к пред.', w: '10%', num: true, cell: function (r) { return delta(r[vi], i); } },
@@ -268,6 +272,11 @@
         if (src().flow === 'both') {
             cols.splice(4, 0, { t: 'Экспорт, USD · ' + lbl, kv: 2, w: '14%', num: true,
                 cell: function (r) { return r[2][i] == null ? '—' : fmt(r[2][i]); } });
+        }
+        // В ряде без партнёра колонку убираем и отдаём её ширину товару
+        if (src().noPartner) {
+            cols = cols.filter(function (c) { return !c.partner; });
+            cols[1].w = '34%';
         }
         return cols;
     }
@@ -427,8 +436,8 @@
             var i = state.periodIdx, iv = m.import_usd[i];
             var t = [['Период', esc(m.period_labels[i]) + (m.partial[i] ? ' (неполный)' : '')],
                      ['Импорт, USD', fmt(iv)],
-                     ['Товарных кодов', fmt(m.codes)],
-                     ['Стран-партнёров', fmt(m.partners)]];
+                     ['Товарных кодов', fmt(m.codes)]];
+            if (m.partners) { t.push(['Стран-партнёров', fmt(m.partners)]); }
             if (m.export_usd) { t.splice(2, 0, ['Экспорт, USD', fmt(m.export_usd[i])]); }
             if (i > 0 && m.import_usd[i - 1]) {
                 var g = (iv - m.import_usd[i - 1]) / m.import_usd[i - 1] * 100;
@@ -501,7 +510,10 @@
                     esc(d.meta.period_labels[i]) + (d.meta.partial[i] ? ' — неполный' : '') + '</option>';
             }).join('');
         }
-        document.getElementById('fc-q').placeholder = (ctry || ser) ? 'Поиск по стране-партнёру…' : 'Поиск по импортёру…';
+        // В ряде без партнёра искать по нему нечего — поле скрываем
+        var qEl = document.getElementById('fc-q');
+        qEl.hidden = !!s.noPartner;
+        qEl.placeholder = (ctry || ser) ? 'Поиск по стране-партнёру…' : 'Поиск по импортёру…';
         document.getElementById('fc-qhs').placeholder =
             ((ctry || ser) ? (d.meta.hs_level === 4 ? 'HS4' : 'HS6') : 'HS6') + ' или название товара…';
         document.getElementById('fc-foot').textContent = 'Показаны топ-300 по текущему фильтру и сортировке. ' +

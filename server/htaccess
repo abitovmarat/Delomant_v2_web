@@ -23,6 +23,7 @@ RewriteRule ^data/foreign/kz_aggregate\.json$ asset.php?f=fckz [L]
 RewriteRule ^data/foreign/kg_aggregate\.json$ asset.php?f=fckg [L]
 RewriteRule ^data/foreign/kg_series\.json$    asset.php?f=fckgs [L]
 RewriteRule ^data/foreign/kz_series\.json$    asset.php?f=fckzs [L]
+RewriteRule ^data/foreign/kz_dynamic\.json$   asset.php?f=fckzd [L]
 
 # Корень сайта → форма входа / приложение
 RewriteRule ^$ index.php [L]

@@ -152,10 +152,62 @@ def build_kz():
     print("kz_series.json: %d пар × %d месяцев — %.1f МБ" % (len(out), n, size / 1048576.0))
 
 
+def build_kz_dynamic():
+    """Длинный ряд КЗ 2019–2026 по кодам (регионы свёрнуты в итог по стране)."""
+    src = os.path.join(ARCHIVE, "kz_dynamic_series.jsonl")
+    if not os.path.isfile(src):
+        print("пропуск КЗ-ряда: нет", src); return
+    idx = json.load(io.open(os.path.join(ARCHIVE, "kz_dynamic_index.json"), encoding="utf-8"))
+
+    # 89 месяцев × 5 577 кодов — в помесячном виде снимок весил бы десятки МБ.
+    # Витрине нужен тренд, поэтому сворачиваем в ГОДЫ; помесячная детализация
+    # за 2025 уже есть отдельной вкладкой (kz_series).
+    years = sorted({p[:4] for p in idx["periods"]})
+    pos = {y: i for i, y in enumerate(years)}
+    rows, names = {}, {}
+    partial_years = set()
+    for r in jl(src):
+        i = pos.get(r["year"])
+        if i is None:
+            continue
+        d = rows.setdefault(r["hs6"], {"iu": [None] * len(years), "eu": [None] * len(years)})
+        d["iu"][i] = (d["iu"][i] or 0) + r["import_usd"]
+        d["eu"][i] = (d["eu"][i] or 0) + r["export_usd"]
+        if (r["product"] or "").strip():
+            names.setdefault(r["hs6"], r["product"].strip())
+
+    # последний год неполный: публикация закрывает его только по май
+    months = {}
+    for p in idx["periods"]:
+        months.setdefault(p[:4], set()).add(p[5:])
+    for y in years:
+        if len(months[y]) < 12:
+            partial_years.add(y)
+
+    out = [[c, "", v["eu"], v["iu"]] for c, v in rows.items()]
+    li = len(years) - 1
+    while li > 0 and years[li] in partial_years:
+        li -= 1
+    out.sort(key=lambda r: (r[3][li] or 0), reverse=True)
+
+    meta = dict(
+        model="country", flows="export+import", hs_level=6, built=BUILT,
+        names=names, periods=years, period_labels=years,
+        partial=[y in partial_years for y in years],
+        pairs=len(out), codes=len(rows), partners=0,
+        export_usd=[sum((r[2][i] or 0) for r in out) for i in range(len(years))],
+        import_usd=[sum((r[3][i] or 0) for r in out) for i in range(len(years))],
+        source=provenance("KZD"))
+    size = write({"cols": ["code", "partner", "export_usd", "import_usd"],
+                  "meta": meta, "rows": out}, "kz_dynamic.json")
+    print("kz_dynamic.json: %d кодов × %d лет — %.1f МБ" % (len(out), len(years), size / 1048576.0))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     build_kg()
     build_kz()
+    build_kz_dynamic()
     print("готово ->", os.path.normpath(OUT))
 
 
