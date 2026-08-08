@@ -31,7 +31,11 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function dataSourceNote() {
         if (appState.dataSource === 'comtrade') {
-            return 'Источник: UN Comtrade, зеркальная статистика стран-партнёров';
+            // «Зеркальной» статистика будет только когда партнёр — конкретная
+            // страна: там мы смотрим её торговлю глазами контрагента. С
+            // партнёром «весь мир» это прямая отчётность самих стран.
+            return appState.sourceNote ||
+                'Источник: UN Comtrade, зеркальная статистика стран-партнёров';
         }
         // Зарубежная таможня: журнал источника кладёт сюда сам модуль —
         // такие данные тоже обязаны называть происхождение в материалах наружу
@@ -598,6 +602,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var COMTRADE_REGIONS_URL = 'data/comtrade_regions.json';
     var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries';
     var COMTRADE_RF_CODE = 643;
+    // Comtrade: partnerCode=0 — агрегат «World», торговля со всеми странами
+    var COMTRADE_WORLD_CODE = 0;
 
     // Должны совпадать с проверками в comtrade.php.
     // Периоды по одному — публичный preview отвечает «Maximum number of
@@ -615,6 +621,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeToggle = document.querySelector('.comtrade-toggle');
     var comtradeCountriesBox = document.querySelector('.comtrade-countries');
     var comtradeRegionsBox = document.querySelector('.comtrade-regions');
+    var comtradePartnerSelect = document.querySelector('.comtrade-partner');
     var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
     var comtradeStatus = document.querySelector('.comtrade-status');
@@ -697,6 +704,37 @@ document.addEventListener('DOMContentLoaded', function () {
         var picked = codes.filter(function (code) { return comtradeSelected[code]; }).length;
         if (picked === 0) { return 'none'; }
         return picked === codes.length ? 'all' : 'some';
+    }
+
+    /*
+     * Селект партнёра: «Всем миром» + все страны справочника.
+     *
+     * В разметке заранее лежат только Россия и мир, чтобы форма была осмысленной
+     * до загрузки справочника; остальные страны досыпаем сюда.
+     */
+    function fillComtradePartners() {
+        if (!comtradePartnerSelect || comtradeCountries.length === 0) { return; }
+
+        var current = comtradePartnerSelect.value;
+        var html = '<option value="' + COMTRADE_WORLD_CODE + '">Всем миром</option>';
+
+        comtradeCountries.forEach(function (c) {
+            html += '<option value="' + c.code + '">' + c.name + '</option>';
+        });
+
+        comtradePartnerSelect.innerHTML = html;
+        comtradePartnerSelect.value = current || String(COMTRADE_RF_CODE);
+    }
+
+    /** Читаемое имя партнёра для ярлыка и подписи источника. */
+    function comtradePartnerName(code) {
+        if (String(code) === String(COMTRADE_WORLD_CODE)) { return 'весь мир'; }
+
+        var name = '';
+        comtradeCountries.forEach(function (c) {
+            if (String(c.code) === String(code)) { name = c.name; }
+        });
+        return name || ('код ' + code);
     }
 
     function renderComtradeRegions() {
@@ -807,6 +845,10 @@ document.addEventListener('DOMContentLoaded', function () {
     /** Собирает и проверяет параметры формы. Возвращает null и пишет ошибку в статус. */
     function collectComtradeParams() {
         var direction = document.querySelector('.comtrade-direction').value;
+        var partner = comtradePartnerSelect
+            ? comtradePartnerSelect.value
+            : String(COMTRADE_RF_CODE);
+        var isWorld = String(partner) === String(COMTRADE_WORLD_CODE);
         var freq = document.querySelector('.comtrade-freq').value;
         var yearFrom = parseInt(document.querySelector('.comtrade-year-from').value, 10);
         var yearTo = parseInt(document.querySelector('.comtrade-year-to').value, 10);
@@ -816,8 +858,23 @@ document.addEventListener('DOMContentLoaded', function () {
             return comtradeSelected[code];
         });
 
+        /*
+         * Страна не торгует сама с собой: если партнёр попал в список стран
+         * (например, выбрали регион «Европа» при партнёре «Германия»),
+         * Comtrade вернёт по ней пусто. Молча убираем — иначе выбор региона
+         * с европейским партнёром выглядел бы как потеря данных.
+         */
+        if (!isWorld) {
+            reporters = reporters.filter(function (code) {
+                return String(code) !== String(partner);
+            });
+        }
+
         if (reporters.length === 0) {
-            setComtradeStatus('Выберите хотя бы одну страну-партнёра', 'error');
+            setComtradeStatus(
+                'Выберите хотя бы одну страну, кроме той, с кем смотрим торговлю',
+                'error'
+            );
             return null;
         }
         if (isNaN(yearFrom) || isNaN(yearTo) || yearFrom > yearTo) {
@@ -840,9 +897,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
         return {
             direction: direction,
+            partner: partner,
             freq: freq,
-            // Импорт РФ — это экспорт партнёра в РФ, и наоборот
-            flow: direction === 'import' ? 'X' : 'M',
+            /*
+             * Направление задаётся с точки зрения репортёра — страны из списка.
+             *
+             * При партнёре-стране это зеркальный взгляд: «импорт России из
+             * Китая» мы берём как экспорт Китая (X), потому что репортёр —
+             * Китай, а РФ стоит партнёром. Но с партнёром «весь мир» репортёр
+             * и есть тот, кто покупает: «сколько Европа покупает» — это её
+             * собственный импорт (M). Без этой развилки запрос вернул бы
+             * ровно обратное — сколько она продаёт.
+             */
+            flow: isWorld
+                ? (direction === 'import' ? 'M' : 'X')
+                : (direction === 'import' ? 'X' : 'M'),
             reporters: reporters,
             periods: periods,
             codes: codes,
@@ -856,7 +925,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var url = COMTRADE_PROXY_URL +
             '?freq=' + encodeURIComponent(params.freq) +
             '&flow=' + encodeURIComponent(params.flow) +
-            '&partner=' + COMTRADE_RF_CODE +
+            '&partner=' + encodeURIComponent(params.partner) +
             '&reporter=' + encodeURIComponent(params.reporters.join(',')) +
             '&period=' + encodeURIComponent(params.periods.join(',')) +
             '&cmd=' + encodeURIComponent(params.codes.join(','));
@@ -889,6 +958,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /*
+     * Как назвать колонку страны в выгрузке.
+     *
+     * При партнёре-стране (обычно РФ) в строке стоит контрагент: смотрим
+     * «импорт России из Китая» — и Китай это страна отправления. Но при
+     * партнёре «весь мир» второй стороны нет, она размазана по всем странам,
+     * и репортёр — это сама страна, которая купила или продала. Называть её
+     * «страной отправления» в таком режиме прямо неверно.
+     *
+     * Обе точки, которые читают выгрузку (таблица и презентация), берут имя
+     * отсюда — иначе они разъедутся и презентация не найдёт колонку.
+     */
+    function comtradeCountryColumn(params) {
+        var isImport = params.direction === 'import';
+
+        if (String(params.partner) === String(COMTRADE_WORLD_CODE)) {
+            return isImport ? 'Страна-импортёр' : 'Страна-экспортёр';
+        }
+        return isImport ? 'Страна отправления' : 'Страна назначения';
+    }
+
+    /*
      * Итоговая ли это строка по товарной позиции.
      *
      * Comtrade возвращает одну позицию несколькими строками: одна — итог
@@ -913,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function () {
         comtradeCountries.forEach(function (c) { byCode[c.code] = c.name; });
 
         var isImport = params.direction === 'import';
-        var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
+        var countryCol = comtradeCountryColumn(params);
 
         var headers = [
             COL_DATE_REG,
@@ -1071,11 +1161,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 comtradePresentation = buildComtradePresentation(parsed, params);
                 if (comtradePresentationBtn) { comtradePresentationBtn.hidden = false; }
 
-                var label = 'UN Comtrade — ' +
-                    (params.direction === 'import' ? 'импорт РФ' : 'экспорт РФ') + ', ' +
+                // Ярлык и подпись источника зависят от партнёра: «импорт РФ»
+                // и «зеркальная статистика» верны, только когда партнёр — страна
+                var partnerName = comtradePartnerName(params.partner);
+                var isWorld = String(params.partner) === String(COMTRADE_WORLD_CODE);
+                var flowWord = params.direction === 'import' ? 'импорт' : 'экспорт';
+
+                var label = 'UN Comtrade — ' + flowWord +
+                    (isWorld ? ' (весь мир)' : ' ' + partnerName) + ', ' +
                     params.periods[0].slice(0, 4) + '–' + params.periods[params.periods.length - 1].slice(0, 4);
 
                 applyParsedData({ name: label }, parsed, 'comtrade');
+
+                appState.sourceNote = isWorld
+                    ? 'Источник: UN Comtrade, торговля стран со всем миром'
+                    : 'Источник: UN Comtrade, зеркальная статистика стран-партнёров ' +
+                      '(торговля с: ' + partnerName + ')';
 
                 var note = 'Загружено ' + formatNumber(parsed.rows.length) + ' строк. ';
                 note += parsed.weightCoverage === 100
@@ -1104,6 +1205,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     .then(function () {
                         renderComtradeCountries('');
                         renderComtradeRegions();
+                        fillComtradePartners();
                         updateComtradeSelectedHint();
                     });
             }
@@ -1193,7 +1295,7 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function buildComtradePresentation(parsed, params) {
         var isImport = params.direction === 'import';
-        var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
+        var countryCol = comtradeCountryColumn(params);
         var isMonthly = params.freq === 'M';
 
         // Нац. валюта: Comtrade отдаёт только USD, поэтому пересчитываем по курсу
