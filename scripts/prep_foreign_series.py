@@ -101,7 +101,8 @@ def build_kg():
         coverage_pct=[y.get("coverage_pct") for y in idx["years"]],
         official_total=[y.get("official_total") for y in idx["years"]],
         pairs=len(out), codes=len({r[0] for r in out}), partners=len({r[1] for r in out}),
-        import_usd=[y["import_usd"] for y in idx["years"]],
+        # см. пояснение в build_kz(): итог считаем по строкам снимка
+        import_usd=[sum((r[2][i] or 0) for r in out) for i in range(len(years))],
         source=provenance("KG"))
     size = write({"cols": ["code", "partner", "import_usd", "qty"],
                   "meta": meta, "rows": out}, "kg_series.json")
@@ -139,8 +140,11 @@ def build_kz():
         periods=periods, period_labels=periods,
         partial=[False] * n,          # публикация помесячная и закрытая: все месяцы полные
         pairs=len(out), codes=len({r[0] for r in out}), partners=len({r[1] for r in out}),
-        export_usd=[p["export_usd"] for p in idx["periods"]],
-        import_usd=[p["import_usd"] for p in idx["periods"]],
+        # Итоги считаем ПО СТРОКАМ СНИМКА, а не переносим из индекса ряда: строки
+        # округлены до целых USD, и сумма индекса (округление в самом конце)
+        # расходилась бы с суммой видимых чисел на десятки долларов.
+        export_usd=[sum((r[2][i] or 0) for r in out) for i in range(n)],
+        import_usd=[sum((r[3][i] or 0) for r in out) for i in range(n)],
         source=provenance("KZ"))
     size = write({"cols": ["code", "partner",
                            "export_usd", "import_usd", "export_t", "import_t"],

@@ -38,16 +38,18 @@
               tab: '🇨🇴 Колумбия' },
         PE: { file: 'data/foreign/pe_aggregate.json', kind: 'firm', idLabel: 'RUC', sortDefault: 5,
               tab: '🇵🇪 Перу' },
+        // Казахстан: срез январь–май 2026 (книга Олега). Отдельная вкладка от ряда
+        // не дублирует его — ряд покрывает 2025 помесячно, здесь текущий период.
         KZ: { file: 'data/foreign/kz_aggregate.json', kind: 'country', sortDefault: 6,
-              tab: '🇰🇿 Казахстан' },
-        KG: { file: 'data/foreign/kg_aggregate.json', kind: 'country', sortDefault: 5,
-              tab: '🇰🇬 Кыргызстан' },
+              tab: '🇰🇿 Казахстан: янв–май 2026' },
         // Ряды — отдельная модель: строка несёт вектор значений по периодам,
         // а не одно число, поэтому и таблица, и сортировка у них свои.
+        // Отдельной вкладки «Кыргызстан» нет: её период (январь–май 2026) —
+        // последняя точка этого ряда, те же цифры из того же файла.
         KGS: { file: 'data/foreign/kg_series.json', kind: 'series', flow: 'import',
-               tab: '📈 Кыргызстан: динамика' },
+               tab: '🇰🇬 Кыргызстан: 2019–2026' },
         KZS: { file: 'data/foreign/kz_series.json', kind: 'series', flow: 'both',
-               tab: '📈 Казахстан: помесячно' }
+               tab: '🇰🇿 Казахстан: 2025 помесячно' }
     };
 
     var CATEGORY = {
@@ -483,8 +485,10 @@
         document.getElementById('fc-drill').innerHTML = '';
         // Передача в приложение возможна только для контрагентской модели —
         // см. пояснение в toAppRows()
+        // Срез страновой модели в приложение не отдаём: одна точка без динамики
+        // и без контрагентов там бесполезна. Ряд — отдаём: он даёт годы.
         var use = document.getElementById('fc-use');
-        use.hidden = ctry || isSeries();
+        use.hidden = ctry;
         use.title = 'Загрузить снимок как активную таблицу приложения ' +
                     '(разделы «Обработка», «Анализ», «Презентация»)';
         var ser = isSeries();
@@ -601,8 +605,47 @@
         return { headers: headers, rows: rows };
     }
 
+    /*
+     * Ряд → таблица приложения. В отличие от среза, здесь КАЖДЫЙ период даёт
+     * свою строку: именно так слайды «Объёмы» и «Кварт. цены» видят динамику
+     * (они группируют по колонке «Год»).
+     *
+     * Получателя в источнике нет, поэтому колонка не заполняется — контрагентские
+     * анализы на этих данных всё равно невыполнимы, а выдумывать контрагента
+     * нельзя. Партнёр идёт в «Страна отправления»: для импорта это он и есть.
+     *
+     * Неполный период по умолчанию НЕ выгружаем: в отчёте недобранные месяцы
+     * рядом с полными годами читаются как обвал. Пользователь может включить
+     * его сознательно — тогда период помечен в подписи.
+     */
+    function seriesToAppRows(withPartial) {
+        var d = current(), s = src(), m = d.meta;
+        var vi = s.flow === 'both' ? 3 : 2;
+        var headers = ['Дата регистрации', 'Год', 'Период', 'Страна отправления',
+                       'Код товара по ТН ВЭД', 'Наименование и характеристики товаров',
+                       'Направление перемещения', 'Статистическая стоимость, USD'];
+        var rows = [];
+        m.periods.forEach(function (per, i) {
+            if (m.partial[i] && !withPartial) { return; }
+            var year = String(per).slice(0, 4);
+            var date = /^\d{4}-\d{2}$/.test(per) ? per + '-01' : year + '-01-01';
+            var label = m.period_labels[i] + (m.partial[i] ? ' (неполный)' : '');
+            d.rows.forEach(function (r) {
+                var name = m.names[r[0]] || '';
+                if (r[vi][i] != null) {
+                    rows.push([date, year, label, r[1], r[0], name, 'ИМ', r[vi][i]]);
+                }
+                if (s.flow === 'both' && r[2][i] != null) {
+                    rows.push([date, year, label, r[1], r[0], name, 'ЭК', r[2][i]]);
+                }
+            });
+        });
+        return { headers: headers, rows: rows };
+    }
+
     function sendToApp() {
         if (isCountry()) { return; }
+        if (isSeries()) { return sendSeriesToApp(); }
         if (!window.DelomantData) {
             alert('Модуль данных приложения недоступен.');
             return;
@@ -623,6 +666,35 @@
         alert('Загружено строк: ' + fmt(parsed.rows.length) + '.\n\n' +
               'Данные доступны в разделах «Обработка», «Анализ» и «Презентация».\n' +
               'Источник: ' + p.agency + ', ' + p.period_label + '.');
+    }
+
+    function sendSeriesToApp() {
+        if (!window.DelomantData) { alert('Модуль данных приложения недоступен.'); return; }
+        var d = current(), m = d.meta, p = m.source;
+        var hasPartial = m.partial.some(function (x) { return x; });
+        var withPartial = false;
+        if (hasPartial) {
+            withPartial = confirm(
+                'Включить неполный период (' + m.period_labels[m.partial.indexOf(true)] + ')?\n\n' +
+                'ОК — включить: в отчёте он будет ниже полных периодов, это не спад рынка.\n' +
+                'Отмена — только полные периоды (рекомендуется).');
+        }
+        var parsed = seriesToAppRows(withPartial);
+        var label = p.title + ' — ряд ' + m.period_labels[0] + '…' +
+                    m.period_labels[m.periods.length - 1];
+        if (window.DelomantData.hasData() &&
+            !confirm('Загруженные данные будут заменены на «' + label + '».\n\nПродолжить?')) {
+            return;
+        }
+        var note = 'Источник: ' + p.agency + ' (' + p.dataset + '), ряд по периодам; ' +
+                   'выгрузка ' + p.retrieved +
+                   (withPartial ? '; включён неполный период' : '');
+        window.DelomantData.apply(label, parsed, 'foreign', note);
+        var link = document.querySelector('.sidebar-nav-item[href="#data"]');
+        if (link) { link.click(); }
+        alert('Загружено строк: ' + fmt(parsed.rows.length) + '.\n\n' +
+              'Периодов: ' + (withPartial ? m.periods.length : m.partial.filter(function (x) { return !x; }).length) +
+              '. Контрагентов в источнике нет — доступны анализы по кодам и странам.');
     }
 
     function esc(s) {
