@@ -48,6 +48,7 @@ const ASSETS = [
     ['data/company_dictionary.json', 'assets/company_dictionary.dat'],
     ['data/comtrade_countries.json', 'assets/comtrade_countries.dat'],
     ['data/comtrade_regions.json',   'assets/comtrade_regions.dat'],
+    ['data/wits_countries.json',     'assets/wits_countries.dat'],
     ['scripts/foreign_customs.js',   'assets/foreign_customs.js.dat'],
     ['data/foreign/hs_names_ru.json','assets/fc_hs_names.dat'],
     ['data/foreign/co_aggregate.json','assets/fc_co.dat'],
@@ -69,6 +70,7 @@ const sizes = [];
 sizes.push(['index.php', write('index.php', read('server/index.php'))]);
 sizes.push(['asset.php', write('asset.php', read('server/asset.php'))]);
 sizes.push(['comtrade.php', write('comtrade.php', read('server/comtrade.php'))]);
+sizes.push(['wits.php', write('wits.php', read('server/wits.php'))]);
 sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 
 // setup.php с подставленным токеном установки

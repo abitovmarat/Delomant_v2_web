@@ -5,7 +5,7 @@
 RewriteEngine On
 
 # Точки входа отдаём как есть
-RewriteRule ^(index|asset|setup|comtrade)\.php$ - [L]
+RewriteRule ^(index|asset|setup|comtrade|wits)\.php$ - [L]
 
 # Пути, к которым обращается фронтенд, проксируем на asset.php.
 # Проверку сессии делает сам asset.php.
@@ -16,6 +16,7 @@ RewriteRule ^data/cbr_rates\.json$          asset.php?f=cbr  [L]
 RewriteRule ^data/company_dictionary\.json$ asset.php?f=dict [L]
 RewriteRule ^data/comtrade_countries\.json$ asset.php?f=ctry [L]
 RewriteRule ^data/comtrade_regions\.json$   asset.php?f=creg [L]
+RewriteRule ^data/wits_countries\.json$     asset.php?f=wits [L]
 RewriteRule ^scripts/foreign_customs\.js$    asset.php?f=fcjs [L]
 RewriteRule ^data/foreign/hs_names_ru\.json$ asset.php?f=fchs [L]
 RewriteRule ^data/foreign/co_aggregate\.json$ asset.php?f=fcco [L]

@@ -150,6 +150,88 @@
                         </div>
                     </div>
 
+                    <div class="comtrade-card wits-card">
+                        <div class="comtrade-head">
+                            <span class="comtrade-icon" aria-hidden="true">🏦</span>
+                            <div>
+                                <h3 class="comtrade-title">Загрузка из World Bank WITS</h3>
+                                <p class="comtrade-description">
+                                    Мировая торговая статистика Всемирного банка по 250+ странам.
+                                    Годовые объёмы импорта/экспорта по товарным разделам. Агрегат,
+                                    без сведений о контрагентах. Данные доступны примерно до 2021 года.
+                                </p>
+                            </div>
+                            <button class="btn btn-secondary wits-toggle" aria-expanded="false">Открыть</button>
+                        </div>
+
+                        <div class="comtrade-form wits-form" hidden>
+                            <div class="comtrade-row">
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Тип данных</span>
+                                    <select class="wits-mode">
+                                        <option value="trade" selected>Торговля (объёмы)</option>
+                                        <option value="tariff">Тарифы (ставки, %)</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field wits-only-trade">
+                                    <span class="comtrade-label">Направление</span>
+                                    <select class="wits-direction">
+                                        <option value="import" selected>Импорт</option>
+                                        <option value="export">Экспорт</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field wits-only-tariff" hidden>
+                                    <span class="comtrade-label">Показатель тарифа</span>
+                                    <select class="wits-tariff-type">
+                                        <option value="MFN-SMPL-AVRG" selected>РНБ, простая средняя</option>
+                                        <option value="MFN-WGHTD-AVRG">РНБ, взвешенная</option>
+                                        <option value="AHS-SMPL-AVRG">Фактическая, простая средняя</option>
+                                        <option value="AHS-WGHTD-AVRG">Фактическая, взвешенная</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Торговля с</span>
+                                    <select class="wits-partner">
+                                        <option value="wld" selected>Весь мир</option>
+                                    </select>
+                                    <span class="comtrade-hint">«Весь мир» — вся торговля страны. Или выберите конкретного партнёра.</span>
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Уровень товара</span>
+                                    <select class="wits-level">
+                                        <option value="all" selected>Товарные разделы</option>
+                                        <option value="Total">Итог по стране</option>
+                                    </select>
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Год с</span>
+                                    <input type="number" class="wits-year-from" min="1996" max="2021" value="2017">
+                                </label>
+                                <label class="comtrade-field">
+                                    <span class="comtrade-label">Год по</span>
+                                    <input type="number" class="wits-year-to" min="1996" max="2021" value="2021">
+                                </label>
+                            </div>
+
+                            <div class="comtrade-row">
+                                <div class="comtrade-field comtrade-field-wide">
+                                    <span class="comtrade-label">Страны-репортёры</span>
+                                    <input type="text" class="comtrade-country-search wits-country-search" placeholder="Поиск страны">
+                                    <div class="comtrade-countries wits-countries" role="group" aria-label="Страны-репортёры"></div>
+                                    <span class="comtrade-hint wits-selected-hint">Не выбрано ни одной страны</span>
+                                </div>
+                            </div>
+
+                            <div class="comtrade-actions">
+                                <button class="btn btn-primary wits-load-btn">Загрузить данные</button>
+                                <button class="btn btn-secondary wits-tariff-export-btn" hidden>Скачать тарифы (Excel)</button>
+                                <span class="comtrade-status wits-status" role="status"></span>
+                            </div>
+
+                            <div class="wits-tariff-results" hidden></div>
+                        </div>
+                    </div>
+
                     <div class="file-list">
                         <!-- Карточки файлов будут добавлены сюда -->
                     </div>
@@ -545,65 +627,7 @@
                                     <textarea class="pres-set-commentary" rows="5" placeholder="Аналитический текст для слайда"></textarea>
                                     <div class="pres-gen-actions">
                                         <button class="btn btn-secondary pres-gen-template">Шаблон</button>
-                                        <button class="btn btn-secondary pres-gen-ai">AI генерация</button>
                                     </div>
-                                </div>
-                                <div class="settings-group pres-set-provider-group" style="display:none">
-                                    <label class="settings-label">AI-провайдер</label>
-                                    <select class="pres-set-provider">
-                                        <option value="openrouter">OpenRouter (бесплатные модели)</option>
-                                        <option value="openai">OpenAI (ChatGPT)</option>
-                                        <option value="groq">Groq (быстрый)</option>
-                                        <option value="ollama">Ollama (локально)</option>
-                                        <option value="lmstudio">LM Studio (локально)</option>
-                                        <option value="claude">Claude API (платный)</option>
-                                    </select>
-                                </div>
-                                <div class="settings-group pres-set-model-group" style="display:none">
-                                    <label class="settings-label">Модель</label>
-                                    <select class="pres-set-model-select" style="display:none">
-                                        <optgroup label="OpenAI">
-                                            <option value="gpt-4o-mini">GPT-4o mini (быстрый, дешёвый)</option>
-                                            <option value="gpt-4o">GPT-4o</option>
-                                            <option value="gpt-4.1-mini">GPT-4.1 mini</option>
-                                        </optgroup>
-                                        <optgroup label="Groq">
-                                            <option value="llama-3.3-70b-versatile">Llama 3.3 70B (рекомендуется)</option>
-                                            <option value="llama-3.1-8b-instant">Llama 3.1 8B (очень быстрый)</option>
-                                            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                                            <option value="gemma2-9b-it">Gemma 2 9B</option>
-                                        </optgroup>
-                                        <optgroup label="С поиском в интернете">
-                                            <option value="perplexity/sonar">Perplexity Sonar (поиск, платный)</option>
-                                            <option value="perplexity/sonar-pro">Perplexity Sonar Pro (поиск, платный)</option>
-                                        </optgroup>
-                                        <optgroup label="Бесплатные — крупные">
-                                            <option value="nousresearch/hermes-3-llama-3.1-405b:free">Hermes 3 Llama 405B</option>
-                                            <option value="openai/gpt-oss-120b:free">OpenAI OSS 120B</option>
-                                            <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
-                                            <option value="qwen/qwen3-coder:free">Qwen3 Coder 480B</option>
-                                            <option value="qwen/qwen3-235b-a22b-thinking-2507">Qwen3 235B Thinking</option>
-                                        </optgroup>
-                                        <optgroup label="Бесплатные — средние">
-                                            <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 24B</option>
-                                            <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
-                                            <option value="deepseek/deepseek-r1-0528:free">DeepSeek R1 0528</option>
-                                            <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 80B</option>
-                                            <option value="upstage/solar-pro-3:free">Solar Pro 3</option>
-                                        </optgroup>
-                                        <option value="custom">Своя модель...</option>
-                                    </select>
-                                    <input type="text" class="pres-set-model-custom" placeholder="Название модели" style="display:none;margin-top:6px">
-                                </div>
-                                <div class="settings-group pres-set-apikey-group" style="display:none">
-                                    <label class="settings-label">API-ключ</label>
-                                    <input type="password" class="pres-set-apikey" placeholder="sk-...">
-                                    <p class="pres-hint">Ключ хранится только в браузере</p>
-                                </div>
-                                <div class="settings-group pres-set-aiurl-group" style="display:none">
-                                    <label class="settings-label">URL сервера</label>
-                                    <input type="text" class="pres-set-aiurl" placeholder="http://localhost:11434">
-                                    <p class="pres-hint">Адрес локального сервера</p>
                                 </div>
                             </div>
                             <div class="pres-settings-actions">
@@ -695,7 +719,7 @@
                             <p class="about-description">
                                 Веб-приложение для анализа данных внешнеэкономической деятельности (ВЭД).
                                 Загрузка и обработка таможенных деклараций, построение аналитических отчётов,
-                                визуализация торговых потоков, генерация презентаций и ИИ-исследование товарных рынков.
+                                визуализация торговых потоков и генерация презентаций по результатам анализа.
                             </p>
                         </div>
 
@@ -733,16 +757,6 @@
                                 <li><strong>Фильтрация по ТН ВЭД:</strong> каждый аналитический слайд работает со своим срезом данных</li>
                                 <li><strong>Экспорт PPTX:</strong> графики из вкладки Анализ вставляются как изображения</li>
                                 <li><strong>Экспорт PDF:</strong> многостраничный документ с теми же слайдами</li>
-                            </ul>
-                        </div>
-
-                        <div class="about-section">
-                            <h3 class="about-section-title">ИИ-исследование</h3>
-                            <ul class="about-features">
-                                <li><strong>Чат с данными:</strong> задавайте вопросы по загруженным таможенным данным</li>
-                                <li><strong>Контекст:</strong> сводка, топ стран и динамика по годам передаются в запрос автоматически</li>
-                                <li><strong>Генерация слайдов:</strong> ИИ формирует аналитические выводы и добавляет их в презентацию</li>
-                                <li><strong>API-ключ:</strong> используется ваш собственный ключ Claude API, хранится только в браузере</li>
                             </ul>
                         </div>
 

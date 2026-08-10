@@ -21,7 +21,8 @@ document.addEventListener('DOMContentLoaded', function () {
      * на таком источнике объясняют причину вместо пустого графика.
      */
     function isContractorDataAvailable() {
-        return appState.dataSource !== 'comtrade';
+        // UN Comtrade и World Bank WITS — агрегаты по кодам ТН ВЭД, без контрагентов
+        return appState.dataSource !== 'comtrade' && appState.dataSource !== 'wits';
     }
 
     /*
@@ -37,6 +38,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return appState.sourceNote ||
                 'Источник: UN Comtrade, зеркальная статистика стран-партнёров';
         }
+        if (appState.dataSource === 'wits') {
+            return appState.sourceNote || 'Источник: World Bank WITS, мировая торговая статистика';
+        }
         // Зарубежная таможня: журнал источника кладёт сюда сам модуль —
         // такие данные тоже обязаны называть происхождение в материалах наружу
         if (appState.dataSource === 'foreign') {
@@ -46,8 +50,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderContractorUnavailable() {
+        var srcName = appState.dataSource === 'wits' ? 'World Bank WITS' : 'UN Comtrade';
         return '<div class="analysis-unavailable">' +
-            '<p>Анализ недоступен на данных UN Comtrade: статистика ООН агрегирована ' +
+            '<p>Анализ недоступен на данных ' + srcName + ': статистика агрегирована ' +
             'по кодам ТН ВЭД и не содержит отправителей, получателей и изготовителей.</p>' +
             '<p>Для этого разреза нужна выгрузка с контрагентским уровнем данных.</p>' +
             '</div>';
@@ -1454,6 +1459,388 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (comtradePresentationBtn) {
         comtradePresentationBtn.addEventListener('click', downloadComtradePresentation);
+    }
+
+    /* ================================
+       Module: Data — World Bank WITS
+       ================================
+       Мировая торговая статистика Всемирного банка. Годовые объёмы импорта/
+       экспорта по товарным разделам (или итог по стране). Как и Comtrade —
+       агрегат по кодам ТН ВЭД, без контрагентов (см. isContractorDataAvailable).
+       Значения WITS приходят в тыс. USD — приводим к USD, как в остальном
+       приложении. Запросы идут через прокси wits.php (белый список, кэш). */
+
+    var WITS_PROXY_URL = 'wits.php';
+    var WITS_COUNTRIES_URL = 'data/wits_countries.json';
+    var LS_WITS_COUNTRIES_KEY = 'delomant_wits_countries';
+
+    // Проксирующий wits.php ограничивает длину списков; WITS в пути соединяет
+    // их через «;» (перевод из запятой делает сам прокси).
+    var WITS_MAX_REPORTERS = 10;
+    var WITS_MAX_YEARS = 15;
+    var WITS_MIN_YEAR = 1996;
+    var WITS_MAX_YEAR = 2021; // покрытие tradestats обычно отстаёт на ~2 года
+
+    var witsCard = document.querySelector('.wits-card');
+    var witsForm = witsCard ? witsCard.querySelector('.wits-form') : null;
+    var witsToggle = witsCard ? witsCard.querySelector('.wits-toggle') : null;
+    var witsCountriesBox = witsCard ? witsCard.querySelector('.wits-countries') : null;
+    var witsCountrySearch = witsCard ? witsCard.querySelector('.wits-country-search') : null;
+    var witsSelectedHint = witsCard ? witsCard.querySelector('.wits-selected-hint') : null;
+    var witsPartnerSelect = witsCard ? witsCard.querySelector('.wits-partner') : null;
+    var witsDirection = witsCard ? witsCard.querySelector('.wits-direction') : null;
+    var witsLevel = witsCard ? witsCard.querySelector('.wits-level') : null;
+    var witsYearFrom = witsCard ? witsCard.querySelector('.wits-year-from') : null;
+    var witsYearTo = witsCard ? witsCard.querySelector('.wits-year-to') : null;
+    var witsStatus = witsCard ? witsCard.querySelector('.wits-status') : null;
+    var witsLoadBtn = witsCard ? witsCard.querySelector('.wits-load-btn') : null;
+    var witsMode = witsCard ? witsCard.querySelector('.wits-mode') : null;
+    var witsTariffType = witsCard ? witsCard.querySelector('.wits-tariff-type') : null;
+    var witsTariffResults = witsCard ? witsCard.querySelector('.wits-tariff-results') : null;
+    var witsTariffExportBtn = witsCard ? witsCard.querySelector('.wits-tariff-export-btn') : null;
+
+    var witsCountries = [];      // [{iso3, code, name, reporter}]
+    var witsSelected = {};       // iso3 → true
+    var witsTariffRows = [];     // последняя выгрузка тарифов для экспорта в Excel
+
+    function loadWitsCountries() {
+        if (witsCountries.length > 0) { return Promise.resolve(witsCountries); }
+        try {
+            var cached = localStorage.getItem(LS_WITS_COUNTRIES_KEY);
+            if (cached) {
+                witsCountries = JSON.parse(cached);
+                if (witsCountries.length > 0) { return Promise.resolve(witsCountries); }
+            }
+        } catch (e) { /* ignore */ }
+
+        return fetch(WITS_COUNTRIES_URL)
+            .then(function (resp) { if (!resp.ok) { throw new Error(resp.status); } return resp.json(); })
+            .then(function (json) {
+                witsCountries = Array.isArray(json) ? json : [];
+                try { localStorage.setItem(LS_WITS_COUNTRIES_KEY, JSON.stringify(witsCountries)); } catch (e) { /* ignore */ }
+                return witsCountries;
+            })
+            .catch(function () { witsCountries = []; return witsCountries; });
+    }
+
+    function setWitsStatus(text, kind) {
+        if (!witsStatus) { return; }
+        witsStatus.textContent = text || '';
+        witsStatus.className = 'comtrade-status wits-status' + (kind ? ' comtrade-status-' + kind : '');
+    }
+
+    function renderWitsCountries(filter) {
+        if (!witsCountriesBox) { return; }
+        var q = (filter || '').trim().toLowerCase();
+        var list = witsCountries.filter(function (c) {
+            if (!c.reporter) { return false; } // отбираем только страны-репортёры
+            return !q || c.name.toLowerCase().indexOf(q) !== -1 || c.iso3.toLowerCase().indexOf(q) !== -1;
+        });
+        if (list.length === 0) {
+            witsCountriesBox.innerHTML = '<span class="comtrade-empty">Ничего не найдено</span>';
+            return;
+        }
+        var html = '';
+        list.forEach(function (c) {
+            var checked = witsSelected[c.iso3] ? ' checked' : '';
+            html += '<label class="comtrade-country">' +
+                '<input type="checkbox" value="' + c.iso3 + '"' + checked + '>' +
+                '<span>' + c.name + '</span></label>';
+        });
+        witsCountriesBox.innerHTML = html;
+    }
+
+    function updateWitsSelectedHint() {
+        if (!witsSelectedHint) { return; }
+        var n = Object.keys(witsSelected).filter(function (k) { return witsSelected[k]; }).length;
+        witsSelectedHint.textContent = n === 0
+            ? 'Не выбрано ни одной страны'
+            : 'Выбрано стран: ' + n;
+    }
+
+    function fillWitsPartners() {
+        if (!witsPartnerSelect) { return; }
+        // «Весь мир» уже в разметке; досыпаем страны справочника как партнёров
+        var frag = document.createDocumentFragment();
+        witsCountries.forEach(function (c) {
+            var opt = document.createElement('option');
+            opt.value = c.iso3;
+            opt.textContent = c.name;
+            frag.appendChild(opt);
+        });
+        witsPartnerSelect.appendChild(frag);
+    }
+
+    function collectWitsParams() {
+        var reporters = Object.keys(witsSelected).filter(function (k) { return witsSelected[k]; });
+        if (reporters.length === 0) {
+            setWitsStatus('Выберите хотя бы одну страну-репортёра.', 'error');
+            return null;
+        }
+        var yFrom = parseInt(witsYearFrom && witsYearFrom.value, 10);
+        var yTo = parseInt(witsYearTo && witsYearTo.value, 10);
+        if (isNaN(yFrom) || isNaN(yTo) || yFrom > yTo) {
+            setWitsStatus('Проверьте диапазон лет.', 'error');
+            return null;
+        }
+        yFrom = Math.max(yFrom, WITS_MIN_YEAR);
+        yTo = Math.min(yTo, WITS_MAX_YEAR);
+        var years = [];
+        for (var y = yFrom; y <= yTo; y++) { years.push(String(y)); }
+
+        var partner = (witsPartnerSelect && witsPartnerSelect.value) || 'wld';
+        // Партнёр не может совпадать с единственным репортёром — WITS вернёт пусто
+        return {
+            mode: (witsMode && witsMode.value) || 'trade',
+            direction: (witsDirection && witsDirection.value) || 'import',
+            tariffType: (witsTariffType && witsTariffType.value) || 'MFN-SMPL-AVRG',
+            reporters: reporters,
+            partner: partner,
+            product: (witsLevel && witsLevel.value) || 'all',
+            years: years,
+        };
+    }
+
+    function witsProductLabel(code) {
+        if (!code || code === 'Total') { return 'Все товары'; }
+        // Разделы приходят как «01-05_Animal» — оставляем код, подпись читаемее
+        return String(code).replace(/_/g, ' ');
+    }
+
+    function witsToRows(records, params) {
+        var byIso = {};
+        witsCountries.forEach(function (c) { byIso[c.iso3] = c.name; });
+
+        var isImport = params.direction === 'import';
+        var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
+        var headers = [COL_DATE_REG, COL_YEAR, COL_DIRECTION, countryCol, COL_HS_CODE, COL_STAT_USD];
+
+        var rows = [];
+        records.forEach(function (r) {
+            if (r.value == null) { return; }
+            var year = parseInt(r.year, 10);
+            if (isNaN(year)) { return; }
+            var row = {};
+            row[COL_DATE_REG] = year + '-01-01';
+            row[COL_YEAR] = year;
+            row[COL_DIRECTION] = isImport ? 'ИМ' : 'ЭК';
+            row[countryCol] = byIso[r.reporter] || r.reporter;
+            row[COL_HS_CODE] = witsProductLabel(r.product);
+            // WITS отдаёт стоимость в тыс. USD — приводим к USD, как везде в приложении
+            row[COL_STAT_USD] = Math.round(r.value * 1000 * 100) / 100;
+            rows.push(row);
+        });
+        return { headers: headers, rows: rows };
+    }
+
+    function witsFetchBatch(batch, params) {
+        var isTariff = params.mode === 'tariff';
+        var datasource = isTariff ? 'tradestats-tariff' : 'tradestats-trade';
+        var indicator = isTariff
+            ? params.tariffType
+            : (params.direction === 'import' ? 'MPRT-TRD-VL' : 'XPRT-TRD-VL');
+        var query = 'datasource=' + datasource +
+            '&reporter=' + encodeURIComponent(batch.reporters.join(',')) +
+            '&partner=' + encodeURIComponent(params.partner) +
+            '&year=' + encodeURIComponent(batch.years.join(',')) +
+            '&product=' + encodeURIComponent(params.product) +
+            '&indicator=' + encodeURIComponent(indicator);
+
+        return fetch(WITS_PROXY_URL + '?' + query)
+            .then(function (resp) {
+                return resp.json().then(function (body) {
+                    if (!resp.ok) { throw new Error(body && body.error ? body.error : ('WITS ' + resp.status)); }
+                    return body;
+                });
+            })
+            .then(function (body) { return (body && body.data) || []; });
+    }
+
+    function witsLoad() {
+        var params = collectWitsParams();
+        if (!params) { return; }
+
+        clearWitsTariffs();
+
+        var batches = [];
+        comtradeChunk(params.years, WITS_MAX_YEARS).forEach(function (years) {
+            comtradeChunk(params.reporters, WITS_MAX_REPORTERS).forEach(function (reporters) {
+                batches.push({ years: years, reporters: reporters });
+            });
+        });
+
+        witsLoadBtn.disabled = true;
+        setWitsStatus('Загрузка из WITS… (запросов: ' + batches.length + ')', 'progress');
+
+        var collected = [];
+        var chain = Promise.resolve();
+        batches.forEach(function (batch, i) {
+            chain = chain.then(function () {
+                setWitsStatus('Загрузка из WITS… ' + (i + 1) + ' из ' + batches.length, 'progress');
+                return witsFetchBatch(batch, params).then(function (data) {
+                    collected = collected.concat(data);
+                });
+            });
+        });
+
+        chain.then(function () {
+            if (collected.length === 0) {
+                setWitsStatus('WITS не вернул данных по этому запросу. Проверьте страны, партнёра и период.', 'error');
+                return;
+            }
+
+            // Тарифы — это ставки в %, а не объёмы: их нельзя класть в общий
+            // набор для анализа (там стоимость USD). Показываем отдельной
+            // таблицей прямо в карточке и даём выгрузку.
+            if (params.mode === 'tariff') {
+                renderWitsTariffs(collected, params);
+                return;
+            }
+
+            var parsed = witsToRows(collected, params);
+            if (parsed.rows.length === 0) {
+                setWitsStatus('Данные получены, но пусты после обработки.', 'error');
+                return;
+            }
+
+            var flowWord = params.direction === 'import' ? 'импорт' : 'экспорт';
+            var isWorld = String(params.partner).toLowerCase() === 'wld';
+            var partnerName = isWorld ? 'весь мир'
+                : (witsCountries.reduce(function (acc, c) { return c.iso3 === params.partner ? c.name : acc; }, params.partner));
+            var yFrom = params.years[0], yTo = params.years[params.years.length - 1];
+            var label = 'World Bank WITS — ' + flowWord + ' (' + partnerName + '), ' + yFrom + '–' + yTo;
+
+            applyParsedData({ name: label }, parsed, 'wits');
+            appState.sourceNote = 'Источник: World Bank WITS (tradestats-trade), ' +
+                'торговля ' + (isWorld ? 'со всем миром' : 'с: ' + partnerName) +
+                '. Годовые агрегаты в USD.';
+
+            setWitsStatus('Загружено ' + formatNumber(parsed.rows.length) + ' строк.', 'ok');
+        }).catch(function (err) {
+            setWitsStatus(err.message || 'Не удалось загрузить данные из WITS', 'error');
+        }).then(function () {
+            witsLoadBtn.disabled = false;
+        });
+    }
+
+    var WITS_TARIFF_NAMES = {
+        'MFN-SMPL-AVRG': 'РНБ, простая средняя',
+        'MFN-WGHTD-AVRG': 'РНБ, взвешенная',
+        'AHS-SMPL-AVRG': 'Фактическая, простая средняя',
+        'AHS-WGHTD-AVRG': 'Фактическая, взвешенная',
+    };
+
+    var WITS_TARIFF_COLS = ['Страна', 'Товар', 'Год', 'Ставка, %'];
+
+    function renderWitsTariffs(records, params) {
+        var byIso = {};
+        witsCountries.forEach(function (c) { byIso[c.iso3] = c.name; });
+
+        var rows = [];
+        records.forEach(function (r) {
+            if (r.value == null) { return; }
+            var row = {};
+            row['Страна'] = byIso[r.reporter] || r.reporter;
+            row['Товар'] = witsProductLabel(r.product);
+            row['Год'] = parseInt(r.year, 10);
+            row['Ставка, %'] = Math.round(r.value * 100) / 100;
+            rows.push(row);
+        });
+
+        rows.sort(function (a, b) {
+            return a['Страна'].localeCompare(b['Страна'], 'ru') ||
+                a['Товар'].localeCompare(b['Товар'], 'ru') ||
+                a['Год'] - b['Год'];
+        });
+
+        witsTariffRows = rows;
+
+        if (rows.length === 0) {
+            setWitsStatus('Тарифы не найдены по этому запросу.', 'error');
+            return;
+        }
+
+        var html = '<table class="wits-tariff-table"><thead><tr>';
+        WITS_TARIFF_COLS.forEach(function (h) { html += '<th>' + h + '</th>'; });
+        html += '</tr></thead><tbody>';
+        rows.forEach(function (row) {
+            html += '<tr>' +
+                '<td>' + row['Страна'] + '</td>' +
+                '<td>' + row['Товар'] + '</td>' +
+                '<td>' + row['Год'] + '</td>' +
+                '<td class="wits-tariff-rate">' + formatNumber(row['Ставка, %']) + '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table>';
+
+        if (witsTariffResults) {
+            witsTariffResults.innerHTML = html;
+            witsTariffResults.hidden = false;
+        }
+        if (witsTariffExportBtn) { witsTariffExportBtn.hidden = false; }
+
+        var tName = WITS_TARIFF_NAMES[params.tariffType] || params.tariffType;
+        setWitsStatus('Тарифы (' + tName + '): ' + formatNumber(rows.length) + ' строк.', 'ok');
+    }
+
+    function downloadWitsTariffs() {
+        if (witsTariffRows.length === 0) { return; }
+        downloadXlsxData(witsTariffRows, WITS_TARIFF_COLS, 'Тарифы WITS', 'Тарифы WITS');
+    }
+
+    /* Скрыть выдачу тарифов — при смене режима или новой загрузке торговли */
+    function clearWitsTariffs() {
+        witsTariffRows = [];
+        if (witsTariffResults) { witsTariffResults.hidden = true; witsTariffResults.innerHTML = ''; }
+        if (witsTariffExportBtn) { witsTariffExportBtn.hidden = true; }
+    }
+
+    function updateWitsMode() {
+        var isTariff = witsMode && witsMode.value === 'tariff';
+        witsCard.querySelectorAll('.wits-only-trade').forEach(function (el) { el.hidden = isTariff; });
+        witsCard.querySelectorAll('.wits-only-tariff').forEach(function (el) { el.hidden = !isTariff; });
+        clearWitsTariffs();
+        setWitsStatus('', '');
+    }
+
+    if (witsMode) {
+        witsMode.addEventListener('change', updateWitsMode);
+    }
+
+    if (witsTariffExportBtn) {
+        witsTariffExportBtn.addEventListener('click', downloadWitsTariffs);
+    }
+
+    if (witsToggle) {
+        witsToggle.addEventListener('click', function () {
+            var opened = !witsForm.hidden;
+            witsForm.hidden = opened;
+            witsToggle.setAttribute('aria-expanded', String(!opened));
+            witsToggle.textContent = opened ? 'Открыть' : 'Свернуть';
+            if (!opened && witsCountries.length === 0) {
+                loadWitsCountries().then(function () {
+                    renderWitsCountries('');
+                    fillWitsPartners();
+                    updateWitsSelectedHint();
+                });
+            }
+        });
+    }
+
+    if (witsCountrySearch) {
+        witsCountrySearch.addEventListener('input', function () { renderWitsCountries(this.value); });
+    }
+
+    if (witsCountriesBox) {
+        witsCountriesBox.addEventListener('change', function (e) {
+            if (e.target.type !== 'checkbox') { return; }
+            witsSelected[e.target.value] = e.target.checked;
+            updateWitsSelectedHint();
+        });
+    }
+
+    if (witsLoadBtn) {
+        witsLoadBtn.addEventListener('click', witsLoad);
     }
 
     /* ================================
@@ -8320,38 +8707,6 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Настройки блока ---
     var presEditingSlideId = null;
 
-    function updateProviderFields(providerKey) {
-        var p = AI_PROVIDERS[providerKey] || AI_PROVIDERS.openrouter;
-        document.querySelector('.pres-set-apikey-group').style.display = p.needsKey ? '' : 'none';
-        document.querySelector('.pres-set-aiurl-group').style.display = p.needsUrl ? '' : 'none';
-        if (p.keyPlaceholder) {
-            document.querySelector('.pres-set-apikey').placeholder = p.keyPlaceholder;
-        }
-        if (p.needsUrl) {
-            document.querySelector('.pres-set-aiurl').placeholder = p.url;
-        }
-
-        // Блок выбора модели: только для openrouter и локальных
-        var modelGroup = document.querySelector('.pres-set-model-group');
-        var modelSelect = document.querySelector('.pres-set-model-select');
-        var modelCustom = document.querySelector('.pres-set-model-custom');
-
-        if (providerKey === 'openrouter') {
-            modelGroup.style.display = '';
-            modelSelect.style.display = '';
-            // Показываем кастомное поле если выбрано "custom"
-            modelCustom.style.display = modelSelect.value === 'custom' ? '' : 'none';
-        } else if (providerKey === 'ollama' || providerKey === 'lmstudio') {
-            modelGroup.style.display = '';
-            modelSelect.style.display = 'none';
-            modelCustom.style.display = '';
-            modelCustom.placeholder = providerKey === 'ollama' ? 'qwen3:8b' : 'local-model';
-        } else {
-            // Claude — модель фиксирована
-            modelGroup.style.display = 'none';
-        }
-    }
-
     function openPresSettings(id) {
         var slide = null;
         for (var i = 0; i < presState.slides.length; i++) {
@@ -8369,15 +8724,6 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelector('.pres-set-bullets').value = (slide.opts && slide.opts.bullets) || '';
         document.querySelector('.pres-set-commentary').value = (slide.opts && slide.opts.commentary) || '';
 
-        // AI provider settings from localStorage
-        var storedProvider = localStorage.getItem(LS_PRES_PROVIDER) || 'openrouter';
-        var storedKey = localStorage.getItem(LS_PRES_APIKEY) || '';
-        var storedUrl = localStorage.getItem(LS_PRES_AIURL) || '';
-        var storedModel = localStorage.getItem(LS_PRES_MODEL) || '';
-        document.querySelector('.pres-set-provider').value = storedProvider;
-        document.querySelector('.pres-set-apikey').value = storedKey;
-        document.querySelector('.pres-set-aiurl').value = storedUrl;
-
         // Show/hide fields
         document.querySelector('.pres-set-hs-group').style.display = block.hasHsFilter ? '' : 'none';
         document.querySelector('.pres-set-topn-group').style.display = block.hasTopN ? '' : 'none';
@@ -8385,32 +8731,6 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelector('.pres-set-subtitle-group').style.display = block.hasSubtitle ? '' : 'none';
         document.querySelector('.pres-set-bullets-group').style.display = block.hasBullets ? '' : 'none';
         document.querySelector('.pres-set-commentary-group').style.display = block.hasCommentary ? '' : 'none';
-        document.querySelector('.pres-set-provider-group').style.display = block.hasCommentary ? '' : 'none';
-        updateProviderFields(storedProvider);
-
-        // Восстановить выбранную модель после updateProviderFields
-        var modelSelect = document.querySelector('.pres-set-model-select');
-        var modelCustom = document.querySelector('.pres-set-model-custom');
-        if (storedProvider === 'openrouter' && storedModel) {
-            // Проверяем, есть ли такая опция в select
-            var found = false;
-            for (var oi = 0; oi < modelSelect.options.length; oi++) {
-                if (modelSelect.options[oi].value === storedModel) { found = true; break; }
-            }
-            if (found) {
-                modelSelect.value = storedModel;
-                modelCustom.style.display = storedModel === 'custom' ? '' : 'none';
-                if (storedModel === 'custom') modelCustom.value = '';
-            } else {
-                // Сохранённая модель не в списке — считаем её кастомной
-                modelSelect.value = 'custom';
-                modelCustom.style.display = '';
-                modelCustom.value = storedModel;
-            }
-        } else if ((storedProvider === 'ollama' || storedProvider === 'lmstudio') && storedModel) {
-            modelCustom.value = storedModel;
-        }
-
         // Populate HS datalist
         populateHSDatalist();
 
@@ -8509,12 +8829,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 presState.slides.splice(insertAt, 0, contSlide);
                 insertAt++;
             }
-        }
-
-        // Save API key to localStorage
-        var apiKey = document.querySelector('.pres-set-apikey').value.trim();
-        if (apiKey) {
-            localStorage.setItem(LS_PRES_APIKEY, apiKey);
         }
 
         presSettingsOverlay.style.display = 'none';
@@ -9597,61 +9911,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return slideWrapper(slide.title || '\u041f\u043e\u043a\u0432\u0430\u0440\u0442\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0430 \u0446\u0435\u043d', body, { commentary: slide.opts && slide.opts.commentary });
     }
 
-    // --- Авто-генерация текста для слайдов ---
-
-    var LS_PRES_APIKEY = 'delomant_pres_apikey';
-    var LS_PRES_PROVIDER = 'delomant_pres_provider';
-    var LS_PRES_AIURL = 'delomant_pres_aiurl';
-    var LS_PRES_MODEL = 'delomant_pres_model';
-
-    var AI_PROVIDERS = {
-        openrouter: {
-            url: 'https://openrouter.ai/api/v1/chat/completions',
-            model: 'meta-llama/llama-3.3-70b-instruct:free',
-            needsKey: true,
-            needsUrl: false,
-            keyPlaceholder: 'sk-or-...',
-            format: 'openai'
-        },
-        ollama: {
-            url: 'http://localhost:11434/v1/chat/completions',
-            model: 'qwen3:8b',
-            needsKey: false,
-            needsUrl: true,
-            format: 'openai'
-        },
-        lmstudio: {
-            url: 'http://localhost:1234/v1/chat/completions',
-            model: 'local-model',
-            needsKey: false,
-            needsUrl: true,
-            format: 'openai'
-        },
-        openai: {
-            url: 'https://api.openai.com/v1/chat/completions',
-            model: 'gpt-4o-mini',
-            needsKey: true,
-            needsUrl: false,
-            keyPlaceholder: 'sk-...',
-            format: 'openai'
-        },
-        groq: {
-            url: 'https://api.groq.com/openai/v1/chat/completions',
-            model: 'llama-3.3-70b-versatile',
-            needsKey: true,
-            needsUrl: false,
-            keyPlaceholder: 'gsk_...',
-            format: 'openai'
-        },
-        claude: {
-            url: 'https://api.anthropic.com/v1/messages',
-            model: 'claude-sonnet-4-20250514',
-            needsKey: true,
-            needsUrl: false,
-            keyPlaceholder: 'sk-ant-...',
-            format: 'claude'
-        }
-    };
+    // --- Автоматические тексты для слайдов ---
 
     function computeSlideMetrics(type, data, headers, slide) {
         var m = { years: [], trend: 'stable' };
@@ -10042,43 +10302,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        return lines;        return lines;
-    }
-
-    var SEARCH_MODELS = ['perplexity/sonar', 'perplexity/sonar-pro'];
-
-    /* Удаляет символы вне ASCII (>255) из строки — защита от ошибки ByteString при вставке ключей с Unicode */
-    function sanitizeAscii(str) {
-        if (!str) return str;
-        return str.replace(/[^\x00-\xFF]/g, '');
-    }
-
-    function buildAIPrompt(type, metrics, model) {
-        var typeLabels = {
-            'volumes': 'Объёмы и стоимость импорта',
-            'countries': 'Объёмы по странам',
-            'price-dynamics': 'Динамика цен по странам',
-            'sankey-sender': 'Структура поставок: отправители и получатели',
-            'sankey-manufacturer': 'Структура поставок: изготовители и получатели',
-            'quarterly-prices': 'Поквартальная динамика цен'
-        };
-        var typeLabel = typeLabels[type] || type;
-        var years = (metrics.years || []).join('–');
-
-        var basePrompt = 'Ты аналитик ВЭД (внешнеэкономическая деятельность). На основе метрик напиши 3–5 аналитических тезисов для слайда презентации.\n\n' +
-            'Тип слайда: ' + typeLabel + '\n' +
-            'Метрики из данных: ' + JSON.stringify(metrics, null, 2) + '\n\n' +
-            'Формат: каждый тезис с новой строки, без нумерации, деловой стиль, на русском. Только тезисы, без вступлений.';
-
-        if (model && SEARCH_MODELS.indexOf(model) !== -1) {
-            return basePrompt +
-                '\n\nДополнительно: найди в интернете актуальные рыночные данные по этой теме' +
-                (years ? ' (период ' + years + ')' : '') +
-                (metrics.leader ? ', включая информацию по стране/компании: ' + metrics.leader : '') +
-                '. Добавь 1–2 тезиса на основе найденных внешних данных, указав источник в скобках в конце тезиса.';
-        }
-
-        return basePrompt;
+        return lines;
     }
 
     // Обзорный текст для «Введения» (kind='intro') и «Резюме» (kind='resume').
@@ -10136,77 +10360,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return lines;
-    }
-
-    function generateAIText(type, metrics, providerKey, apiKey, customUrl, selectedModel) {
-        var provider = AI_PROVIDERS[providerKey] || AI_PROVIDERS.openrouter;
-        apiKey = sanitizeAscii(apiKey);
-        selectedModel = sanitizeAscii(selectedModel);
-        var model = selectedModel || provider.model;
-        var prompt = buildAIPrompt(type, metrics, model);
-
-        // Claude API — отдельный формат
-        if (provider.format === 'claude') {
-            return fetch(provider.url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    max_tokens: 500,
-                    messages: [{ role: 'user', content: prompt }]
-                })
-            })
-            .then(function (resp) {
-                if (!resp.ok) throw new Error('Claude API: ' + resp.status);
-                return resp.json();
-            })
-            .then(function (json) {
-                var text = '';
-                if (json.content && json.content[0] && json.content[0].text) {
-                    text = json.content[0].text;
-                }
-                return text.trim();
-            });
-        }
-
-        // OpenAI-совместимый формат (OpenRouter, Ollama, LM Studio)
-        var url = customUrl || provider.url;
-        // Для Ollama/LM Studio: добавить /v1/chat/completions если только хост
-        if ((providerKey === 'ollama' || providerKey === 'lmstudio') && customUrl && customUrl.indexOf('/v1/') === -1) {
-            url = url.replace(/\/+$/, '') + '/v1/chat/completions';
-        }
-
-        var hdrs = { 'Content-Type': 'application/json' };
-        if (apiKey) { hdrs['Authorization'] = 'Bearer ' + apiKey; }
-        if (providerKey === 'openrouter') {
-            hdrs['HTTP-Referer'] = 'https://delomant.ru';
-        }
-
-        return fetch(url, {
-            method: 'POST',
-            headers: hdrs,
-            body: JSON.stringify({
-                model: model,
-                max_tokens: 500,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        })
-        .then(function (resp) {
-            if (!resp.ok) throw new Error(providerKey + ' API: ' + resp.status);
-            return resp.json();
-        })
-        .then(function (json) {
-            var text = '';
-            if (json.choices && json.choices[0] && json.choices[0].message) {
-                text = json.choices[0].message.content;
-            }
-            return (text || '').trim();
-        });
     }
 
     // --- PDF-экспорт (Фаза 5) ---
@@ -10948,90 +11101,6 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             document.querySelector('.pres-set-commentary').value = lines.join('\n');
         }
-    });
-
-    // Provider select change
-    document.querySelector('.pres-set-provider').addEventListener('change', function () {
-        updateProviderFields(this.value);
-    });
-
-    // Model select change — показ кастомного поля
-    document.querySelector('.pres-set-model-select').addEventListener('change', function () {
-        var modelCustom = document.querySelector('.pres-set-model-custom');
-        modelCustom.style.display = this.value === 'custom' ? '' : 'none';
-        if (this.value === 'custom') modelCustom.focus();
-    });
-
-    // Хелпер: получить выбранную модель из формы
-    function getSelectedModel(providerKey) {
-        var modelSelect = document.querySelector('.pres-set-model-select');
-        var modelCustom = document.querySelector('.pres-set-model-custom');
-        if (providerKey === 'openrouter') {
-            if (modelSelect.value === 'custom') {
-                return modelCustom.value.trim() || AI_PROVIDERS.openrouter.model;
-            }
-            return modelSelect.value || AI_PROVIDERS.openrouter.model;
-        }
-        if (providerKey === 'ollama' || providerKey === 'lmstudio') {
-            return modelCustom.value.trim() || AI_PROVIDERS[providerKey].model;
-        }
-        return AI_PROVIDERS[providerKey] ? AI_PROVIDERS[providerKey].model : '';
-    }
-
-    // Commentary generation: AI
-    document.querySelector('.pres-gen-ai').addEventListener('click', function () {
-        if (presEditingSlideId === null) return;
-        var slide = null;
-        for (var i = 0; i < presState.slides.length; i++) {
-            if (presState.slides[i].id === presEditingSlideId) { slide = presState.slides[i]; break; }
-        }
-        if (!slide) return;
-
-        var providerKey = document.querySelector('.pres-set-provider').value || 'openrouter';
-        var provider = AI_PROVIDERS[providerKey] || AI_PROVIDERS.openrouter;
-        var apiKey = document.querySelector('.pres-set-apikey').value.trim() || localStorage.getItem(LS_PRES_APIKEY) || '';
-        var customUrl = document.querySelector('.pres-set-aiurl').value.trim() || localStorage.getItem(LS_PRES_AIURL) || '';
-        var selectedModel = getSelectedModel(providerKey);
-
-        if (provider.needsKey && !apiKey) {
-            alert('Введите API-ключ для ' + providerKey);
-            document.querySelector('.pres-set-apikey').focus();
-            return;
-        }
-
-        var data = getActiveData();
-        var headers = getActiveHeaders();
-        var filteredData = filterDataByHS(data, headers, slide.hsFilter);
-
-        var metrics = computeSlideMetrics(slide.type, filteredData, headers, slide);
-        var btn = document.querySelector('.pres-gen-ai');
-        btn.classList.add('loading');
-        btn.textContent = 'Генерация...';
-
-        generateAIText(slide.type, metrics, providerKey, apiKey, customUrl, selectedModel)
-            .then(function (text) {
-                document.querySelector('.pres-set-commentary').value = text;
-                localStorage.setItem(LS_PRES_PROVIDER, providerKey);
-                localStorage.setItem(LS_PRES_MODEL, selectedModel);
-                if (apiKey) localStorage.setItem(LS_PRES_APIKEY, apiKey);
-                if (customUrl) localStorage.setItem(LS_PRES_AIURL, customUrl);
-                btn.classList.remove('loading');
-                btn.textContent = 'AI генерация';
-            })
-            .catch(function (err) {
-                var msg = 'Ошибка AI: ' + err.message;
-                if ((providerKey === 'ollama' || providerKey === 'lmstudio') && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
-                    msg = 'Не удалось подключиться к ' + providerKey + '.\n\n' +
-                        '1. Убедитесь, что сервер запущен\n' +
-                        '2. Для Ollama разрешите CORS:\n' +
-                        '   Windows PowerShell: $env:OLLAMA_ORIGINS="*"; ollama serve\n' +
-                        '   Linux/Mac: OLLAMA_ORIGINS=* ollama serve\n' +
-                        '3. Страница должна открываться через http://, не file://';
-                }
-                alert(msg);
-                btn.classList.remove('loading');
-                btn.textContent = 'AI генерация';
-            });
     });
 
 });

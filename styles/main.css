@@ -2692,24 +2692,6 @@ body {
     padding: 5px 14px;
 }
 
-.pres-gen-ai.loading {
-    pointer-events: none;
-    opacity: 0.7;
-}
-
-.pres-gen-ai.loading::after {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--color-border);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    margin-left: 6px;
-    vertical-align: middle;
-    animation: pres-spin 0.6s linear infinite;
-}
-
 @keyframes pres-spin {
     to { transform: rotate(360deg); }
 }
@@ -3055,6 +3037,42 @@ body {
 .comtrade-status-ok       { color: var(--color-success); }
 .comtrade-status-warn     { color: var(--color-warning); }
 .comtrade-status-error    { color: var(--color-error); }
+
+/* Таблица тарифов WITS — отдельная выдача внутри карточки, не идёт в анализ */
+.wits-tariff-results {
+    margin-top: 16px;
+    max-height: 360px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.wits-tariff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.wits-tariff-table th,
+.wits-tariff-table td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+}
+
+.wits-tariff-table th {
+    position: sticky;
+    top: 0;
+    background-color: var(--color-surface);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.wits-tariff-table td.wits-tariff-rate {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 
 .analysis-unavailable {
     padding: 24px;
