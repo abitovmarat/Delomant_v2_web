@@ -5401,8 +5401,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         html += '</tbody></table></div></div>';
 
+        // Годовые данные не имеют кварталов: приложение кладёт весь год в Q1.
+        // Тогда «по кварталам» — это те же годовые суммы под ярлыком Q1, что
+        // вводит в заблуждение. Определяем такой случай: единственный квартал
+        // среди всех данных — Q1.
+        var distinctQ = {};
+        quarterKeys.forEach(function (k) { distinctQ[byQuarter[k].q] = true; });
+        var qNums = Object.keys(distinctQ);
+        var quartersAreAnnual = qNums.length === 1 && qNums[0] === '1';
+
         // --- Таблица по кварталам ---
-        if (quarterKeys.length > 0) {
+        if (quarterKeys.length > 0 && quartersAreAnnual) {
+            html += '<div class="analysis-section">';
+            html += '<h3 class="analysis-section-title">По кварталам</h3>';
+            html += '<div class="analysis-note">Разбивка по кварталам недоступна: ' +
+                'загружены годовые данные (по одному значению на год). ' +
+                'Чтобы увидеть кварталы Q1–Q4, загрузите данные с частотой ' +
+                '«Месячная» — приложение сложит месяцы в кварталы.</div>';
+            html += '</div>';
+        } else if (quarterKeys.length > 0) {
             html += '<div class="analysis-section">';
             html += '<h3 class="analysis-section-title">По кварталам</h3>';
             html += '<div class="data-table-wrapper"><table class="data-table">';

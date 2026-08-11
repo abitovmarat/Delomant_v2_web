@@ -3259,3 +3259,15 @@ body {
     color: var(--color-text-secondary);
     text-align: center;
 }
+
+/* Пояснение внутри секции анализа (напр. кварталы недоступны на годовых) */
+.analysis-note {
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-warning);
+    border-radius: 6px;
+    background-color: var(--color-bg);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
