@@ -112,7 +112,7 @@
         // (в статистике КЗ описания товара доходят до ~1000 знаков) и она выходит за экран
         '#foreign table.fc-tbl{border-collapse:collapse;width:100%;font-size:13px;min-width:720px;table-layout:fixed}' +
         '#foreign .fc-tbl th,.fc-tbl td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--fc-line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-        '#foreign .fc-tbl th{position:sticky;top:0;background:var(--fc-tile);cursor:pointer;user-select:none;font-size:12px}' +
+        '#foreign .fc-tbl th{position:sticky;top:0;background:var(--fc-tile);color:var(--fc-fg);cursor:pointer;user-select:none;font-size:12px}' +
         '#foreign .fc-tbl th.num,.fc-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}' +
         '#foreign .fc-tbl tbody tr{cursor:default}' +
         '#foreign .fc-tbl tbody tr[data-id]{cursor:pointer}' +
