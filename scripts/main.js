@@ -1475,10 +1475,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var WITS_REGIONS_URL = 'data/wits_regions.json';
     var LS_WITS_COUNTRIES_KEY = 'delomant_wits_countries';
 
-    // Проксирующий wits.php ограничивает длину списков; WITS в пути соединяет
-    // их через «;» (перевод из запятой делает сам прокси).
+    // Репортёров шлём пачкой, год — по одному на запрос: WITS даёт 413, если
+    // списком идут и репортёры, и годы сразу (см. батчинг в witsLoad).
     var WITS_MAX_REPORTERS = 10;
-    var WITS_MAX_YEARS = 15;
     var WITS_MIN_YEAR = 1996;
     var WITS_MAX_YEAR = 2021; // покрытие tradestats обычно отстаёт на ~2 года
 
@@ -1761,15 +1760,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
         clearWitsTariffs();
 
+        /*
+         * WITS отдаёт 413, если в одном запросе списком идут И репортёры, И
+         * годы одновременно (проверено: 2×2 уже валится, а 20×1 и 1×15 — ок).
+         * Поэтому берём по одному году на запрос, а репортёров — пачкой.
+         */
         var batches = [];
-        comtradeChunk(params.years, WITS_MAX_YEARS).forEach(function (years) {
+        params.years.forEach(function (year) {
             comtradeChunk(params.reporters, WITS_MAX_REPORTERS).forEach(function (reporters) {
-                batches.push({ years: years, reporters: reporters });
+                batches.push({ years: [year], reporters: reporters });
             });
         });
 
         witsLoadBtn.disabled = true;
         setWitsStatus('Загрузка из WITS… (запросов: ' + batches.length + ')', 'progress');
+        // Длинный период × много стран — это десятки запросов с паузой. Предупредим.
+        if (batches.length > 25 &&
+            !confirm('Потребуется ' + batches.length + ' запросов к WITS (примерно ' +
+                     Math.ceil(batches.length * 1.2 / 60) + ' мин). Продолжить?')) {
+            witsLoadBtn.disabled = false;
+            setWitsStatus('Отменено. Сузьте период или число стран.', 'warn');
+            return;
+        }
 
         var collected = [];
         var chain = Promise.resolve();
