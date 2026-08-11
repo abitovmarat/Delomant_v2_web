@@ -605,7 +605,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var COMTRADE_PROXY_URL = 'comtrade.php';
     var COMTRADE_COUNTRIES_URL = 'data/comtrade_countries.json';
     var COMTRADE_REGIONS_URL = 'data/comtrade_regions.json';
-    var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries';
+    // Версия ключа меняется при изменении формата справочника. Это не даёт
+    // старой записи localStorage подставить в <option> пустой/текстовый код.
+    var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries_v2';
     var COMTRADE_RF_CODE = 643;
     // Comtrade: partnerCode=0 — агрегат «World», торговля со всеми странами
     var COMTRADE_WORLD_CODE = 0;
@@ -643,13 +645,21 @@ document.addEventListener('DOMContentLoaded', function () {
     // Понятная версия для презентаций: {headers, rows} с ценой и объёмом.
     var comtradePresentation = null;
 
+    function normalizeComtradeCountries(value) {
+        if (!Array.isArray(value)) { return []; }
+        return value.filter(function (country) {
+            return country && /^\d{1,4}$/.test(String(country.code).trim()) &&
+                String(country.name || '').trim() !== '';
+        });
+    }
+
     function loadComtradeCountries() {
         if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
 
         try {
             var cached = localStorage.getItem(LS_COMTRADE_COUNTRIES_KEY);
             if (cached) {
-                comtradeCountries = JSON.parse(cached);
+                comtradeCountries = normalizeComtradeCountries(JSON.parse(cached));
                 if (comtradeCountries.length > 0) { return Promise.resolve(comtradeCountries); }
             }
         } catch (e) { /* ignore */ }
@@ -660,8 +670,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 return resp.json();
             })
             .then(function (json) {
-                comtradeCountries = json;
-                try { localStorage.setItem(LS_COMTRADE_COUNTRIES_KEY, JSON.stringify(json)); } catch (e) { /* ignore */ }
+                comtradeCountries = normalizeComtradeCountries(json);
+                if (comtradeCountries.length === 0) {
+                    throw new Error('Справочник стран Comtrade пуст или повреждён');
+                }
+                try { localStorage.setItem(LS_COMTRADE_COUNTRIES_KEY, JSON.stringify(comtradeCountries)); } catch (e) { /* ignore */ }
                 return comtradeCountries;
             })
             .catch(function () {
@@ -728,7 +741,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         comtradePartnerSelect.innerHTML = html;
-        comtradePartnerSelect.value = current || String(COMTRADE_RF_CODE);
+        comtradePartnerSelect.value = /^\d{1,4}$/.test(String(current).trim())
+            ? String(current).trim()
+            : String(COMTRADE_RF_CODE);
+        // Выбранного кода могло не оказаться в обновлённом справочнике.
+        if (comtradePartnerSelect.value === '') {
+            comtradePartnerSelect.value = String(COMTRADE_RF_CODE);
+        }
     }
 
     /** Читаемое имя партнёра для ярлыка и подписи источника. */
@@ -851,8 +870,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function collectComtradeParams() {
         var direction = document.querySelector('.comtrade-direction').value;
         var partner = comtradePartnerSelect
-            ? comtradePartnerSelect.value
+            ? String(comtradePartnerSelect.value || '').trim()
             : String(COMTRADE_RF_CODE);
+        // Самовосстановление после пустого/устаревшего значения в браузере.
+        // Россия — штатный партнёр по умолчанию и всегда есть в разметке.
+        if (!/^\d{1,4}$/.test(partner)) {
+            partner = String(COMTRADE_RF_CODE);
+            if (comtradePartnerSelect) { comtradePartnerSelect.value = partner; }
+        }
         var isWorld = String(partner) === String(COMTRADE_WORLD_CODE);
         var freq = document.querySelector('.comtrade-freq').value;
         var yearFrom = parseInt(document.querySelector('.comtrade-year-from').value, 10);

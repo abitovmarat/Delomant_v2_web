@@ -95,8 +95,13 @@ function codeList(string $raw, string $pattern, int $max, string $label): string
 $reporter = codeList((string)($_GET['reporter'] ?? ''), '/^\d{1,4}$/',       40, 'Страны');
 $period   = codeList((string)($_GET['period']   ?? ''), '/^\d{4}(\d{2})?$/', 12, 'Периоды');
 
-// Партнёр всегда один — это та сторона, чью торговлю мы смотрим (обычно РФ)
-$partner = (string)($_GET['partner'] ?? '643');
+// Партнёр всегда один — это та сторона, чью торговлю мы смотрим (обычно РФ).
+// Пустое значение мог прислать старый кэшированный фронтенд после обновления
+// списка <option>; для обратной совместимости восстанавливаем значение РФ.
+$partner = trim((string)($_GET['partner'] ?? '643'));
+if ($partner === '') {
+    $partner = '643';
+}
 if (!preg_match('/^\d{1,4}$/', $partner)) {
     fail(400, 'Некорректный код партнёра');
 }
