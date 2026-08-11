@@ -78,8 +78,18 @@ sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 const setup = read('server/setup.php').replace('__SETUP_TOKEN__', setupToken);
 sizes.push(['setup.php', write('setup.php', setup)]);
 
-// Приложение и его статика
-sizes.push(['app/index.html', write('app/index.html', read('index.html'))]);
+/*
+ * Приложение. К ссылкам на свою статику дописываем метку версии сборки
+ * (?v=…), чтобы браузер гарантированно скачивал свежий файл после деплоя,
+ * а не отдавал старый из кэша. HTML отдаётся с no-cache, поэтому новая
+ * метка доходит сразу. CDN-скрипты не трогаем — у них свои версии в пути.
+ */
+const buildId = Date.now().toString(36);
+let appHtml = read('index.html')
+    .replace('href="styles/main.css"', 'href="styles/main.css?v=' + buildId + '"')
+    .replace('src="scripts/main.js"', 'src="scripts/main.js?v=' + buildId + '"')
+    .replace('src="scripts/foreign_customs.js"', 'src="scripts/foreign_customs.js?v=' + buildId + '"');
+sizes.push(['app/index.html', write('app/index.html', appHtml)]);
 for (const [src, dst] of ASSETS) {
     sizes.push([dst, write(dst, read(src))]);
 }
