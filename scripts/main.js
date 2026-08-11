@@ -1472,6 +1472,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var WITS_PROXY_URL = 'wits.php';
     var WITS_COUNTRIES_URL = 'data/wits_countries.json';
+    var WITS_REGIONS_URL = 'data/wits_regions.json';
     var LS_WITS_COUNTRIES_KEY = 'delomant_wits_countries';
 
     // Проксирующий wits.php ограничивает длину списков; WITS в пути соединяет
@@ -1485,6 +1486,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var witsForm = witsCard ? witsCard.querySelector('.wits-form') : null;
     var witsToggle = witsCard ? witsCard.querySelector('.wits-toggle') : null;
     var witsCountriesBox = witsCard ? witsCard.querySelector('.wits-countries') : null;
+    var witsRegionsBox = witsCard ? witsCard.querySelector('.wits-regions') : null;
     var witsCountrySearch = witsCard ? witsCard.querySelector('.wits-country-search') : null;
     var witsSelectedHint = witsCard ? witsCard.querySelector('.wits-selected-hint') : null;
     var witsPartnerSelect = witsCard ? witsCard.querySelector('.wits-partner') : null;
@@ -1500,6 +1502,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var witsTariffExportBtn = witsCard ? witsCard.querySelector('.wits-tariff-export-btn') : null;
 
     var witsCountries = [];      // [{iso3, code, name, reporter}]
+    var witsRegions = [];        // [{group, name, codes:[iso3]}]
     var witsSelected = {};       // iso3 → true
     var witsTariffRows = [];     // последняя выгрузка тарифов для экспорта в Excel
 
@@ -1521,6 +1524,63 @@ document.addEventListener('DOMContentLoaded', function () {
                 return witsCountries;
             })
             .catch(function () { witsCountries = []; return witsCountries; });
+    }
+
+    function loadWitsRegions() {
+        if (witsRegions.length > 0) { return Promise.resolve(witsRegions); }
+        return fetch(WITS_REGIONS_URL)
+            .then(function (resp) { return resp.ok ? resp.json() : []; })
+            .then(function (json) { witsRegions = Array.isArray(json) ? json : []; return witsRegions; })
+            .catch(function () { witsRegions = []; return witsRegions; });
+    }
+
+    /* Коды региона, оставляя только известные страны-репортёры справочника. */
+    function witsRegionCodes(region) {
+        var known = {};
+        witsCountries.forEach(function (c) { if (c.reporter) { known[c.iso3] = true; } });
+        return region.codes.filter(function (code) { return known[code]; });
+    }
+
+    /* Регион отмечен целиком, частично или совсем не отмечен. */
+    function witsRegionState(region) {
+        var codes = witsRegionCodes(region);
+        if (codes.length === 0) { return 'none'; }
+        var picked = codes.filter(function (code) { return witsSelected[code]; }).length;
+        if (picked === 0) { return 'none'; }
+        return picked === codes.length ? 'all' : 'some';
+    }
+
+    function renderWitsRegions() {
+        if (!witsRegionsBox) { return; }
+        var html = '';
+        var lastGroup = '';
+        witsRegions.forEach(function (region, idx) {
+            if (region.group !== lastGroup) {
+                html += '<span class="comtrade-region-group">' + region.group + '</span>';
+                lastGroup = region.group;
+            }
+            var state = witsRegionState(region);
+            html += '<button type="button" class="comtrade-region comtrade-region-' + state + '"' +
+                ' data-region="' + idx + '" aria-pressed="' + (state === 'all') + '">' +
+                region.name + '</button>';
+        });
+        witsRegionsBox.innerHTML = html;
+    }
+
+    /*
+     * Клик по региону: отмечен целиком — снимаем, иначе дожимаем до полного.
+     * Частичный доотмечается, а не сбрасывается, — чтобы не стереть страны,
+     * выбранные вручную.
+     */
+    function toggleWitsRegion(idx) {
+        var region = witsRegions[idx];
+        if (!region) { return; }
+        var codes = witsRegionCodes(region);
+        var turnOff = witsRegionState(region) === 'all';
+        codes.forEach(function (code) {
+            if (turnOff) { delete witsSelected[code]; }
+            else { witsSelected[code] = true; }
+        });
     }
 
     function setWitsStatus(text, kind) {
@@ -1860,8 +1920,10 @@ document.addEventListener('DOMContentLoaded', function () {
             witsToggle.setAttribute('aria-expanded', String(!opened));
             witsToggle.textContent = opened ? 'Открыть' : 'Свернуть';
             if (!opened && witsCountries.length === 0) {
-                loadWitsCountries().then(function () {
+                // Регионы ссылаются на коды стран, поэтому ждём оба справочника
+                Promise.all([loadWitsCountries(), loadWitsRegions()]).then(function () {
                     renderWitsCountries('');
+                    renderWitsRegions();
                     fillWitsPartners();
                     updateWitsSelectedHint();
                 });
@@ -1877,6 +1939,18 @@ document.addEventListener('DOMContentLoaded', function () {
         witsCountriesBox.addEventListener('change', function (e) {
             if (e.target.type !== 'checkbox') { return; }
             witsSelected[e.target.value] = e.target.checked;
+            renderWitsRegions();   // регион мог стать полным/неполным
+            updateWitsSelectedHint();
+        });
+    }
+
+    if (witsRegionsBox) {
+        witsRegionsBox.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.comtrade-region') : null;
+            if (!btn) { return; }
+            toggleWitsRegion(parseInt(btn.getAttribute('data-region'), 10));
+            renderWitsCountries(witsCountrySearch ? witsCountrySearch.value : '');
+            renderWitsRegions();
             updateWitsSelectedHint();
         });
     }
