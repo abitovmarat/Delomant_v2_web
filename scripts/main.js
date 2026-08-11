@@ -1135,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     batches.push({
                         freq: params.freq,
                         flow: params.flow,
+                        partner: params.partner,
                         periods: periods,
                         reporters: reporters,
                         codes: codes,
