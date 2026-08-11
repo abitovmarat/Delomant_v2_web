@@ -65,7 +65,11 @@ if (!empty($_SESSION['auth'])) {
         http_response_code(500);
         exit('Приложение не найдено.');
     }
+    // no-cache: браузер каждый раз проверяет свежесть разметки, поэтому
+    // новая сборка (в т.ч. изменения в карточках) подхватывается обычным
+    // обновлением страницы, без Ctrl+F5.
     header('Content-Type: text/html; charset=UTF-8');
+    header('Cache-Control: no-cache, private');
     readfile($appFile);
     exit;
 }

@@ -60,7 +60,29 @@ if (!is_file($path)) {
     exit;
 }
 
+/*
+ * Кэш с обязательной ревалидацией. max-age=300 раньше заставлял браузер
+ * 5 минут отдавать старый JS/CSS из кэша без перезапроса — после каждого
+ * деплоя приходилось жать Ctrl+F5. Теперь `no-cache` (revalidate-каждый-раз)
+ * + ETag/Last-Modified: неизменный файл отдаётся быстрым 304, новая сборка
+ * подхватывается обычным обновлением страницы.
+ */
+$mtime = filemtime($path);
+$size  = filesize($path);
+$etag  = '"' . $mtime . '-' . $size . '"';
+
 header('Content-Type: ' . $type);
-header('Content-Length: ' . filesize($path));
-header('Cache-Control: private, max-age=300');
+header('Cache-Control: private, no-cache');
+header('ETag: ' . $etag);
+header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+
+$ifNoneMatch = trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+$ifModSince  = trim((string)($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? ''));
+if ($ifNoneMatch === $etag ||
+    ($ifNoneMatch === '' && $ifModSince !== '' && @strtotime($ifModSince) >= $mtime)) {
+    http_response_code(304);
+    exit;
+}
+
+header('Content-Length: ' . $size);
 readfile($path);
