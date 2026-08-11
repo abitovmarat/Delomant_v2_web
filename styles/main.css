@@ -3038,6 +3038,12 @@ body {
 .comtrade-status-warn     { color: var(--color-warning); }
 .comtrade-status-error    { color: var(--color-error); }
 
+/* .comtrade-field задаёт display:flex, который перебивает браузерный
+   [hidden]{display:none}. Без этого правила скрытые через hidden поля
+   (Направление/Показатель тарифа в разных режимах WITS) остаются видимыми. */
+.comtrade-field[hidden] { display: none; }
+.btn[hidden] { display: none; }
+
 /* Таблица тарифов WITS — отдельная выдача внутри карточки, не идёт в анализ */
 .wits-tariff-results {
     margin-top: 16px;

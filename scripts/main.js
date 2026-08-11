@@ -1601,9 +1601,42 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
+    /*
+     * Русские названия 16 товарных разделов ТН ВЭД (коды WITS вида
+     * «01-05_Animal»). WITS в ответе product=all мешает три классификации:
+     * эти разделы, альтернативные группировки UNCTAD (AgrRaw, Food, manuf…)
+     * и строку Total. Оставляем только разделы (witsIsHsSection), чтобы суммы
+     * не задваивались, и подписываем их по-русски.
+     */
+    var WITS_SECTION_RU = {
+        '01-05_Animal':     'Живые животные и продукты животного происхождения',
+        '06-15_Vegetable':  'Продукты растительного происхождения',
+        '16-24_FoodProd':   'Готовые пищевые продукты, напитки, табак',
+        '25-26_Minerals':   'Минеральные продукты (руды, соль, камень)',
+        '27-27_Fuels':      'Минеральное топливо, нефть, газ',
+        '28-38_Chemicals':  'Продукция химической промышленности',
+        '39-40_PlastiRub':  'Пластмассы и каучук',
+        '41-43_HidesSkin':  'Кожа, мех и изделия из них',
+        '44-49_Wood':       'Древесина, бумага и изделия из них',
+        '50-63_TextCloth':  'Текстиль и текстильные изделия',
+        '64-67_Footwear':   'Обувь, головные уборы, зонты',
+        '68-71_StoneGlas':  'Камень, керамика, стекло, драгоценности',
+        '72-83_Metals':     'Недрагоценные металлы и изделия из них',
+        '84-85_MachElec':   'Машины, оборудование и электроника',
+        '86-89_Transport':  'Транспортные средства',
+        '90-99_Miscellan':  'Приборы, оружие, прочие товары',
+    };
+
+    /* Настоящий раздел ТН ВЭД (а не альтернативная группировка/итог). */
+    function witsIsHsSection(code) {
+        return Object.prototype.hasOwnProperty.call(WITS_SECTION_RU, code);
+    }
+
     function witsProductLabel(code) {
         if (!code || code === 'Total') { return 'Все товары'; }
-        // Разделы приходят как «01-05_Animal» — оставляем код, подпись читаемее
+        if (WITS_SECTION_RU[code]) {
+            return WITS_SECTION_RU[code] + ' (' + code.split('_')[0] + ')';
+        }
         return String(code).replace(/_/g, ' ');
     }
 
@@ -1615,9 +1648,15 @@ document.addEventListener('DOMContentLoaded', function () {
         var countryCol = isImport ? 'Страна отправления' : 'Страна назначения';
         var headers = [COL_DATE_REG, COL_YEAR, COL_DIRECTION, countryCol, COL_HS_CODE, COL_STAT_USD];
 
+        var wantSections = params.product === 'all';
+
         var rows = [];
         records.forEach(function (r) {
             if (r.value == null) { return; }
+            // В режиме разделов берём только 16 разделов ТН ВЭД, отбрасывая
+            // альтернативные группировки UNCTAD и строку Total — иначе суммы
+            // задваиваются. В режиме «Итог по стране» оставляем Total.
+            if (wantSections && !witsIsHsSection(r.product)) { return; }
             var year = parseInt(r.year, 10);
             if (isNaN(year)) { return; }
             var row = {};
@@ -1736,9 +1775,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var byIso = {};
         witsCountries.forEach(function (c) { byIso[c.iso3] = c.name; });
 
+        var wantSections = params.product === 'all';
+
         var rows = [];
         records.forEach(function (r) {
             if (r.value == null) { return; }
+            if (wantSections && !witsIsHsSection(r.product)) { return; }
             var row = {};
             row['Страна'] = byIso[r.reporter] || r.reporter;
             row['Товар'] = witsProductLabel(r.product);
