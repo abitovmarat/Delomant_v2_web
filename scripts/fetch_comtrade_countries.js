@@ -50,6 +50,52 @@ const RU_NAMES = {
   ZA: 'ЮАР', ZM: 'Замбия', ZW: 'Зимбабве',
 };
 
+// Записи без действующего ISO-кода: служебные территории и агрегаты UN
+// Comtrade. Intl.DisplayNames их перевести не может, поэтому фиксируем
+// понятные русские подписи по стабильному PartnerCode.
+const RU_CODE_NAMES = {
+  472: 'Африканский регион, прочие',
+  899: 'Территории, не указанные отдельно',
+  837: 'Бункерное топливо',
+  471: 'Центральноамериканский общий рынок, прочие',
+  129: 'Карибский регион, прочие',
+  830: 'Нормандские острова',
+  221: 'Восточная Европа, прочие',
+  697: 'Европа ЕАСТ, прочие',
+  838: 'Свободные зоны',
+  412: 'Косово',
+  473: 'Латиноамериканская ассоциация интеграции, прочие',
+  488: 'Острова Мидуэй',
+  536: 'Нейтральная зона',
+  637: 'Северная и Центральная Америка, прочие',
+  290: 'Северная Африка, прочие',
+  527: 'Океания, прочие',
+  577: 'Прочие страны Африки',
+  490: 'Прочие страны Азии',
+  568: 'Прочие страны Европы',
+  636: 'Прочие страны Америки',
+  839: 'Специальные категории',
+  849: 'Прочие тихоокеанские острова США',
+  872: 'Остров Уэйк',
+  879: 'Западная Азия, прочие',
+};
+
+const REGION_NAMES_RU = new Intl.DisplayNames(['ru'], { type: 'region' });
+
+function russianName(row, iso) {
+  if (RU_NAMES[iso]) return RU_NAMES[iso];
+  if (RU_CODE_NAMES[row.PartnerCode]) return RU_CODE_NAMES[row.PartnerCode];
+
+  if (iso) {
+    try {
+      const translated = REGION_NAMES_RU.of(iso);
+      if (translated && translated !== iso) return translated;
+    } catch (_) { /* неизвестный исторический ISO — используем подпись ниже */ }
+  }
+
+  return row.PartnerDesc;
+}
+
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
@@ -88,13 +134,13 @@ async function main() {
     if (row.entryExpiredDate && new Date(row.entryExpiredDate) < now) continue;
 
     const iso = (row.PartnerCodeIsoAlpha2 || '').trim();
-    const ru = RU_NAMES[iso];
-    if (ru) translated++;
+    const ru = russianName(row, iso);
+    if (ru !== row.PartnerDesc) translated++;
 
     countries.push({
       code: row.PartnerCode,
       iso: iso,
-      name: ru || row.PartnerDesc,
+      name: ru,
     });
   }
 

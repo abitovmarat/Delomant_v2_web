@@ -607,7 +607,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var COMTRADE_REGIONS_URL = 'data/comtrade_regions.json';
     // Версия ключа меняется при изменении формата справочника. Это не даёт
     // старой записи localStorage подставить в <option> пустой/текстовый код.
-    var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries_v2';
+    var LS_COMTRADE_COUNTRIES_KEY = 'delomant_comtrade_countries_v3';
     var COMTRADE_RF_CODE = 643;
     // Comtrade: partnerCode=0 — агрегат «World», торговля со всеми странами
     var COMTRADE_WORLD_CODE = 0;
