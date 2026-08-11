@@ -1499,11 +1499,13 @@ document.addEventListener('DOMContentLoaded', function () {
     var witsTariffType = witsCard ? witsCard.querySelector('.wits-tariff-type') : null;
     var witsTariffResults = witsCard ? witsCard.querySelector('.wits-tariff-results') : null;
     var witsTariffExportBtn = witsCard ? witsCard.querySelector('.wits-tariff-export-btn') : null;
+    var witsTradeExportBtn = witsCard ? witsCard.querySelector('.wits-trade-export-btn') : null;
 
     var witsCountries = [];      // [{iso3, code, name, reporter}]
     var witsRegions = [];        // [{group, name, codes:[iso3]}]
     var witsSelected = {};       // iso3 → true
     var witsTariffRows = [];     // последняя выгрузка тарифов для экспорта в Excel
+    var witsTradeExport = null;  // {rows, headers, name} последней загрузки торговли
 
     function loadWitsCountries() {
         if (witsCountries.length > 0) { return Promise.resolve(witsCountries); }
@@ -1759,6 +1761,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!params) { return; }
 
         clearWitsTariffs();
+        clearWitsTradeExport();
 
         /*
          * WITS отдаёт 413, если в одном запросе списком идут И репортёры, И
@@ -1825,6 +1828,10 @@ document.addEventListener('DOMContentLoaded', function () {
             appState.sourceNote = 'Источник: World Bank WITS (tradestats-trade), ' +
                 'торговля ' + (isWorld ? 'со всем миром' : 'с: ' + partnerName) +
                 '. Годовые агрегаты в USD.';
+
+            // Запоминаем загруженное для отдельной кнопки «Скачать данные»
+            witsTradeExport = { rows: parsed.rows, headers: parsed.headers, name: label };
+            if (witsTradeExportBtn) { witsTradeExportBtn.hidden = false; }
 
             setWitsStatus('Загружено ' + formatNumber(parsed.rows.length) + ' строк.', 'ok');
         }).catch(function (err) {
@@ -1902,11 +1909,21 @@ document.addEventListener('DOMContentLoaded', function () {
         downloadXlsxData(witsTariffRows, WITS_TARIFF_COLS, 'Тарифы WITS', 'Тарифы WITS');
     }
 
-    /* Скрыть выдачу тарифов — при смене режима или новой загрузке торговли */
+    function downloadWitsTrade() {
+        if (!witsTradeExport) { return; }
+        downloadXlsxData(witsTradeExport.rows, witsTradeExport.headers, 'WITS', witsTradeExport.name);
+    }
+
+    /* Скрыть выдачу тарифов и загруженной торговли — при смене режима/новой загрузке */
     function clearWitsTariffs() {
         witsTariffRows = [];
         if (witsTariffResults) { witsTariffResults.hidden = true; witsTariffResults.innerHTML = ''; }
         if (witsTariffExportBtn) { witsTariffExportBtn.hidden = true; }
+    }
+
+    function clearWitsTradeExport() {
+        witsTradeExport = null;
+        if (witsTradeExportBtn) { witsTradeExportBtn.hidden = true; }
     }
 
     function updateWitsMode() {
@@ -1914,6 +1931,7 @@ document.addEventListener('DOMContentLoaded', function () {
         witsCard.querySelectorAll('.wits-only-trade').forEach(function (el) { el.hidden = isTariff; });
         witsCard.querySelectorAll('.wits-only-tariff').forEach(function (el) { el.hidden = !isTariff; });
         clearWitsTariffs();
+        clearWitsTradeExport();
         setWitsStatus('', '');
     }
 
@@ -1923,6 +1941,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (witsTariffExportBtn) {
         witsTariffExportBtn.addEventListener('click', downloadWitsTariffs);
+    }
+
+    if (witsTradeExportBtn) {
+        witsTradeExportBtn.addEventListener('click', downloadWitsTrade);
     }
 
     if (witsToggle) {
