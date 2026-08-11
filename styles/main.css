@@ -1633,6 +1633,158 @@ body {
     margin-top: 24px;
 }
 
+/* Анализ: изменения рынка */
+.market-changes-config {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.market-changes-config h3 {
+    margin: 0 0 4px;
+    font-size: 18px;
+}
+
+.market-config-hint,
+.market-change-context {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+}
+
+.market-config-hint {
+    margin: 0 0 16px;
+}
+
+.market-config-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 14px;
+    align-items: end;
+}
+
+.market-config-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.market-config-grid label > span {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.market-config-grid select,
+.market-config-grid input {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.market-config-grid .market-run-btn {
+    min-height: 38px;
+}
+
+.market-change-summary {
+    margin-bottom: 20px;
+}
+
+.market-change-context {
+    margin-bottom: 12px;
+}
+
+.market-change-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.market-change-section {
+    min-width: 0;
+}
+
+.market-change-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+
+.market-change-section h4 span {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+
+.market-change-growth h4,
+.market-change-new h4,
+.market-delta.positive {
+    color: var(--color-success);
+}
+
+.market-change-decline h4,
+.market-change-disappeared h4,
+.market-delta.negative {
+    color: var(--color-error);
+}
+
+.market-change-table {
+    font-size: 12px;
+}
+
+.market-change-table th:first-child,
+.market-change-table td:first-child {
+    min-width: 150px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.market-change-table td.numeric {
+    white-space: nowrap;
+}
+
+.market-change-empty {
+    padding: 18px !important;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.analysis-export-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+@media (max-width: 1200px) {
+    .market-config-grid,
+    .market-change-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .market-config-grid,
+    .market-change-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analysis-export-actions {
+        flex-direction: column;
+    }
+}
+
 /* ================================
    Report Item
    ================================ */
@@ -2507,6 +2659,24 @@ body {
 .pres-slide-body td.numeric {
     text-align: right;
     font-variant-numeric: tabular-nums;
+}
+
+.pres-market-caption {
+    margin: 0 0 8px;
+    color: #64748B;
+    font-size: 10px;
+}
+
+.pres-market-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.pres-market-panel {
+    width: 100%;
+    height: auto;
+    display: block;
 }
 
 /* Текстовый слайд — карточки */

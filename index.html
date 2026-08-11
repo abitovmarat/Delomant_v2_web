@@ -415,7 +415,7 @@
                     <h2 class="module-title">Анализ</h2>
 
                     <div class="action-cards">
-                        <div class="action-card" title="Колонки: Вес нетто, кг · Статистическая стоимость, USD · Таможенная стоимость · Год · КВАРТАЛ">
+                        <div class="action-card" data-analysis="volumes" title="Колонки: Вес нетто, кг · Статистическая стоимость, USD · Таможенная стоимость · Год · КВАРТАЛ">
                             <span class="action-card-icon">📦</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Объёмы и стоимость</h3>
@@ -423,7 +423,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Страна отправления · Страна происхождения · Вес нетто, кг · Статистическая стоимость, USD">
+                        <div class="action-card" data-analysis="countries" title="Колонки: Страна отправления · Страна происхождения · Вес нетто, кг · Статистическая стоимость, USD">
                             <span class="action-card-icon">🌍</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Объёмы по странам</h3>
@@ -431,7 +431,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Страна отправления / Страна происхождения · Статистическая стоимость, USD · Вес нетто, кг · Год">
+                        <div class="action-card" data-analysis="priceDynamics" title="Колонки: Страна отправления / Страна происхождения · Статистическая стоимость, USD · Вес нетто, кг · Год">
                             <span class="action-card-icon">💰</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Динамика цен по странам</h3>
@@ -439,7 +439,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Наименование отправителя · Наименование получателя · Вес нетто, кг · Год">
+                        <div class="action-card" data-analysis="importStructure" title="Колонки: Наименование отправителя · Наименование получателя · Вес нетто, кг · Год">
                             <span class="action-card-icon">🏭</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Структура импорта</h3>
@@ -447,7 +447,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Фирма-изготовитель · Наименование получателя · Вес нетто, кг · Год">
+                        <div class="action-card" data-analysis="manufacturerStructure" title="Колонки: Фирма-изготовитель · Наименование получателя · Вес нетто, кг · Год">
                             <span class="action-card-icon">&#x1F3ED;</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Структура по изготовителям</h3>
@@ -455,7 +455,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Статистическая стоимость, USD · Таможенная стоимость · Вес нетто, кг · Год · КВАРТАЛ">
+                        <div class="action-card" data-analysis="quarterlyPrices" title="Колонки: Статистическая стоимость, USD · Таможенная стоимость · Вес нетто, кг · Год · КВАРТАЛ">
                             <span class="action-card-icon">📈</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Поквартальная динамика цен</h3>
@@ -463,7 +463,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Наименование получателя · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                        <div class="action-card" data-analysis="topReceivers" title="Колонки: Наименование получателя · Вес нетто, кг · Статистическая стоимость, USD · Год">
                             <span class="action-card-icon">🏢</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Топ получателей</h3>
@@ -471,7 +471,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Наименование отправителя · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                        <div class="action-card" data-analysis="topSenders" title="Колонки: Наименование отправителя · Вес нетто, кг · Статистическая стоимость, USD · Год">
                             <span class="action-card-icon">🚢</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Топ отправителей</h3>
@@ -479,11 +479,19 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
-                        <div class="action-card" title="Колонки: Фирма-изготовитель · Вес нетто, кг · Статистическая стоимость, USD · Год">
+                        <div class="action-card" data-analysis="topManufacturers" title="Колонки: Фирма-изготовитель · Вес нетто, кг · Статистическая стоимость, USD · Год">
                             <span class="action-card-icon">&#x1F3ED;</span>
                             <div class="action-card-body">
                                 <h3 class="action-card-title">Топ изготовителей</h3>
                                 <p class="action-card-description">Объёмы и стоимость по фирмам-изготовителям</p>
+                            </div>
+                            <button class="btn btn-secondary">Запустить</button>
+                        </div>
+                        <div class="action-card" data-analysis="marketChanges" title="Сравнивает два периода по ТН ВЭД, странам, регионам или компаниям: рост, падение, новые и исчезнувшие позиции">
+                            <span class="action-card-icon">⚡</span>
+                            <div class="action-card-body">
+                                <h3 class="action-card-title">Изменения рынка</h3>
+                                <p class="action-card-description">Рост, падение, новые и исчезнувшие позиции между периодами</p>
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
@@ -673,6 +681,7 @@
                                         <label><input type="checkbox" value="sankey-manufacturer" checked> Изготовители → Получатели</label>
                                         <label><input type="checkbox" value="sankey-sender"> Отправители → Получатели</label>
                                         <label><input type="checkbox" value="quarterly-prices" checked> Поквартальные цены</label>
+                                        <label><input type="checkbox" value="market-changes" checked> Изменения рынка</label>
                                         <label><input type="checkbox" value="segments" checked> Каналы сбыта (сегменты)</label>
                                     </div>
                                 </div>

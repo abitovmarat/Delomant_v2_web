@@ -4746,17 +4746,13 @@ document.addEventListener('DOMContentLoaded', function () {
     var analysisButtons = document.querySelectorAll('.module-analysis .action-card .btn');
     var analysisResults = document.querySelector('.analysis-results');
 
-    if (analysisButtons.length > 0) {
-        if (analysisButtons[0]) analysisButtons[0].addEventListener('click', function () { runAnalysis('volumes'); });
-        if (analysisButtons[1]) analysisButtons[1].addEventListener('click', function () { runAnalysis('countries'); });
-        if (analysisButtons[2]) analysisButtons[2].addEventListener('click', function () { runAnalysis('priceDynamics'); });
-        if (analysisButtons[3]) analysisButtons[3].addEventListener('click', function () { runAnalysis('importStructure'); });
-        if (analysisButtons[4]) analysisButtons[4].addEventListener('click', function () { runAnalysis('manufacturerStructure'); });
-        if (analysisButtons[5]) analysisButtons[5].addEventListener('click', function () { runAnalysis('quarterlyPrices'); });
-        if (analysisButtons[6]) analysisButtons[6].addEventListener('click', function () { runAnalysis('topReceivers'); });
-        if (analysisButtons[7]) analysisButtons[7].addEventListener('click', function () { runAnalysis('topSenders'); });
-        if (analysisButtons[8]) analysisButtons[8].addEventListener('click', function () { runAnalysis('topManufacturers'); });
-    }
+    analysisButtons.forEach(function (button) {
+        var card = button.closest('.action-card');
+        var analysisType = card ? card.getAttribute('data-analysis') : '';
+        if (analysisType) {
+            button.addEventListener('click', function () { runAnalysis(analysisType); });
+        }
+    });
 
     // --- Фильтр по направлению ИМ/ЭК ---
     var analysisDirectionFilter = 'ИМ';
@@ -4851,6 +4847,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 return;
             }
+            if (type === 'marketChanges') {
+                renderMarketChangesAnalysis(data, headers);
+                return;
+            }
 
             analysisResults.innerHTML = '';
         } catch (err) {
@@ -4858,6 +4858,396 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<div class="analysis-empty"><p>Ошибка анализа: ' + err.message + '</p></div>';
             console.error('Analysis error:', err);
         }
+    }
+
+    /* --- Анализ: изменения рынка между двумя сопоставимыми периодами --- */
+
+    var MARKET_MONTH_INDEX = {
+        'Январь': 1, 'Февраль': 2, 'Март': 3, 'Апрель': 4,
+        'Май': 5, 'Июнь': 6, 'Июль': 7, 'Август': 8,
+        'Сентябрь': 9, 'Октябрь': 10, 'Ноябрь': 11, 'Декабрь': 12
+    };
+
+    function marketEsc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function marketNumber(value) {
+        if (typeof value === 'number') { return isFinite(value) ? value : 0; }
+        var normalized = String(value == null ? '' : value)
+            .replace(/[\s\u00A0]/g, '').replace(',', '.');
+        var parsed = Number(normalized);
+        return isFinite(parsed) ? parsed : 0;
+    }
+
+    function marketPeriodContext(headers, granularity) {
+        return {
+            granularity: granularity,
+            dateCol: findColumn(headers, COL_DATE_REG) || findColumn(headers, COL_DATE_RELEASE),
+            yearCol: findColumn(headers, COL_YEAR),
+            quarterCol: findColumn(headers, COL_QUARTER),
+            monthCol: findColumn(headers, COL_MONTH)
+        };
+    }
+
+    function marketPeriodKey(row, ctx) {
+        var date = ctx.dateCol ? parseDate(row[ctx.dateCol]) : null;
+        var year = date ? date.getFullYear() : parseInt(row[ctx.yearCol], 10);
+        if (!year || isNaN(year)) { return ''; }
+        if (ctx.granularity === 'year') { return String(year); }
+
+        if (ctx.granularity === 'quarter') {
+            var quarter = date ? getQuarter(date.getMonth() + 1) :
+                parseInt(String(row[ctx.quarterCol] || '').replace(/\D/g, ''), 10);
+            return quarter >= 1 && quarter <= 4 ? year + '-Q' + quarter : '';
+        }
+
+        var month = date ? date.getMonth() + 1 : MARKET_MONTH_INDEX[String(row[ctx.monthCol] || '').trim()];
+        return month >= 1 && month <= 12 ? year + '-' + String(month).padStart(2, '0') : '';
+    }
+
+    function marketCollectPeriods(data, headers, granularity) {
+        var ctx = marketPeriodContext(headers, granularity);
+        var found = {};
+        data.forEach(function (row) {
+            var key = marketPeriodKey(row, ctx);
+            if (key) { found[key] = true; }
+        });
+        return Object.keys(found).sort();
+    }
+
+    function marketDimensionOptions(headers) {
+        var result = [];
+        var seen = {};
+        function add(column, label, type) {
+            if (column && !seen[column]) {
+                seen[column] = true;
+                result.push({ column: column, label: label, type: type || 'text' });
+            }
+        }
+        add(findColumn(headers, COL_HS_CODE), 'Код ТН ВЭД', 'hs');
+        add(findColumn(headers, 'Страна отправления'), 'Страна отправления');
+        add(findColumn(headers, 'Страна происхождения'), 'Страна происхождения');
+        add(findColumn(headers, 'Страна назначения'), 'Страна назначения');
+        add(findColumn(headers, 'Регион получателя'), 'Регион получателя');
+        add(findColumn(headers, COL_RECEIVER), 'Получатель');
+        add(findColumn(headers, COL_SENDER), 'Отправитель');
+        add(findColumn(headers, COL_MANUFACTURER), 'Изготовитель');
+        add(findColumn(headers, 'Сегмент'), 'Сегмент получателя');
+        add(findColumn(headers, 'Более крупный холдинг/объединение'), 'Холдинг / объединение');
+        return result;
+    }
+
+    function marketMetricOptions(headers) {
+        var result = [];
+        if (findColumn(headers, COL_WEIGHT)) { result.push({ key: 'weight', label: 'Вес нетто, кг' }); }
+        if (findColumn(headers, COL_STAT_USD)) { result.push({ key: 'usd', label: 'Стоимость, USD' }); }
+        if (findColumn(headers, COL_WEIGHT) && findColumn(headers, COL_STAT_USD)) {
+            result.push({ key: 'price', label: 'Средневзвешенная цена, USD/кг' });
+        }
+        result.push({ key: 'count', label: 'Количество строк' });
+        return result;
+    }
+
+    function marketDimensionValue(row, column, isHs, hsLevel) {
+        var raw = String(row[column] == null ? '' : row[column]).trim();
+        if (!raw) { return ''; }
+        if (!isHs) { return raw; }
+        var digits = raw.replace(/\D/g, '');
+        if (!digits) { return raw; }
+        var level = Math.max(2, Math.min(parseInt(hsLevel, 10) || 10, 10));
+        return digits.length > level ? digits.slice(0, level) : digits;
+    }
+
+    function marketAccumulatorValue(acc, metric) {
+        if (metric === 'weight') { return acc.weight; }
+        if (metric === 'usd') { return acc.usd; }
+        if (metric === 'price') { return acc.weight > 0 ? acc.usd / acc.weight : 0; }
+        return acc.count;
+    }
+
+    function computeMarketChanges(data, headers, options) {
+        options = options || {};
+        var granularity = options.granularity || 'year';
+        var periods = marketCollectPeriods(data, headers, granularity);
+        if (periods.length < 2) {
+            return { error: 'Для сравнения нужны как минимум два периода.', periods: periods };
+        }
+
+        var currentPeriod = periods.indexOf(options.currentPeriod) !== -1
+            ? options.currentPeriod : periods[periods.length - 1];
+        var currentIndex = periods.indexOf(currentPeriod);
+        var defaultBaseIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+        var basePeriod = periods.indexOf(options.basePeriod) !== -1
+            ? options.basePeriod : periods[defaultBaseIndex];
+        if (basePeriod === currentPeriod) {
+            return { error: 'Выберите разные периоды для сравнения.', periods: periods };
+        }
+
+        var dimensions = marketDimensionOptions(headers);
+        var dimension = options.dimension || (dimensions[0] ? dimensions[0].column : '');
+        var dimensionMeta = dimensions.filter(function (d) { return d.column === dimension; })[0];
+        if (!dimensionMeta) { return { error: 'Не найден подходящий разрез данных.', periods: periods }; }
+
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var usdCol = findColumn(headers, COL_STAT_USD);
+        var metric = options.metric || (weightCol ? 'weight' : (usdCol ? 'usd' : 'count'));
+        if (metric === 'weight' && !weightCol) { return { error: 'Не найден столбец веса.', periods: periods }; }
+        if ((metric === 'usd' || metric === 'price') && !usdCol) { return { error: 'Не найден столбец стоимости USD.', periods: periods }; }
+        if (metric === 'price' && !weightCol) { return { error: 'Для цены USD/кг нужен столбец веса.', periods: periods }; }
+
+        var ctx = marketPeriodContext(headers, granularity);
+        var grouped = {};
+        var totals = {
+            base: { weight: 0, usd: 0, count: 0 },
+            current: { weight: 0, usd: 0, count: 0 }
+        };
+        var hsLevel = parseInt(options.hsLevel, 10) || 10;
+
+        data.forEach(function (row) {
+            var period = marketPeriodKey(row, ctx);
+            var side = period === basePeriod ? 'base' : (period === currentPeriod ? 'current' : '');
+            if (!side) { return; }
+            var key = marketDimensionValue(row, dimension, dimensionMeta.type === 'hs', hsLevel);
+            if (!key) { return; }
+            if (!grouped[key]) {
+                grouped[key] = {
+                    base: { weight: 0, usd: 0, count: 0 },
+                    current: { weight: 0, usd: 0, count: 0 }
+                };
+            }
+            var weight = weightCol ? marketNumber(row[weightCol]) : 0;
+            var usd = usdCol ? marketNumber(row[usdCol]) : 0;
+            grouped[key][side].weight += weight;
+            grouped[key][side].usd += usd;
+            grouped[key][side].count += 1;
+            totals[side].weight += weight;
+            totals[side].usd += usd;
+            totals[side].count += 1;
+        });
+
+        var threshold = Math.max(0, marketNumber(options.threshold));
+        var all = [];
+        var growth = [], decline = [], added = [], disappeared = [];
+        var EPS = 1e-9;
+
+        Object.keys(grouped).forEach(function (key) {
+            var baseValue = marketAccumulatorValue(grouped[key].base, metric);
+            var currentValue = marketAccumulatorValue(grouped[key].current, metric);
+            if (Math.max(Math.abs(baseValue), Math.abs(currentValue)) < threshold) { return; }
+            var delta = currentValue - baseValue;
+            var pct = Math.abs(baseValue) > EPS ? delta / Math.abs(baseValue) * 100 : null;
+            var status;
+            if (Math.abs(baseValue) <= EPS && currentValue > EPS) { status = 'new'; }
+            else if (baseValue > EPS && Math.abs(currentValue) <= EPS) { status = 'disappeared'; }
+            else if (delta > EPS) { status = 'growth'; }
+            else if (delta < -EPS) { status = 'decline'; }
+            else { status = 'stable'; }
+            var item = {
+                key: key, base: baseValue, current: currentValue,
+                delta: delta, pct: pct, status: status
+            };
+            all.push(item);
+            if (status === 'growth') { growth.push(item); }
+            if (status === 'decline') { decline.push(item); }
+            if (status === 'new') { added.push(item); }
+            if (status === 'disappeared') { disappeared.push(item); }
+        });
+
+        growth.sort(function (a, b) { return b.delta - a.delta; });
+        decline.sort(function (a, b) { return a.delta - b.delta; });
+        added.sort(function (a, b) { return b.current - a.current; });
+        disappeared.sort(function (a, b) { return b.base - a.base; });
+        all.sort(function (a, b) { return Math.abs(b.delta) - Math.abs(a.delta); });
+
+        var baseTotal = marketAccumulatorValue(totals.base, metric);
+        var currentTotal = marketAccumulatorValue(totals.current, metric);
+        return {
+            periods: periods,
+            basePeriod: basePeriod,
+            currentPeriod: currentPeriod,
+            granularity: granularity,
+            dimension: dimension,
+            dimensionLabel: dimensionMeta.label,
+            metric: metric,
+            baseTotal: baseTotal,
+            currentTotal: currentTotal,
+            totalDelta: currentTotal - baseTotal,
+            totalPct: Math.abs(baseTotal) > EPS ? (currentTotal - baseTotal) / Math.abs(baseTotal) * 100 : null,
+            all: all,
+            growth: growth,
+            decline: decline,
+            added: added,
+            disappeared: disappeared
+        };
+    }
+
+    function marketMetricLabel(metric) {
+        if (metric === 'weight') { return 'Вес нетто, кг'; }
+        if (metric === 'usd') { return 'Стоимость, USD'; }
+        if (metric === 'price') { return 'Цена, USD/кг'; }
+        return 'Количество строк';
+    }
+
+    function marketFormatValue(value, metric) {
+        if (metric === 'weight') {
+            return formatNumber(round2(value / 1000)) + ' т';
+        }
+        if (metric === 'usd') { return '$ ' + formatNumber(round2(value)); }
+        if (metric === 'price') { return '$ ' + formatNumber(round2(value)) + '/кг'; }
+        return formatNumber(Math.round(value));
+    }
+
+    function marketChangeTable(title, rows, result, topN, kind) {
+        var html = '<section class="market-change-section market-change-' + kind + '">';
+        html += '<h4>' + marketEsc(title) + ' <span>' + formatNumber(rows.length) + '</span></h4>';
+        html += '<div class="data-table-wrapper"><table class="data-table market-change-table">';
+        html += '<thead><tr><th>' + marketEsc(result.dimensionLabel) + '</th>' +
+            '<th>' + marketEsc(result.basePeriod) + '</th><th>' + marketEsc(result.currentPeriod) + '</th>' +
+            '<th>Изменение</th><th>Изменение, %</th></tr></thead><tbody>';
+        rows.slice(0, topN).forEach(function (row) {
+            var pct = row.pct == null ? 'новая база' : (row.pct >= 0 ? '+' : '') + round2(row.pct) + '%';
+            html += '<tr><td>' + marketEsc(row.key) + '</td>' +
+                '<td class="numeric">' + marketFormatValue(row.base, result.metric) + '</td>' +
+                '<td class="numeric">' + marketFormatValue(row.current, result.metric) + '</td>' +
+                '<td class="numeric market-delta ' + (row.delta >= 0 ? 'positive' : 'negative') + '">' +
+                    (row.delta >= 0 ? '+' : '') + marketFormatValue(row.delta, result.metric) + '</td>' +
+                '<td class="numeric">' + pct + '</td></tr>';
+        });
+        if (!rows.length) {
+            html += '<tr><td colspan="5" class="market-change-empty">Нет позиций</td></tr>';
+        }
+        html += '</tbody></table></div></section>';
+        return html;
+    }
+
+    function renderMarketChangesResult(data, headers) {
+        var output = analysisResults.querySelector('.market-changes-output');
+        var options = {
+            granularity: analysisResults.querySelector('.market-granularity').value,
+            basePeriod: analysisResults.querySelector('.market-base-period').value,
+            currentPeriod: analysisResults.querySelector('.market-current-period').value,
+            dimension: analysisResults.querySelector('.market-dimension').value,
+            hsLevel: analysisResults.querySelector('.market-hs-level').value,
+            metric: analysisResults.querySelector('.market-metric').value,
+            threshold: analysisResults.querySelector('.market-threshold').value
+        };
+        var topN = Math.max(3, Math.min(parseInt(analysisResults.querySelector('.market-topn').value, 10) || 10, 50));
+        var result = computeMarketChanges(data, headers, options);
+        if (result.error) {
+            output.innerHTML = '<div class="analysis-empty"><p>' + marketEsc(result.error) + '</p></div>';
+            return;
+        }
+
+        var deltaClass = result.totalDelta >= 0 ? 'growth' : 'decline';
+        var totalPct = result.totalPct == null ? 'нет базы' :
+            (result.totalPct >= 0 ? '+' : '') + round2(result.totalPct) + '%';
+        var html = '<div class="market-change-summary">';
+        html += '<div class="market-change-context">' + marketEsc(result.dimensionLabel) + ' · ' +
+            marketEsc(marketMetricLabel(result.metric)) + ' · ' + marketEsc(result.basePeriod) + ' → ' +
+            marketEsc(result.currentPeriod) + '</div>';
+        html += '<div class="kpi-grid">' +
+            '<div class="kpi-card"><div class="kpi-card-title">Базовый период</div><div class="kpi-card-value">' + marketFormatValue(result.baseTotal, result.metric) + '</div></div>' +
+            '<div class="kpi-card"><div class="kpi-card-title">Сравниваемый период</div><div class="kpi-card-value">' + marketFormatValue(result.currentTotal, result.metric) + '</div></div>' +
+            '<div class="kpi-card"><div class="kpi-card-title">Общее изменение</div><div class="kpi-card-value">' + totalPct + '</div><div class="kpi-card-delta ' + deltaClass + '">' + marketFormatValue(result.totalDelta, result.metric) + '</div></div>' +
+            '<div class="kpi-card"><div class="kpi-card-title">Новые / исчезнувшие</div><div class="kpi-card-value">' + formatNumber(result.added.length) + ' / ' + formatNumber(result.disappeared.length) + '</div></div>' +
+            '</div></div>';
+        html += '<div class="market-change-grid">';
+        html += marketChangeTable('Лидеры роста', result.growth, result, topN, 'growth');
+        html += marketChangeTable('Лидеры падения', result.decline, result, topN, 'decline');
+        html += marketChangeTable('Новые позиции', result.added, result, topN, 'new');
+        html += marketChangeTable('Исчезнувшие позиции', result.disappeared, result, topN, 'disappeared');
+        html += '</div>';
+        html += '<div class="analysis-export-actions"><button class="btn btn-primary market-export-xlsx">Скачать XLSX</button>' +
+            '<button class="btn btn-secondary market-export-csv">Скачать CSV</button></div>';
+        output.innerHTML = html;
+
+        var statusLabels = { growth: 'Рост', decline: 'Падение', new: 'Новая позиция', disappeared: 'Исчезнувшая позиция', stable: 'Без изменений' };
+        var exportRows = result.all.map(function (row) {
+            return {
+                'Статус': statusLabels[row.status] || row.status,
+                'Разрез': result.dimensionLabel,
+                'Позиция': row.key,
+                'Базовый период': result.basePeriod,
+                'Сравниваемый период': result.currentPeriod,
+                'Показатель': marketMetricLabel(result.metric),
+                'База': round2(row.base),
+                'Текущее значение': round2(row.current),
+                'Изменение': round2(row.delta),
+                'Изменение, %': row.pct == null ? '' : round2(row.pct)
+            };
+        });
+        var exportHeaders = ['Статус', 'Разрез', 'Позиция', 'Базовый период', 'Сравниваемый период',
+            'Показатель', 'База', 'Текущее значение', 'Изменение', 'Изменение, %'];
+        output.querySelector('.market-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(exportRows, exportHeaders, 'market_changes');
+        });
+        output.querySelector('.market-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(exportRows, exportHeaders, 'market_changes');
+        });
+    }
+
+    function renderMarketChangesAnalysis(data, headers) {
+        var dimensions = marketDimensionOptions(headers);
+        var metrics = marketMetricOptions(headers);
+        var granularities = [
+            { key: 'year', label: 'Год' },
+            { key: 'quarter', label: 'Квартал' },
+            { key: 'month', label: 'Месяц' }
+        ].filter(function (g) { return marketCollectPeriods(data, headers, g.key).length >= 2; });
+
+        if (!dimensions.length || !granularities.length) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Для анализа нужны два периода и хотя бы один разрез: ТН ВЭД, страна, регион или компания.</p></div>';
+            return;
+        }
+
+        var html = '<div class="market-changes-config"><h3>Радар изменений рынка</h3>' +
+            '<p class="market-config-hint">Сравните одинаковые по масштабу периоды. Минимальный порог помогает убрать статистический шум.</p>' +
+            '<div class="market-config-grid">';
+        html += '<label><span>Периодичность</span><select class="market-granularity">' +
+            granularities.map(function (g) { return '<option value="' + g.key + '">' + g.label + '</option>'; }).join('') + '</select></label>';
+        html += '<label><span>Базовый период</span><select class="market-base-period"></select></label>';
+        html += '<label><span>Сравниваемый период</span><select class="market-current-period"></select></label>';
+        html += '<label><span>Разрез</span><select class="market-dimension">' +
+            dimensions.map(function (d) { return '<option value="' + marketEsc(d.column) + '" data-type="' + d.type + '">' + marketEsc(d.label) + '</option>'; }).join('') + '</select></label>';
+        html += '<label class="market-hs-field"><span>Уровень ТН ВЭД</span><select class="market-hs-level">' +
+            '<option value="2">HS2</option><option value="4" selected>HS4</option><option value="6">HS6</option><option value="10">HS10</option></select></label>';
+        html += '<label><span>Показатель</span><select class="market-metric">' +
+            metrics.map(function (m) { return '<option value="' + m.key + '">' + marketEsc(m.label) + '</option>'; }).join('') + '</select></label>';
+        html += '<label><span>Минимальный объём</span><input class="market-threshold" type="number" min="0" step="any" value="0"></label>';
+        html += '<label><span>Показывать позиций</span><input class="market-topn" type="number" min="3" max="50" value="10"></label>';
+        html += '<button class="btn btn-primary market-run-btn">Сравнить периоды</button></div></div>';
+        html += '<div class="market-changes-output"></div>';
+        analysisResults.innerHTML = html;
+
+        var granularityEl = analysisResults.querySelector('.market-granularity');
+        var baseEl = analysisResults.querySelector('.market-base-period');
+        var currentEl = analysisResults.querySelector('.market-current-period');
+        var dimensionEl = analysisResults.querySelector('.market-dimension');
+        var hsField = analysisResults.querySelector('.market-hs-field');
+
+        function refreshPeriods() {
+            var periods = marketCollectPeriods(data, headers, granularityEl.value);
+            baseEl.innerHTML = periods.map(function (p) { return '<option value="' + p + '">' + p + '</option>'; }).join('');
+            currentEl.innerHTML = baseEl.innerHTML;
+            currentEl.value = periods[periods.length - 1];
+            baseEl.value = periods[periods.length - 2];
+        }
+        function refreshHsField() {
+            var opt = dimensionEl.options[dimensionEl.selectedIndex];
+            hsField.hidden = !opt || opt.getAttribute('data-type') !== 'hs';
+        }
+
+        granularityEl.addEventListener('change', refreshPeriods);
+        dimensionEl.addEventListener('change', refreshHsField);
+        analysisResults.querySelector('.market-run-btn').addEventListener('click', function () {
+            renderMarketChangesResult(data, headers);
+        });
+        refreshPeriods();
+        refreshHsField();
+        renderMarketChangesResult(data, headers);
     }
 
     // --- Анализ: Объёмы и стоимость по периодам ---
@@ -5323,9 +5713,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function exportAnalysisCSV(rows, headers, name) {
-        var lines = [headers.join(CSV_SEPARATOR)];
+        function csvCell(value) {
+            var text = value != null ? String(value) : '';
+            if (text.indexOf(CSV_SEPARATOR) !== -1 || /["\r\n]/.test(text)) {
+                return '"' + text.replace(/"/g, '""') + '"';
+            }
+            return text;
+        }
+        var lines = [headers.map(csvCell).join(CSV_SEPARATOR)];
         rows.forEach(function (row) {
-            var vals = headers.map(function (h) { return row[h] != null ? String(row[h]) : ''; });
+            var vals = headers.map(function (h) { return csvCell(row[h]); });
             lines.push(vals.join(CSV_SEPARATOR));
         });
         var blob = new Blob([UTF8_BOM + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -8639,6 +9036,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'sankey-sender', label: 'Санки: Отпр\u2192Пол', icon: '\uD83C\uDFED', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: true, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'sankey-manufacturer', label: 'Санки: Изг\u2192Пол', icon: '\uD83C\uDFED', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: true, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'quarterly-prices', label: 'Кварт. цены', icon: '\uD83D\uDCC8', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
+        { type: 'market-changes', label: 'Изменения рынка', icon: '⚡', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'segments', label: 'Каналы сбыта', icon: '\uD83C\uDFEC', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'summary', label: 'Итоги', icon: '\u2705', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
         { type: 'recommendations', label: 'Рекомендации', icon: '\uD83D\uDCCB', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
@@ -9259,6 +9657,68 @@ document.addEventListener('DOMContentLoaded', function () {
         return slideWrapper(slide.title || 'Каналы сбыта', body, { commentary: slide.opts && slide.opts.commentary });
     }
 
+    function marketPresPanel(title, rows, result, color, topN) {
+        var shown = rows.slice(0, topN);
+        var maxDelta = shown.reduce(function (max, row) {
+            return Math.max(max, Math.abs(row.delta));
+        }, 0) || 1;
+        var svg = '<svg class="pres-market-panel" viewBox="0 0 390 320" xmlns="http://www.w3.org/2000/svg">';
+        svg += '<rect x="0" y="0" width="390" height="320" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>';
+        svg += '<text x="18" y="28" font-size="15" font-weight="700" fill="' + color + '">' + svgEscFact(title) + '</text>';
+        if (!shown.length) {
+            svg += '<text x="195" y="168" text-anchor="middle" font-size="13" fill="#94A3B8">Нет позиций</text>';
+            return svg + '</svg>';
+        }
+        shown.forEach(function (row, index) {
+            var y = 54 + index * 48;
+            var barW = Math.max(3, Math.abs(row.delta) / maxDelta * 180);
+            var status = row.status === 'new' ? 'новая' : (row.status === 'disappeared' ? 'исчезла' : '');
+            svg += '<text x="18" y="' + y + '" font-size="10" font-weight="600" fill="#0F172A">' + svgEscFact(truncFact(row.key, 34)) + '</text>';
+            if (status) {
+                svg += '<text x="372" y="' + y + '" text-anchor="end" font-size="8" font-weight="700" fill="' + color + '">' + status + '</text>';
+            }
+            svg += '<rect x="18" y="' + (y + 8) + '" width="' + barW + '" height="12" rx="3" fill="' + color + '" opacity="0.82"/>';
+            svg += '<text x="' + (Math.min(18 + barW + 7, 280)) + '" y="' + (y + 18) + '" font-size="9" fill="#334155">' +
+                svgEscFact((row.delta >= 0 ? '+' : '') + marketFormatValue(row.delta, result.metric)) + '</text>';
+            if (row.pct != null) {
+                svg += '<text x="372" y="' + (y + 18) + '" text-anchor="end" font-size="9" fill="#64748B">' +
+                    svgEscFact((row.pct >= 0 ? '+' : '') + round2(row.pct) + '%') + '</text>';
+            }
+        });
+        return svg + '</svg>';
+    }
+
+    function renderPresMarketChanges(data, headers, slide) {
+        var dimensions = marketDimensionOptions(headers);
+        if (!dimensions.length) { return presNoData(slide.title || 'Изменения рынка'); }
+        var hsDimension = dimensions.filter(function (d) { return d.type === 'hs'; })[0];
+        var dimension = hsDimension ? hsDimension.column : dimensions[0].column;
+        var metric = findColumn(headers, COL_WEIGHT) ? 'weight' :
+            (findColumn(headers, COL_STAT_USD) ? 'usd' : 'count');
+        var result = computeMarketChanges(data, headers, {
+            granularity: 'year',
+            dimension: dimension,
+            hsLevel: 4,
+            metric: metric,
+            threshold: 0
+        });
+        if (result.error) { return presNoData(slide.title || 'Изменения рынка'); }
+
+        var topN = Math.max(3, Math.min(slide.topN || 5, 5));
+        var up = result.added.concat(result.growth).sort(function (a, b) { return b.delta - a.delta; });
+        var down = result.disappeared.concat(result.decline).sort(function (a, b) { return a.delta - b.delta; });
+        var body = '<div class="pres-market-caption">' + marketEsc(result.dimensionLabel) + ' · ' +
+            marketEsc(marketMetricLabel(result.metric)) + ' · ' + marketEsc(result.basePeriod) + ' → ' +
+            marketEsc(result.currentPeriod) + '</div>';
+        body += '<div class="pres-market-grid">';
+        body += marketPresPanel('Рост и новые позиции', up, result, '#16A34A', topN);
+        body += marketPresPanel('Падение и исчезнувшие', down, result, '#DC2626', topN);
+        body += '</div>';
+        return slideWrapper(slide.title || 'Изменения рынка', body, {
+            commentary: slide.opts && slide.opts.commentary
+        });
+    }
+
     function renderPresSlideByType(slide, data, headers) {
         var type = slide.type;
         if (type === 'title') return renderPresTitle(slide);
@@ -9276,6 +9736,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (type === 'sankey-sender') return renderPresSankeySender(data, headers, slide);
         if (type === 'sankey-manufacturer') return renderPresSankeyManufacturer(data, headers, slide);
         if (type === 'quarterly-prices') return renderPresQuarterlyPrices(data, headers, slide);
+        if (type === 'market-changes') return renderPresMarketChanges(data, headers, slide);
         if (type === 'facts') return renderPresFacts(data, headers, slide);
         if (type === 'segments') return renderPresSegments(data, headers, slide);
         return slideWrapper('\u041e\u0448\u0438\u0431\u043a\u0430', '<p>\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u0442\u0438\u043f \u0431\u043b\u043e\u043a\u0430</p>', {});
@@ -10221,6 +10682,32 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        if (type === 'market-changes') {
+            var marketDims = marketDimensionOptions(headers);
+            if (marketDims.length) {
+                var marketHs = marketDims.filter(function (d) { return d.type === 'hs'; })[0];
+                var marketMetric = weightCol ? 'weight' : (statUsdCol ? 'usd' : 'count');
+                var marketResult = computeMarketChanges(data, headers, {
+                    granularity: 'year',
+                    dimension: marketHs ? marketHs.column : marketDims[0].column,
+                    hsLevel: 4,
+                    metric: marketMetric,
+                    threshold: 0
+                });
+                if (!marketResult.error) {
+                    m.marketBasePeriod = marketResult.basePeriod;
+                    m.marketCurrentPeriod = marketResult.currentPeriod;
+                    m.marketMetric = marketResult.metric;
+                    m.marketDelta = marketResult.totalDelta;
+                    m.marketPct = marketResult.totalPct;
+                    m.marketNewCount = marketResult.added.length;
+                    m.marketGoneCount = marketResult.disappeared.length;
+                    m.marketGrowthLeader = marketResult.growth[0] || marketResult.added[0] || null;
+                    m.marketDeclineLeader = marketResult.decline[0] || marketResult.disappeared[0] || null;
+                }
+            }
+        }
+
         if (type === 'quarterly-prices') {
             var quarterCol = findColumn(headers, COL_QUARTER);
             var byYQ = {};
@@ -10336,6 +10823,13 @@ document.addEventListener('DOMContentLoaded', function () {
             return 'Поквартальная цена импорта' + of + ' колебалась в диапазоне ' + presRuNum(m.usdMin, 1) + '–' + presRuNum(m.usdMax, 1) + ' USD/кг';
         }
 
+        if (type === 'market-changes' && m.marketBasePeriod) {
+            var marketDirection = m.marketDelta >= 0 ? 'вырос' : 'снизился';
+            var marketPct = m.marketPct == null ? '' : ' на ' + presRuNum(Math.abs(m.marketPct), 1) + '%';
+            return subj + ' ' + marketDirection + marketPct + ': ' + m.marketNewCount +
+                ' новых и ' + m.marketGoneCount + ' исчезнувших позиций';
+        }
+
         return '';
     }
 
@@ -10449,6 +10943,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 var vol = round2((m.usdMax - m.usdMin) / m.usdMin * 100);
                 if (vol >= 30) lines.push('Высокая волатильность цен (размах ' + presRuNum(Math.round(vol)) + '%) — рынок подвержен ценовым шокам.');
                 else lines.push('Цены относительно стабильны (размах ' + presRuNum(Math.round(vol)) + '%) — предсказуемый ценовой коридор.');
+            }
+        }
+
+        if (type === 'market-changes' && m.marketBasePeriod) {
+            var direction = m.marketDelta >= 0 ? 'увеличился' : 'сократился';
+            var pctText = m.marketPct == null ? '' : ' на ' + presRuNum(Math.abs(m.marketPct), 1) + '%';
+            lines.push('За период ' + m.marketBasePeriod + '–' + m.marketCurrentPeriod + ' совокупный показатель ' + direction + pctText + '.');
+            lines.push('Появилось ' + m.marketNewCount + ' новых позиций, исчезло ' + m.marketGoneCount + '.');
+            if (m.marketGrowthLeader) {
+                lines.push('Лидер роста — ' + m.marketGrowthLeader.key + ': +' + marketFormatValue(m.marketGrowthLeader.delta, m.marketMetric) + '.');
+            }
+            if (m.marketDeclineLeader) {
+                lines.push('Наибольшее снижение — ' + m.marketDeclineLeader.key + ': ' + marketFormatValue(m.marketDeclineLeader.delta, m.marketMetric) + '.');
             }
         }
 
@@ -10619,7 +11126,7 @@ document.addEventListener('DOMContentLoaded', function () {
         progressFill.style.width = '0%';
         progressDetail.textContent = '0 / ' + total;
 
-        var PDF_ANALYTICS = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'segments'];
+        var PDF_ANALYTICS = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments'];
         // PDF page dimensions in points at 10px/mm: 297mm × 210mm
         var PDF_W = 2970, PDF_H = 2100;
 
@@ -11171,7 +11678,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var isSimple = SIMPLE_TYPES.indexOf(slideData.type) !== -1;
 
-            var ANALYTICS_TYPES = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'segments'];
+            var ANALYTICS_TYPES = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments'];
 
             if (isSimple) {
                 if (slideData.type === 'title') addTitleSlide(slideData);
