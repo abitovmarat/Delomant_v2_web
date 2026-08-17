@@ -22,6 +22,10 @@ jobs:
       # статику в assets/*.dat. Подробности — в комментарии build.mjs.
       - name: Build dist
         run: node build.mjs
+        env:
+          # Ключ Comtrade Plus (необязательный). Если секрет не задан —
+          # build.mjs не создаёт comtrade_key.php, работает public-эндпоинт.
+          COMTRADE_KEY: ${{ secrets.COMTRADE_KEY }}
 
       # Выкладываем через lftp одной FTPS-сессией. Прежние варианты падали:
       # FTP-Deploy-Action обрывался на крупном main.js.dat, а curl-цикл

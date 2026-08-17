@@ -79,6 +79,15 @@ sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 const setup = read('server/setup.php').replace('__SETUP_TOKEN__', setupToken);
 sizes.push(['setup.php', write('setup.php', setup)]);
 
+// Ключ Comtrade Plus — только если задан через окружение (секрет GitHub
+// Actions). В репозиторий ключ не попадает: файл создаётся при сборке и
+// уезжает на сервер, где comtrade.php сам его подхватывает. Без секрета
+// файл не создаётся — работает бесплатный public-эндпоинт.
+if (process.env.COMTRADE_KEY) {
+    const keyBody = '<?php return ' + JSON.stringify(process.env.COMTRADE_KEY) + ";\n";
+    sizes.push(['comtrade_key.php', write('comtrade_key.php', keyBody)]);
+}
+
 /*
  * Приложение. К ссылкам на свою статику дописываем метку версии сборки
  * (?v=…), чтобы браузер гарантированно скачивал свежий файл после деплоя,
