@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (uploadCard) { uploadCard.style.display = 'none'; }
         var dataTitle = document.querySelector('#data .module-title');
         if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
+    } else {
+        // Владелец (роль full): показать ссылки на панель проверяющих и выход.
+        // Проверяющему их не показываем — admin.php ему всё равно отдаст 403.
+        var headerActions = document.querySelector('.header-actions');
+        if (headerActions) { headerActions.hidden = false; }
     }
 
     /* ================================

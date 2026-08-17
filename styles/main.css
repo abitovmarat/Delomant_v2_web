@@ -204,6 +204,35 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Ссылки владельца в шапке (панель проверяющих + выход) */
+.header {
+    justify-content: space-between;
+}
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+}
+.header-link {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.header-link:hover {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+}
+.header-admin-link {
+    color: var(--color-primary);
+}
+.header-admin-link:hover {
+    color: var(--color-primary-dark);
+}
+
 /* ================================
    Content Area
    ================================ */
