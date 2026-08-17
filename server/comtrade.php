@@ -42,7 +42,7 @@ if (empty($_SESSION['auth'])) {
 const CACHE_DIR     = __DIR__ . '/cache';
 const CACHE_TTL     = 86400;  // сутки
 const THROTTLE_USEC = 1300000; // пауза между обращениями к API, мкс
-const TIMEOUT       = 30;
+const TIMEOUT       = 45;      // «весь мир» тяжелее — даём апстриму больше времени
 
 /** Аварийный выход с понятным фронтенду телом ответа. */
 function fail(int $status, string $message): void
@@ -183,10 +183,14 @@ if ($apiKey !== '') {
     $headers[] = 'Ocp-Apim-Subscription-Key: ' . $apiKey;
 }
 
+// Чтобы PHP не оборвал скрипт раньше, чем cURL дождётся ответа апстрима
+@set_time_limit(TIMEOUT + 15);
+
 $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_TIMEOUT        => TIMEOUT,
+    CURLOPT_CONNECTTIMEOUT => 15,
     CURLOPT_HTTPHEADER     => $headers,
     CURLOPT_USERAGENT      => 'Delomant-Analytics/2.0',
 ]);

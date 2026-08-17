@@ -1036,7 +1036,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         throw new Error('Прокси comtrade.php недоступен или вернул не JSON (код ' + resp.status + ')');
                     }
 
-                    if (resp.status === 429 && attempt < COMTRADE_MAX_RETRIES) {
+                    // Повторяем не только при лимите (429), но и при таймауте/
+                    // недоступности апстрима (502/504) — публичный Comtrade без
+                    // ключа медленный и «весь мир» иногда не успевает ответить.
+                    if ((resp.status === 429 || resp.status === 502 || resp.status === 504)
+                        && attempt < COMTRADE_MAX_RETRIES) {
                         return new Promise(function (resolve) {
                             setTimeout(resolve, COMTRADE_RETRY_DELAY);
                         }).then(function () {
