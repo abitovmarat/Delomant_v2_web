@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Роль сессии подставляется index.php при отдаче приложения (full|expert).
+         При прямом открытии файла (dev) остаётся плейсхолдер → трактуется как full. -->
+    <meta name="app-role" content="__ROLE__">
     <title>Delomant — Аналитика</title>
     <link rel="stylesheet" href="styles/main.css">
 </head>

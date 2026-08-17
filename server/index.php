@@ -27,7 +27,8 @@ if (!is_file($configFile)) {
     header('Location: /setup.php');
     exit;
 }
-require $configFile; // задаёт $AUTH_HASH
+$AUTH_HASH_EXPERT = null; // необязательный хеш экспертного пароля
+require $configFile; // задаёт $AUTH_HASH (и, возможно, $AUTH_HASH_EXPERT)
 
 // Подстраховка на случай повреждённого config.php
 if (empty($AUTH_HASH) || !is_string($AUTH_HASH)) {
@@ -48,9 +49,19 @@ $error = false;
 // Проверка введённого пароля
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = (string)($_POST['password'] ?? '');
+    // Роль определяется тем, какой пароль подошёл: полный доступ или
+    // ограниченный экспертный (без загрузки пользовательских выгрузок).
+    $role = null;
     if ($password !== '' && password_verify($password, $AUTH_HASH)) {
+        $role = 'full';
+    } elseif ($password !== '' && !empty($AUTH_HASH_EXPERT) && is_string($AUTH_HASH_EXPERT)
+              && password_verify($password, $AUTH_HASH_EXPERT)) {
+        $role = 'expert';
+    }
+    if ($role !== null) {
         session_regenerate_id(true); // защита от фиксации сессии
         $_SESSION['auth'] = true;
+        $_SESSION['role'] = $role;
         header('Location: /');
         exit;
     }
@@ -70,7 +81,11 @@ if (!empty($_SESSION['auth'])) {
     // обновлением страницы, без Ctrl+F5.
     header('Content-Type: text/html; charset=UTF-8');
     header('Cache-Control: no-cache, private');
-    readfile($appFile);
+    // Подставляем роль сессии в плейсхолдер <meta name="app-role" content="__ROLE__">.
+    // HTML отдаётся с no-cache, поэтому персональная роль в кэш не попадает.
+    $role = ($_SESSION['role'] ?? 'full') === 'expert' ? 'expert' : 'full';
+    $html = (string)file_get_contents($appFile);
+    echo str_replace('content="__ROLE__"', 'content="' . $role . '"', $html);
     exit;
 }
 

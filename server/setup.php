@@ -35,14 +35,25 @@ $done  = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $p1 = (string)($_POST['password'] ?? '');
     $p2 = (string)($_POST['password2'] ?? '');
+    $pe = (string)($_POST['password_expert'] ?? ''); // необязательный экспертный пароль
 
     if (mb_strlen($p1) < 8) {
         $error = 'Пароль должен быть не короче 8 символов.';
     } elseif ($p1 !== $p2) {
         $error = 'Пароли не совпадают.';
+    } elseif ($pe !== '' && mb_strlen($pe) < 8) {
+        $error = 'Экспертный пароль должен быть не короче 8 символов.';
+    } elseif ($pe !== '' && $pe === $p1) {
+        $error = 'Экспертный пароль должен отличаться от основного.';
     } else {
         $hash = password_hash($p1, PASSWORD_BCRYPT);
         $body = "<?php\n// Хеш пароля для входа. Сгенерирован setup.php.\n\$AUTH_HASH = " . var_export($hash, true) . ";\n";
+        if ($pe !== '') {
+            // Экспертный доступ: ограниченный режим для проверяющих реестра
+            // (без загрузки пользовательских выгрузок).
+            $hashExpert = password_hash($pe, PASSWORD_BCRYPT);
+            $body .= "// Хеш экспертного пароля (ограниченный доступ для проверяющих).\n\$AUTH_HASH_EXPERT = " . var_export($hashExpert, true) . ";\n";
+        }
         if (file_put_contents($configFile, $body, LOCK_EX) === false) {
             $error = 'Не удалось записать config.php — проверьте права на папку.';
         } else {
@@ -114,6 +125,8 @@ header('Content-Type: text/html; charset=UTF-8');
             <input type="password" id="p1" name="password" autofocus required autocomplete="new-password">
             <label for="p2">Повторите пароль</label>
             <input type="password" id="p2" name="password2" required autocomplete="new-password">
+            <label for="pe" style="margin-top:10px">Пароль для проверяющих <span style="color:#94A3B8">(необязательно — ограниченный доступ без загрузки данных)</span></label>
+            <input type="password" id="pe" name="password_expert" autocomplete="new-password">
             <button type="submit">Сохранить</button>
         </form>
     <?php endif; ?>

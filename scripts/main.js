@@ -1,6 +1,29 @@
 document.addEventListener('DOMContentLoaded', function () {
 
     /* ================================
+       Роль сессии (экспертный режим)
+       ================================
+       Роль приходит из серверной сессии через <meta name="app-role">,
+       которую index.php подставляет при отдаче приложения. В режиме
+       'expert' (доступ для проверяющих реестра) скрывается загрузка
+       пользовательских выгрузок — стенд демонстрирует функциональность
+       на безопасных источниках (UN Comtrade, WITS, зарубежная таможня),
+       не выступая хранилищем чужих таможенных деклараций. */
+    var roleMeta = document.querySelector('meta[name="app-role"]');
+    var appRole = roleMeta ? roleMeta.getAttribute('content') : 'full';
+    // Плейсхолдер (прямое открытие файла в dev) трактуем как полный доступ.
+    if (appRole === '__ROLE__' || !appRole) { appRole = 'full'; }
+    var isExpert = (appRole === 'expert');
+    document.body.setAttribute('data-role', appRole);
+
+    if (isExpert) {
+        var uploadCard = document.querySelector('.upload-card');
+        if (uploadCard) { uploadCard.style.display = 'none'; }
+        var dataTitle = document.querySelector('#data .module-title');
+        if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
+    }
+
+    /* ================================
        App State
        ================================ */
     var appState = {
@@ -274,6 +297,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function appendFile(file) {
+        if (isExpert) { return; }
         if (!appState.rawData || appState.rawData.length === 0) {
             handleFile(file);
             return;
@@ -385,6 +409,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function handleFile(file) {
+        // Экспертный режим: загрузка пользовательских выгрузок отключена
+        // (защита от обхода скрытого UI через консоль).
+        if (isExpert) { return; }
         var ext = file.name.split('.').pop().toLowerCase();
 
         if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xls') {
