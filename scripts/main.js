@@ -1912,7 +1912,13 @@ document.addEventListener('DOMContentLoaded', function () {
         function render(q) {
             q = (q || '').trim().toLowerCase();
             if (q.length < 2) { results.hidden = true; results.innerHTML = ''; return; }
-            if (!namesList) { return; } // ещё грузится — покажем после загрузки
+            if (!namesList) {
+                // Справочник ещё грузится — показываем статус, результаты
+                // дорисуются в loadNames() после загрузки файла.
+                results.innerHTML = '<div class="hs-empty">Загрузка справочника…</div>';
+                results.hidden = false;
+                return;
+            }
             var out = [];
             for (var i = 0; i < namesList.length && out.length < 40; i++) {
                 if (namesList[i][1].toLowerCase().indexOf(q) !== -1) { out.push(namesList[i]); }
