@@ -1,6 +1,6 @@
 <?php
 /*
- * Управление аккаунтами проверяющих. Доступно только владельцу
+ * Управление пользователями. Доступно только владельцу
  * (сессия с ролью full — вход по общему паролю из config.php).
  *
  * Хранилище — server/users.php: PHP-массив логин → {hash, ФИО, role}.
@@ -117,7 +117,7 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Delomant — Проверяющие</title>
+<title>Delomant — Пользователи</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -160,7 +160,7 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 <body>
     <div class="wrap">
         <div class="top">
-            <h1>Проверяющие реестра</h1>
+            <h1>Пользователи</h1>
             <a href="/">← в приложение</a>
         </div>
 
@@ -168,7 +168,7 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
         <?php if ($notice): ?><div class="msg ok"><?= h($notice) ?></div><?php endif; ?>
 
         <div class="panel">
-            <h2>Добавить проверяющего</h2>
+            <h2>Добавить пользователя</h2>
             <form class="add" method="post" autocomplete="off">
                 <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
                 <input type="hidden" name="action" value="add">
@@ -193,7 +193,7 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
         <div class="panel">
             <h2>Аккаунты (<?= count($users) ?>)</h2>
             <?php if (empty($users)): ?>
-                <div class="empty">Пока нет ни одного аккаунта проверяющего.</div>
+                <div class="empty">Пока нет ни одного пользователя.</div>
             <?php else: ?>
                 <table>
                     <thead><tr><th>Логин</th><th>ФИО</th><th>Роль</th><th>Создан</th><th></th></tr></thead>

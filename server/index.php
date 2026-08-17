@@ -140,7 +140,7 @@ if (!empty($_SESSION['auth'])) {
  */
 function renderCabinet(?string $name): void
 {
-    $who = ($name !== null && $name !== '') ? htmlspecialchars($name, ENT_QUOTES) : 'проверяющий';
+    $who = ($name !== null && $name !== '') ? htmlspecialchars($name, ENT_QUOTES) : 'пользователь';
     header('Content-Type: text/html; charset=UTF-8');
     header('Cache-Control: no-cache, private');
     ?>
@@ -373,7 +373,7 @@ header('Content-Type: text/html; charset=UTF-8');
             <div class="error">Неверный логин или пароль. Попробуйте ещё раз.</div>
             <label for="login">Логин</label>
             <input type="text" id="login" name="login" autofocus
-                   autocomplete="username" placeholder="Для проверяющих — выданный логин"
+                   autocomplete="username" placeholder="Выданный логин пользователя"
                    value="<?= htmlspecialchars((string)($_POST['login'] ?? ''), ENT_QUOTES) ?>">
             <label for="password">Пароль</label>
             <input type="password" id="password" name="password"
