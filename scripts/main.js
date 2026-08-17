@@ -662,6 +662,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
     var comtradeOriginalBtn = document.querySelector('.comtrade-original-btn');
     var comtradePresentationBtn = document.querySelector('.comtrade-presentation-btn');
+    var comtradeReportBtn = document.querySelector('.comtrade-report-btn');
 
     var comtradeCountries = [];
     var comtradeRegions = [];
@@ -1184,6 +1185,7 @@ document.addEventListener('DOMContentLoaded', function () {
         comtradeLoadBtn.disabled = true;
         if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = true; }
         if (comtradePresentationBtn) { comtradePresentationBtn.hidden = true; }
+        if (comtradeReportBtn) { comtradeReportBtn.hidden = true; }
         comtradeRawRows = [];
         comtradePresentation = null;
         setComtradeStatus('Запрос 1 из ' + batches.length + '…', 'progress');
@@ -1218,6 +1220,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Понятная версия для презентаций: цена, объём, читаемые подписи
                 comtradePresentation = buildComtradePresentation(parsed, params);
                 if (comtradePresentationBtn) { comtradePresentationBtn.hidden = false; }
+                // Записка формируется из той же сводки, что и Excel-презентация
+                if (comtradeReportBtn && comtradePresentation.summaryRows.length > 0) {
+                    comtradeReportBtn.hidden = false;
+                }
 
                 // Ярлык и подпись источника зависят от партнёра: «импорт РФ»
                 // и «зеркальная статистика» верны, только когда партнёр — страна
@@ -1475,6 +1481,7 @@ document.addEventListener('DOMContentLoaded', function () {
             headers: headers, rows: rows,
             summaryHeaders: summaryHeaders, summaryRows: summaryRows,
             yearHeaders: yearHeaders, yearRows: yearRows,
+            reportParams: params, // для HTML-записки: направление, коды, партнёр
         };
     }
 
@@ -1512,6 +1519,316 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (comtradePresentationBtn) {
         comtradePresentationBtn.addEventListener('click', downloadComtradePresentation);
+    }
+
+    /* ================================
+       Аналитическая записка (HTML) — в стиле Delomant
+       ================================
+       Собирается из той же сводки, что Excel-презентация (comtradePresentation),
+       но выдаёт готовый самодостаточный HTML: титул + рейтинг стран + динамика +
+       цены + выводы + источник. Все графики — статичный SVG/CSS без внешних
+       библиотек, файл открывается в браузере и печатается в PDF (альбомная).
+       Инсайты (лидер, история роста, оговорка про реэкспорт) считаются из данных. */
+
+    function comtradeReportHtml(p, params) {
+        function esc(s) {
+            return String(s).replace(/[&<>"]/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+            });
+        }
+        // Разделитель тысяч — узкий неразрывный пробел
+        function fmtInt(n) {
+            return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        }
+        function fmtT(tonnes) {
+            return tonnes >= 10000 ? fmtInt(tonnes / 1000) + ' тыс. т' : fmtInt(tonnes) + ' т';
+        }
+        function pctSpan(v) {
+            if (typeof v !== 'number') { return ''; }
+            var cls = v >= 0 ? 'up' : 'down';
+            var sign = v >= 0 ? '+' : '';
+            return '<span class="' + cls + '">' + sign + round2(v) + '%</span>';
+        }
+
+        var isImport = params.direction === 'import';
+        var buyer = isImport ? 'закупщик' : 'поставщик';
+        var flowNoun = isImport ? 'импорта' : 'экспорта';   // родительный: «доля импорта»
+        var flowActNoun = isImport ? 'закупки' : 'поставки'; // винительный: «сокращает закупки»
+
+        // Годы (без строки CAGR) и последний год для KPI
+        var yearRows = p.yearRows.filter(function (r) { return r['Год'] !== 'CAGR'; });
+        var years = yearRows.map(function (r) { return r['Год']; });
+        var lastY = yearRows[yearRows.length - 1] || {};
+        var firstYear = years[0], lastYear = years[years.length - 1];
+
+        var top = p.summaryRows.slice(0, 10);
+        var leader = top[0] || { 'Страна': '—', 'Объём (тонн)': 0, 'Доля по объёму, %': 0 };
+        var second = top[1];
+        var ratio = (second && second['Объём (тонн)'] > 0)
+            ? leader['Объём (тонн)'] / second['Объём (тонн)'] : null;
+
+        // Страна × год (тонны) для линий — из детальных строк
+        var cy = {};
+        p.rows.forEach(function (r) {
+            var t = r['Объём (тонн)'];
+            if (typeof t !== 'number') { return; }
+            var c = r['Страна'], y = r['Год'];
+            if (!cy[c]) { cy[c] = {}; }
+            cy[c][y] = (cy[c][y] || 0) + t;
+        });
+        var lineCountries = top.slice(0, 5).map(function (r) { return r['Страна']; });
+
+        // Тренд первый→последний год, % (для инсайтов)
+        function trendPct(country) {
+            var a = cy[country] || {};
+            var f = a[firstYear], l = a[lastYear];
+            if (!f || f <= 0 || typeof l !== 'number') { return null; }
+            return (l / f - 1) * 100;
+        }
+        var leaderTrend = trendPct(leader['Страна']);
+        // Лидер роста среди топ-8 (с заметным объёмом)
+        var grower = null, growerPct = -Infinity;
+        top.slice(0, 8).forEach(function (r) {
+            var t = trendPct(r['Страна']);
+            if (t !== null && t > growerPct) { growerPct = t; grower = r['Страна']; }
+        });
+
+        // Цены по странам (по убыванию), только где есть
+        var priceRows = p.summaryRows.filter(function (r) {
+            return typeof r['Средняя цена, USD/кг'] === 'number';
+        }).sort(function (a, b) {
+            return b['Средняя цена, USD/кг'] - a['Средняя цена, USD/кг'];
+        }).slice(0, 10);
+
+        var reexport = isImport && top.slice(0, 8).some(function (r) {
+            return r['Страна'] === 'Нидерланды' || r['Страна'] === 'Бельгия';
+        });
+
+        // --- Заголовок и контекст ---
+        var codeStr = (params.codes && params.codes[0] !== 'TOTAL')
+            ? params.codes.join(', ') : null;
+        var isWorld = String(params.partner) === String(COMTRADE_WORLD_CODE);
+        var partnerCtx = isWorld ? 'торговля со всем миром'
+            : 'партнёр — ' + comtradePartnerName(params.partner);
+        var title = (isImport ? 'Импорт' : 'Экспорт') +
+            (codeStr ? ' товара ' + esc(codeStr) : ' (весь товарооборот)');
+        var subtitle = (codeStr ? 'ТН ВЭД ' + esc(codeStr) + ' · ' : '') +
+            p.summaryRows.length + ' стран · ' + partnerCtx;
+
+        // --- Барчарт (горизонтальный) ---
+        function barChart(items, maxVal, fmt, leadName) {
+            return items.map(function (it) {
+                var w = maxVal > 0 ? (it.v / maxVal * 100).toFixed(1) : 0;
+                var lead = it.name === leadName ? ' lead' : '';
+                return '<div class="bar-row"><div class="bar-name">' + esc(it.name) + '</div>' +
+                    '<div class="bar-track"><div class="bar-fill' + lead + '" style="width:' + w + '%"></div></div>' +
+                    '<div class="bar-val">' + fmt(it) + '</div></div>';
+            }).join('');
+        }
+        var rankItems = top.map(function (r) {
+            return { name: r['Страна'], v: r['Объём (тонн)'], sh: r['Доля по объёму, %'] };
+        });
+        var bars1 = barChart(rankItems, rankItems[0] ? rankItems[0].v : 0, function (it) {
+            return '<b>' + fmtInt(it.v / 1000) + ' тыс. т</b> <span class="sh">· ' +
+                (typeof it.sh === 'number' ? round2(it.sh) + '%' : '') + '</span>';
+        }, leader['Страна']);
+        var priceItems = priceRows.map(function (r) {
+            return { name: r['Страна'], v: r['Средняя цена, USD/кг'] };
+        });
+        var bars2 = barChart(priceItems, priceItems[0] ? priceItems[0].v : 0, function (it) {
+            return '<b>$' + round2(it.v) + '/кг</b>';
+        }, leader['Страна']);
+
+        // --- SVG линии динамики ---
+        var lineColors = ['#211CB0', '#2F2BC7', '#16A34A', '#8B93F2', '#F59E0B'];
+        var lineSvg = '', legendHtml = '';
+        if (years.length >= 2) {
+            var W = 1180, H = 340, padL = 54, padR = 140, padT = 20, padB = 40;
+            var xa = padL, xb = W - padR, ya = padT, yb = H - padB;
+            var maxV = 0;
+            lineCountries.forEach(function (c) {
+                years.forEach(function (y) {
+                    var v = (cy[c] && cy[c][y]) ? cy[c][y] / 1000 : 0;
+                    if (v > maxV) { maxV = v; }
+                });
+            });
+            // «Красивый» шаг сетки
+            var rawStep = maxV / 4 || 1;
+            var mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+            var step = Math.ceil(rawStep / mag) * mag;
+            var vmax = step * Math.ceil(maxV / step || 1);
+            function X(i) { return xa + (xb - xa) * i / (years.length - 1); }
+            function Y(v) { return yb - (yb - ya) * v / vmax; }
+            var s = '';
+            for (var g = 0; g <= vmax + 0.001; g += step) {
+                s += '<line x1="' + xa + '" y1="' + Y(g) + '" x2="' + xb + '" y2="' + Y(g) + '" stroke="#EEF0F5"/>';
+                s += '<text x="' + (xa - 10) + '" y="' + (Y(g) + 4) + '" text-anchor="end" font-size="12" fill="#94A3B8">' + fmtInt(g) + '</text>';
+            }
+            years.forEach(function (y, i) {
+                s += '<text x="' + X(i) + '" y="' + (yb + 24) + '" text-anchor="middle" font-size="13" fill="#64748B">' + esc(y) + '</text>';
+            });
+            var labels = [];
+            lineCountries.forEach(function (c, idx) {
+                var pts = years.map(function (y) { return (cy[c] && cy[c][y]) ? cy[c][y] / 1000 : 0; });
+                var d = pts.map(function (v, i) { return (i ? 'L' : 'M') + X(i) + ' ' + Y(v); }).join(' ');
+                s += '<path d="' + d + '" fill="none" stroke="' + lineColors[idx] + '" stroke-width="3" stroke-linejoin="round"/>';
+                pts.forEach(function (v, i) { s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="3.5" fill="' + lineColors[idx] + '"/>'; });
+                labels.push({ name: c, color: lineColors[idx], y: Y(pts[pts.length - 1]) });
+            });
+            // Расталкиваем налезающие подписи
+            labels.sort(function (a, b) { return a.y - b.y; });
+            for (var k = 1; k < labels.length; k++) {
+                if (labels[k].y - labels[k - 1].y < 15) { labels[k].y = labels[k - 1].y + 15; }
+            }
+            labels.forEach(function (l) {
+                s += '<text x="' + (xb + 8) + '" y="' + (l.y + 4) + '" font-size="12.5" font-weight="700" fill="' + l.color + '">' + esc(l.name) + '</text>';
+            });
+            lineSvg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:340px">' + s + '</svg>';
+            legendHtml = lineCountries.map(function (c, i) {
+                return '<span><i style="background:' + lineColors[i] + '"></i>' + esc(c) + '</span>';
+            }).join('');
+        }
+
+        // --- Инсайты (динамические) ---
+        var insight1 = 'Крупнейший ' + buyer + ' — <b>' + esc(leader['Страна']) + '</b>: ' +
+            (typeof leader['Доля по объёму, %'] === 'number' ? round2(leader['Доля по объёму, %']) + '% всего ' + flowNoun + ' региона' : '') +
+            (ratio ? ', в ' + round2(ratio) + '× больше ближайшей страны' : '');
+        var insight2;
+        if (years.length >= 2 && grower) {
+            insight2 = '<b>' + esc(leader['Страна']) + '</b> ' +
+                (leaderTrend !== null ? (leaderTrend < 0 ? 'сокращает ' + flowActNoun + ' (' + round2(leaderTrend) + '% за период)' : 'растёт (+' + round2(leaderTrend) + '%)') : '') +
+                (grower !== leader['Страна'] ? ', при этом <b>' + esc(grower) + '</b> наращивает быстрее всех (' + (growerPct >= 0 ? '+' : '') + round2(growerPct) + '%)' : '');
+        } else {
+            insight2 = 'Динамика ' + flowNoun + ' по ключевым странам за выбранный период';
+        }
+        var priceMin = priceItems.length ? priceItems[priceItems.length - 1] : null;
+        var priceMax = priceItems.length ? priceItems[0] : null;
+        var insight3 = priceMin && priceMax
+            ? 'Цена входа различается по странам: от <b>$' + round2(priceMin.v) + '/кг</b> до <b>$' + round2(priceMax.v) + '/кг</b> — объём и премиальность рынка не совпадают'
+            : 'Средняя импортная цена по странам';
+
+        // --- Выводы ---
+        var takes = [];
+        takes.push('<b>' + esc(leader['Страна']) + '</b> — рынок №1 по объёму (' +
+            (typeof leader['Доля по объёму, %'] === 'number' ? round2(leader['Доля по объёму, %']) + '%, ' : '') +
+            fmtT(leader['Объём (тонн)']) + ' за период)' +
+            (leaderTrend !== null ? (leaderTrend < 0 ? ', но с нисходящим трендом' : ' и с растущим спросом') : '') + '.');
+        if (grower && grower !== leader['Страна'] && growerPct > 0) {
+            takes.push('<b>' + esc(grower) + '</b> — точка роста: ' + (growerPct >= 0 ? '+' : '') + round2(growerPct) + '% за период, кандидат на перспективу.');
+        }
+        if (reexport) {
+            takes.push('<b>Нидерланды и Бельгию не путать со спросом</b> — крупные хабы (Роттердам, Антверпен), значительная часть их объёма это реэкспорт, а не конечное потребление.');
+        }
+        if (priceMax && priceMin) {
+            takes.push('<b>Ценовое позиционирование:</b> премиальный рынок — ' + esc(priceMax.name) + ' ($' + round2(priceMax.v) + '/кг), самый дешёвый вход — ' + esc(priceMin.name) + ' ($' + round2(priceMin.v) + '/кг).');
+        }
+        var takesHtml = takes.map(function (t, i) {
+            return '<div class="lead-take"><div class="dot">' + (i + 1) + '</div><p>' + t + '</p></div>';
+        }).join('');
+
+        var footNote = 'delomant.ru · UN Comtrade';
+        var dateStr = new Date().toLocaleDateString('ru-RU');
+        var yearNow = new Date().getFullYear();
+
+        // KPI
+        var kpiVolume = typeof lastY['Объём (тонн)'] === 'number' ? fmtT(lastY['Объём (тонн)']) : '—';
+        var kpiValue = typeof lastY['Стоимость (тыс. USD)'] === 'number'
+            ? '$' + fmtInt(lastY['Стоимость (тыс. USD)'] / 1000) + ' млн' : '—';
+        var kpiPrice = typeof lastY['Средняя цена, USD/кг'] === 'number'
+            ? '$' + round2(lastY['Средняя цена, USD/кг']) + '/кг' : '—';
+
+        var CSS = comtradeReportCss();
+        var pages = '';
+
+        // 1. Титул
+        pages += '<section class="page cover">' +
+            '<svg class="deco" viewBox="0 0 640 720" preserveAspectRatio="none"><g fill="#ffffff">' +
+            '<path d="M480 120 a120 120 0 0 1 120 120 h-120 z"/><path d="M360 360 a120 120 0 0 0 120 120 v-120 z"/>' +
+            '<circle cx="520" cy="520" r="80"/><rect x="360" y="120" width="110" height="110" rx="10"/></g></svg>' +
+            '<div class="brand"><div class="col"><span class="colbase"></span></div><div class="bname">DELOMANT<br>GROUP</div></div>' +
+            '<div class="kicker">Аналитическая справка<br>по итогам исследования рынка</div>' +
+            '<h1>' + title + ',<br>' + firstYear + '–' + lastYear + '</h1>' +
+            '<div class="part">' + subtitle + '</div>' +
+            '<div class="site">delomant.ru</div><div class="yr">' + yearNow + '</div></section>';
+
+        // 2. Главное
+        pages += '<section class="page"><div class="insight">' + insight1 + '</div><div class="body">' +
+            '<div class="kpis">' +
+            '<div class="kpi"><div class="k-lab">Лидер</div><div class="k-val" style="font-size:26px">' + esc(leader['Страна']) + '</div><div class="k-sub">' + fmtT(leader['Объём (тонн)']) + ' за период</div></div>' +
+            '<div class="kpi"><div class="k-lab">Объём, ' + lastYear + '</div><div class="k-val">' + kpiVolume + '</div><div class="k-sub">' + pctSpan(lastY['Рост объёма г/г, %']) + '</div></div>' +
+            '<div class="kpi"><div class="k-lab">Стоимость, ' + lastYear + '</div><div class="k-val">' + kpiValue + '</div><div class="k-sub">' + pctSpan(lastY['Рост USD г/г, %']) + '</div></div>' +
+            '<div class="kpi"><div class="k-lab">Средняя цена</div><div class="k-val">' + kpiPrice + '</div><div class="k-sub">' + lastYear + '</div></div>' +
+            '</div>' +
+            '<div class="chart-no">Диаграмма 1.</div><div class="chart-title">ТОП-' + top.length + ' стран по объёму ' + flowNoun + ', суммарно ' + firstYear + '–' + lastYear + '</div>' +
+            '<div class="bars">' + bars1 + '</div></div>' +
+            '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>2</span></div></section>';
+
+        // 3. Динамика
+        if (lineSvg) {
+            pages += '<section class="page"><div class="insight">' + insight2 + '</div><div class="body">' +
+                '<div class="chart-no">Диаграмма 2.</div><div class="chart-title">Динамика ' + flowNoun + ' по ключевым странам, ' + firstYear + '–' + lastYear + ', тыс. тонн</div>' +
+                lineSvg + '<div class="legend">' + legendHtml + '</div>' +
+                '<div style="margin-top:22px" class="note"><b>Ключевой вывод:</b> при выборе целевого рынка смотреть не только на текущий объём, но и на тренд — лидерство во времени не абсолютно.</div></div>' +
+                '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>3</span></div></section>';
+        }
+
+        // 4. Цены
+        if (bars2) {
+            pages += '<section class="page"><div class="insight">' + insight3 + '</div><div class="body">' +
+                '<div class="chart-no">Диаграмма 3.</div><div class="chart-title">Средняя импортная цена по странам, ' + firstYear + '–' + lastYear + ', USD/кг</div>' +
+                '<div class="bars">' + bars2 + '</div>' +
+                (reexport ? '<div style="margin-top:24px" class="note"><b>Важно при интерпретации:</b> Нидерланды и Бельгия — логистические хабы; часть их «импорта» это реэкспорт, а не конечное потребление. Германия, Польша, Италия ближе к конечным рынкам.</div>' : '') +
+                '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>4</span></div></section>';
+        }
+
+        // 5. Выводы + источник
+        pages += '<section class="page"><div class="insight">Выводы и рекомендации</div><div class="body">' +
+            takesHtml +
+            '<div style="margin-top:28px" class="chart-no">Источник данных</div><table class="src">' +
+            '<tr><td>Источник</td><td>UN Comtrade — база внешнеторговой статистики ООН (' + partnerCtx + ')</td></tr>' +
+            (codeStr ? '<tr><td>Товар</td><td>ТН ВЭД ' + esc(codeStr) + ' (уровень HS6)</td></tr>' : '') +
+            '<tr><td>Охват</td><td>' + p.summaryRows.length + ' стран · направление — ' + (isImport ? 'импорт' : 'экспорт') + ' · период ' + firstYear + '–' + lastYear + '</td></tr>' +
+            '<tr><td>Единицы</td><td>Тонны (нетто-вес) и тыс. USD. Данные не содержат сведений об отправителях, получателях и изготовителях</td></tr>' +
+            '<tr><td>Выгружено</td><td>' + dateStr + '</td></tr></table>' +
+            '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>5</span></div></section>';
+
+        return '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">' +
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+            '<title>Delomant — ' + title.replace(/<[^>]+>/g, '') + '</title><style>' + CSS + '</style></head><body>' +
+            pages + '</body></html>';
+    }
+
+    function comtradeReportCss() {
+        return ":root{--blue:#2F2BC7;--blue-deep:#211CB0;--blue-soft:#EEF0FF;--ink:#0F172A;--muted:#64748B;--line:#E2E8F0;--accent:#16A34A;--warn:#B45309;--warn-bg:#FEF3C7;--font:'PT Sans','Segoe UI',-apple-system,Roboto,sans-serif;--serif:'PT Serif',Georgia,'Times New Roman',serif}" +
+            "*{box-sizing:border-box;margin:0;padding:0}body{background:#5b5f6b;font-family:var(--font);color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+            ".page{position:relative;width:1280px;height:720px;margin:24px auto;background:#fff;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.35)}" +
+            ".insight{background:var(--blue-deep);color:#fff;padding:26px 48px;font-size:22px;line-height:1.35;font-weight:700}.insight b{color:#FDE047}" +
+            ".body{padding:26px 48px}.chart-no{color:var(--blue);font-weight:700;font-size:16px}.chart-title{color:var(--muted);font-size:15px;margin:2px 0 22px}" +
+            ".footer{position:absolute;left:48px;right:48px;bottom:20px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:12px;color:var(--muted);font-size:12px}.footer .wm{color:var(--blue-deep);font-weight:800;letter-spacing:.12em;font-size:13px}" +
+            ".cover{background:var(--blue-deep);color:#fff}.cover .brand{position:absolute;top:56px;left:56px;display:flex;align-items:center;gap:16px}" +
+            ".cover .col{width:44px;height:52px;position:relative}.cover .col:before{content:'';position:absolute;left:6px;right:6px;top:0;height:7px;background:#fff;border-radius:2px}.cover .col:after{content:'';position:absolute;left:11px;right:11px;top:11px;bottom:8px;background:repeating-linear-gradient(90deg,#fff 0 3px,transparent 3px 7px)}.cover .colbase{position:absolute;left:2px;right:2px;bottom:0;height:7px;background:#fff;border-radius:2px}" +
+            ".cover .bname{font-family:var(--serif);font-size:34px;line-height:1.05;letter-spacing:.06em}.cover .kicker{position:absolute;top:64px;right:56px;text-align:right;font-weight:700;font-size:18px;line-height:1.4;opacity:.95}" +
+            ".cover h1{position:absolute;left:56px;bottom:150px;right:120px;font-family:var(--serif);font-weight:700;font-size:48px;line-height:1.15}.cover .part{position:absolute;left:56px;bottom:96px;font-size:20px;opacity:.9}.cover .site{position:absolute;left:56px;bottom:48px;font-size:15px;opacity:.85}.cover .yr{position:absolute;right:56px;bottom:48px;font-size:15px;opacity:.85}.cover .deco{position:absolute;right:0;top:0;width:640px;height:720px;opacity:.10}" +
+            ".bars{display:flex;flex-direction:column;gap:11px}.bar-row{display:grid;grid-template-columns:180px 1fr 160px;align-items:center;gap:14px}.bar-name{font-size:15px;font-weight:600;text-align:right}.bar-track{background:#F1F5F9;border-radius:5px;height:26px;position:relative}.bar-fill{height:100%;border-radius:5px;background:var(--blue)}.bar-fill.lead{background:linear-gradient(90deg,var(--blue-deep),var(--blue))}.bar-val{font-size:14px}.bar-val .sh{color:var(--muted)}" +
+            ".kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}.kpi{border:1px solid var(--line);border-radius:12px;padding:18px 20px}.kpi .k-lab{color:var(--muted);font-size:13px;margin-bottom:8px}.kpi .k-val{font-size:30px;font-weight:800;color:var(--blue-deep);line-height:1}.kpi .k-sub{font-size:13px;margin-top:8px}.up{color:var(--accent);font-weight:700}.down{color:#DC2626;font-weight:700}" +
+            ".legend{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:var(--muted)}.legend span{display:inline-flex;align-items:center;gap:7px}.legend i{width:14px;height:4px;border-radius:2px;display:inline-block}" +
+            ".lead-take{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px}.lead-take .dot{flex:0 0 auto;width:28px;height:28px;border-radius:8px;background:var(--blue-soft);color:var(--blue-deep);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}.lead-take p{font-size:16px;line-height:1.5}.lead-take b{color:var(--blue-deep)}" +
+            ".note{background:var(--warn-bg);border-left:4px solid var(--warn);border-radius:8px;padding:14px 18px;color:#7c4a03;font-size:14px;line-height:1.5}.note b{color:var(--warn)}" +
+            "table.src{width:100%;border-collapse:collapse;font-size:14px}table.src td{padding:9px 4px;border-bottom:1px solid var(--line);vertical-align:top}table.src td:first-child{color:var(--muted);width:220px}" +
+            "@media print{body{background:#fff}.page{margin:0;box-shadow:none;page-break-after:always}@page{size:1280px 720px;margin:0}}";
+    }
+
+    function downloadComtradeReport() {
+        if (!comtradePresentation || comtradePresentation.summaryRows.length === 0) { return; }
+        var params = comtradePresentation.reportParams;
+        if (!params) { return; }
+        var html = comtradeReportHtml(comtradePresentation, params);
+        var fileName = 'comtrade_report_' + new Date().toISOString().slice(0, 10) + '.html';
+        triggerDownload(new Blob(['﻿' + html], { type: 'text/html;charset=utf-8' }), fileName);
+    }
+
+    if (comtradeReportBtn) {
+        comtradeReportBtn.addEventListener('click', downloadComtradeReport);
     }
 
     /* ================================
