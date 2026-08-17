@@ -22,10 +22,22 @@ document.addEventListener('DOMContentLoaded', function () {
         var dataTitle = document.querySelector('#data .module-title');
         if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
     } else {
-        // Владелец (роль full): показать ссылки на панель проверяющих и выход.
-        // Проверяющему их не показываем — admin.php ему всё равно отдаст 403.
+        // Владелец (роль full): показать ссылки на панель пользователей и выход.
+        // Обычному пользователю их не показываем — admin.php всё равно отдаст 403.
         var headerActions = document.querySelector('.header-actions');
         if (headerActions) { headerActions.hidden = false; }
+    }
+
+    // Интерфейс отрисован и роль применена — убираем стартовую заставку.
+    // Небольшая минимальная задержка, чтобы уход был плавным, а не мгновенным.
+    var appSplash = document.getElementById('app-splash');
+    if (appSplash) {
+        setTimeout(function () {
+            appSplash.classList.add('hide');
+            setTimeout(function () {
+                if (appSplash.parentNode) { appSplash.parentNode.removeChild(appSplash); }
+            }, 400);
+        }, 300);
     }
 
     /* ================================

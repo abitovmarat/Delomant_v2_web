@@ -8,8 +8,42 @@
     <meta name="app-role" content="__ROLE__">
     <title>Delomant — Аналитика</title>
     <link rel="stylesheet" href="styles/main.css">
+    <!-- Стартовая заставка. Критические стили инлайн, чтобы она появилась
+         мгновенно и закрыла собой перестроение интерфейса под роль (в
+         экспертном режиме прячется загрузка выгрузок — без заставки её
+         заголовок мелькал бы). Убирается в main.js после отрисовки. -->
+    <style>
+        #app-splash {
+            position: fixed; inset: 0; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+            background: radial-gradient(circle at 30% 20%, #1E293B 0%, #0F172A 55%, #020617 100%);
+            transition: opacity .35s ease;
+        }
+        #app-splash.hide { opacity: 0; pointer-events: none; }
+        #app-splash .mark {
+            width: 64px; height: 64px; border-radius: 16px;
+            background: linear-gradient(135deg, #2F2BC7, #211CB0);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font: 700 30px/1 'Segoe UI', Roboto, sans-serif; letter-spacing: -1px;
+            box-shadow: 0 10px 30px rgba(47, 43, 199, .5);
+            animation: splashpulse 1.6s ease-in-out infinite;
+        }
+        #app-splash .ring {
+            width: 38px; height: 38px; border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, .18); border-top-color: #fff;
+            animation: splashspin .8s linear infinite;
+        }
+        #app-splash .txt { color: #94A3B8; font: 500 13px 'Segoe UI', Roboto, sans-serif; letter-spacing: .02em; }
+        @keyframes splashspin { to { transform: rotate(360deg); } }
+        @keyframes splashpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+    </style>
 </head>
 <body>
+    <div id="app-splash">
+        <div class="mark">D</div>
+        <div class="ring"></div>
+        <div class="txt">Загрузка…</div>
+    </div>
     <div class="app">
         <!-- Sidebar -->
         <aside class="sidebar" role="navigation" aria-label="Главное меню">
