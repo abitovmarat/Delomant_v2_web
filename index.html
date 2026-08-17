@@ -6,6 +6,9 @@
     <!-- Роль сессии подставляется index.php при отдаче приложения (full|expert).
          При прямом открытии файла (dev) остаётся плейсхолдер → трактуется как full. -->
     <meta name="app-role" content="__ROLE__">
+    <!-- Логин вошедшего (для индивидуальных аккаунтов). Подставляется index.php.
+         Пусто/плейсхолдер → идентификации в шапке нет. -->
+    <meta name="app-user" content="__USER__">
     <title>Delomant — Аналитика</title>
     <link rel="stylesheet" href="styles/main.css">
     <!-- Стартовая заставка. Критические стили инлайн, чтобы она появилась
@@ -111,7 +114,8 @@
                 </div>
                 <!-- Ссылки владельца (роль full). Скрыты по умолчанию, показываются в main.js. -->
                 <div class="header-actions" hidden>
-                    <a href="/admin.php" class="header-link header-admin-link" title="Управление пользователями">Пользователи</a>
+                    <a href="/" class="header-link header-login-link" title="Вернуться в кабинет" hidden></a>
+                    <a href="/admin.php" class="header-link header-admin-link" title="Управление пользователями" hidden>Пользователи</a>
                     <a href="/?logout=1" class="header-link header-logout-link">Выйти</a>
                 </div>
             </header>

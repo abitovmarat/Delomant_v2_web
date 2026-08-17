@@ -129,8 +129,11 @@ if (!empty($_SESSION['auth'])) {
     header('Cache-Control: no-cache, private');
     // Подставляем роль сессии в плейсхолдер <meta name="app-role" content="__ROLE__">.
     // HTML отдаётся с no-cache, поэтому персональная роль в кэш не попадает.
+    $user = (string)($_SESSION['uid'] ?? ''); // логин индивидуального аккаунта (или пусто)
     $html = (string)file_get_contents($appFile);
-    echo str_replace('content="__ROLE__"', 'content="' . $role . '"', $html);
+    $html = str_replace('content="__ROLE__"', 'content="' . $role . '"', $html);
+    $html = str_replace('content="__USER__"', 'content="' . htmlspecialchars($user, ENT_QUOTES) . '"', $html);
+    echo $html;
     exit;
 }
 

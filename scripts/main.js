@@ -21,12 +21,31 @@ document.addEventListener('DOMContentLoaded', function () {
         if (uploadCard) { uploadCard.style.display = 'none'; }
         var dataTitle = document.querySelector('#data .module-title');
         if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
-    } else {
-        // Владелец (роль full): показать ссылки на панель пользователей и выход.
-        // Обычному пользователю их не показываем — admin.php всё равно отдаст 403.
-        var headerActions = document.querySelector('.header-actions');
-        if (headerActions) { headerActions.hidden = false; }
     }
+
+    // Идентификация в шапке. Логин индивидуального аккаунта приходит из
+    // <meta name="app-user"> (подставляет index.php). Клик по логину ведёт
+    // на «/» — для роли expert это возврат в личный кабинет с инструкцией.
+    var appUserMeta = document.querySelector('meta[name="app-user"]');
+    var appUser = appUserMeta ? appUserMeta.getAttribute('content') : '';
+    if (appUser === '__USER__' || !appUser) { appUser = ''; }
+
+    var headerActions = document.querySelector('.header-actions');
+    var loginLink = document.querySelector('.header-login-link');
+    var adminLink = document.querySelector('.header-admin-link');
+    var showHeaderActions = false;
+
+    if (appUser && loginLink) {
+        loginLink.textContent = '← ' + appUser;
+        loginLink.hidden = false;
+        showHeaderActions = true;
+    }
+    if (!isExpert && adminLink) {
+        // Владелец управляет пользователями; обычному пользователю не показываем.
+        adminLink.hidden = false;
+        showHeaderActions = true;
+    }
+    if (headerActions && showHeaderActions) { headerActions.hidden = false; }
 
     // Интерфейс отрисован и роль применена — убираем стартовую заставку.
     // Небольшая минимальная задержка, чтобы уход был плавным, а не мгновенным.
