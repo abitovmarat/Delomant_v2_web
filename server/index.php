@@ -341,11 +341,6 @@ header('Content-Type: text/html; charset=UTF-8');
     }
     button:hover { background: var(--primary-dark); }
     button:active { transform: translateY(1px); }
-    .hint {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: -6px;
-    }
     .error {
         display: <?= $error ? 'flex' : 'none' ?>;
         align-items: center;
@@ -380,7 +375,6 @@ header('Content-Type: text/html; charset=UTF-8');
             <label for="password">Пароль</label>
             <input type="password" id="password" name="password"
                    required autocomplete="current-password" placeholder="Введите пароль">
-            <div class="hint">Владелец входит без логина — только пароль.</div>
             <button type="submit">Войти</button>
         </form>
         <div class="foot">© <?= date('Y') ?> Delomant Group · v0.9</div>
