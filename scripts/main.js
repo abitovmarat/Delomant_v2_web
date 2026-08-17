@@ -1868,6 +1868,90 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /* ================================
+       Справочник кодов ТН ВЭД (поиск по названию)
+       ================================
+       Данные — data/foreign/hs_names_ru.json (hs6/hs4 → рус. название),
+       тот же файл, что и в модуле зарубежной таможни. Грузится лениво при
+       первом обращении. Клик по результату подставляет код в поле «Коды
+       ТН ВЭД». */
+    (function initHsSearch() {
+        var input = document.querySelector('.hs-search-input');
+        var results = document.querySelector('.hs-search-results');
+        var codesInput = document.querySelector('.comtrade-codes');
+        if (!input || !results || !codesInput) { return; }
+
+        var namesList = null; // [[code, name], …]
+        var loading = false;
+        var timer = null;
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"]/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+            });
+        }
+
+        function loadNames() {
+            if (namesList || loading) { return; }
+            loading = true;
+            fetch('data/foreign/hs_names_ru.json', { cache: 'force-cache' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) {
+                    var list = [];
+                    if (d) {
+                        ['hs6', 'hs4'].forEach(function (lvl) {
+                            var m = d[lvl] || {};
+                            Object.keys(m).forEach(function (code) { list.push([code, m[code]]); });
+                        });
+                    }
+                    namesList = list;
+                    render(input.value);
+                })
+                .catch(function () { loading = false; });
+        }
+
+        function render(q) {
+            q = (q || '').trim().toLowerCase();
+            if (q.length < 2) { results.hidden = true; results.innerHTML = ''; return; }
+            if (!namesList) { return; } // ещё грузится — покажем после загрузки
+            var out = [];
+            for (var i = 0; i < namesList.length && out.length < 40; i++) {
+                if (namesList[i][1].toLowerCase().indexOf(q) !== -1) { out.push(namesList[i]); }
+            }
+            if (out.length === 0) {
+                results.innerHTML = '<div class="hs-empty">Ничего не найдено</div>';
+            } else {
+                results.innerHTML = out.map(function (r) {
+                    return '<button type="button" class="hs-item" data-code="' + r[0] + '">' +
+                        '<b>' + r[0] + '</b><span>' + escapeHtml(r[1]) + '</span></button>';
+                }).join('');
+            }
+            results.hidden = false;
+        }
+
+        function addCode(code) {
+            var cur = codesInput.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            if (cur.indexOf(code) === -1) { cur.push(code); }
+            codesInput.value = cur.join(', ');
+            results.hidden = true;
+            input.value = '';
+        }
+
+        input.addEventListener('focus', loadNames);
+        input.addEventListener('input', function () {
+            loadNames();
+            clearTimeout(timer);
+            timer = setTimeout(function () { render(input.value); }, 150);
+        });
+        results.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.hs-item') : null;
+            if (btn) { addCode(btn.getAttribute('data-code')); }
+        });
+        document.addEventListener('click', function (e) {
+            if (e.target !== input && !results.contains(e.target)) { results.hidden = true; }
+        });
+    })();
+
+    /* ================================
        Module: Data — World Bank WITS
        ================================
        Мировая торговая статистика Всемирного банка. Годовые объёмы импорта/

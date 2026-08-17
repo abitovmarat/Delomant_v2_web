@@ -204,6 +204,54 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Справочник кодов ТН ВЭД — выпадающий список результатов поиска */
+.hs-search {
+    position: relative;
+}
+.hs-search-results {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 30;
+    margin-top: 4px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    max-height: 300px;
+    overflow-y: auto;
+}
+.hs-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 9px 12px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+}
+.hs-item:last-child { border-bottom: none; }
+.hs-item:hover { background: var(--color-primary-light); }
+.hs-item b {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.hs-item span { color: var(--color-text-secondary); }
+.hs-empty {
+    padding: 10px 12px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
 /* Ссылки владельца в шапке (панель проверяющих + выход) */
 .header {
     justify-content: space-between;
