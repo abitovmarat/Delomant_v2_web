@@ -9,6 +9,11 @@ scripts/fetch_cbr_rates.js
 
 dist/
 
+# Секреты и аккаунты — создаются на сервере, в репозиторий не идут
+server/config.php
+server/users.php
+server/comtrade_key.php
+
 __pycache__/
 
 # Сырьё зарубежных архивов: качается fetch_foreign_archives.py, разбирается

@@ -72,6 +72,7 @@ sizes.push(['index.php', write('index.php', read('server/index.php'))]);
 sizes.push(['asset.php', write('asset.php', read('server/asset.php'))]);
 sizes.push(['comtrade.php', write('comtrade.php', read('server/comtrade.php'))]);
 sizes.push(['wits.php', write('wits.php', read('server/wits.php'))]);
+sizes.push(['admin.php', write('admin.php', read('server/admin.php'))]);
 sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 
 // setup.php с подставленным токеном установки

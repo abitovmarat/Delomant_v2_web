@@ -5,7 +5,7 @@
 RewriteEngine On
 
 # Точки входа отдаём как есть
-RewriteRule ^(index|asset|setup|comtrade|wits)\.php$ - [L]
+RewriteRule ^(index|asset|setup|comtrade|wits|admin)\.php$ - [L]
 
 # Пути, к которым обращается фронтенд, проксируем на asset.php.
 # Проверку сессии делает сам asset.php.
@@ -36,7 +36,7 @@ RewriteRule ^$ index.php [L]
 RewriteRule ^(app|assets|cache)(/|$) - [F]
 
 # Хеш пароля и ключ подписки Comtrade недоступны снаружи в любом случае
-<FilesMatch "^(config|comtrade_key)\.php$">
+<FilesMatch "^(config|comtrade_key|users)\.php$">
     Require all denied
 </FilesMatch>
 <FilesMatch "\.dat$">
