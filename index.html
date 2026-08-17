@@ -44,6 +44,26 @@
         <div class="ring"></div>
         <div class="txt">Загрузка…</div>
     </div>
+    <!-- Предохранитель заставки: живёт в index.html (отдаётся свежим), не
+         зависит от main.js. Гарантированно убирает сплэш по window.load
+         (срабатывает даже при ошибке в скрипте) и по жёсткому таймауту,
+         чтобы заставка не могла залипнуть. main.js убирает её раньше на
+         штатном пути. -->
+    <script>
+        (function () {
+            var removed = false;
+            function hideSplash() {
+                if (removed) { return; }
+                removed = true;
+                var s = document.getElementById('app-splash');
+                if (!s) { return; }
+                s.classList.add('hide');
+                setTimeout(function () { if (s.parentNode) { s.parentNode.removeChild(s); } }, 450);
+            }
+            window.addEventListener('load', function () { setTimeout(hideSplash, 150); });
+            setTimeout(hideSplash, 5000); // жёсткий предел
+        })();
+    </script>
     <div class="app">
         <!-- Sidebar -->
         <aside class="sidebar" role="navigation" aria-label="Главное меню">
