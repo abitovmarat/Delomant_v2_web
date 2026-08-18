@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (uploadCard) { uploadCard.style.display = 'none'; }
         var dataTitle = document.querySelector('#data .module-title');
         if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
+
+        // Контрагентский уровень (получатели/отправители/изготовители) —
+        // отдельный тариф, в экспертном режиме не показываем карточки.
+        ['topReceivers', 'topSenders', 'topManufacturers'].forEach(function (type) {
+            var card = document.querySelector('.action-card[data-analysis="' + type + '"]');
+            if (card) { card.style.display = 'none'; }
+        });
     }
 
     // Идентификация в шапке. Логин индивидуального аккаунта приходит из
@@ -1345,6 +1352,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    var comtradeResetBtn = document.querySelector('.comtrade-reset-btn:not(.wits-reset-btn)');
+    if (comtradeResetBtn) {
+        comtradeResetBtn.addEventListener('click', function () {
+            comtradeSelected = {};
+            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+            renderComtradeRegions();
+            updateComtradeSelectedHint();
+        });
+    }
+
     if (comtradeLoadBtn) {
         comtradeLoadBtn.addEventListener('click', comtradeLoad);
     }
@@ -2483,6 +2500,16 @@ document.addEventListener('DOMContentLoaded', function () {
             var btn = e.target.closest ? e.target.closest('.comtrade-region') : null;
             if (!btn) { return; }
             toggleWitsRegion(parseInt(btn.getAttribute('data-region'), 10));
+            renderWitsCountries(witsCountrySearch ? witsCountrySearch.value : '');
+            renderWitsRegions();
+            updateWitsSelectedHint();
+        });
+    }
+
+    var witsResetBtn = document.querySelector('.wits-reset-btn');
+    if (witsResetBtn) {
+        witsResetBtn.addEventListener('click', function () {
+            witsSelected = {};
             renderWitsCountries(witsCountrySearch ? witsCountrySearch.value : '');
             renderWitsRegions();
             updateWitsSelectedHint();
@@ -5284,9 +5311,20 @@ document.addEventListener('DOMContentLoaded', function () {
         return { data: filtered, headers: headers };
     }
 
+    // Контрагентский уровень (получатели/отправители/изготовители) —
+    // отдельный тариф, в экспертном режиме недоступен даже в обход
+    // скрытых карточек (напр. через консоль).
+    var CONTRACTOR_ANALYSIS_TYPES = ['topReceivers', 'topSenders', 'topManufacturers'];
+
     function runAnalysis(type) {
         try {
             lastAnalysisType = type;
+
+            if (isExpert && CONTRACTOR_ANALYSIS_TYPES.indexOf(type) !== -1) {
+                analysisResults.innerHTML =
+                    '<div class="analysis-empty"><p>Доступно на других тарифах</p></div>';
+                return;
+            }
 
             var fd = getFilteredAnalysisData();
             var data = fd.data;

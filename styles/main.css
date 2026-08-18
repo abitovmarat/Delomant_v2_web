@@ -3180,6 +3180,30 @@ body {
     margin-bottom: 8px;
 }
 
+/* Заголовок поля со страной-партнёром + кнопка сброса */
+.comtrade-field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.comtrade-reset-btn {
+    padding: 3px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--color-text-secondary);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.comtrade-reset-btn:hover {
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
 .comtrade-regions {
     display: flex;
     flex-wrap: wrap;
@@ -3188,17 +3212,18 @@ body {
     margin-bottom: 8px;
 }
 
+/* Каждая группа (Регионы / Экономические блоки / …) — на своей строке:
+   визуально разделяет наборы кнопок, а не сваливает их в один поток */
 .comtrade-region-group {
+    flex-basis: 100%;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--color-text-secondary);
-    margin-right: 2px;
+    margin: 6px 0 2px;
 }
-
-/* Не первая группа в ряду — отбиваем от предыдущих кнопок */
-.comtrade-region + .comtrade-region-group {
-    margin-left: 8px;
+.comtrade-region-group:first-child {
+    margin-top: 0;
 }
 
 .comtrade-region {
