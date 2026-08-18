@@ -255,13 +255,6 @@ body {
     height: 12px;
 }
 
-.action-card.locked {
-    opacity: 0.62;
-}
-.action-card.locked .btn {
-    cursor: not-allowed;
-}
-
 .locked-module {
     max-width: 720px;
     background: var(--color-surface);

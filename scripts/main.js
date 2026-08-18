@@ -35,17 +35,17 @@ document.addEventListener('DOMContentLoaded', function () {
             'stroke-linejoin="round" aria-hidden="true">' +
             '<rect x="4" y="10.5" width="16" height="10.5" rx="2.2"/>' +
             '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
+        /*
+         * Контрагентские разрезы (получатели/отправители/изготовители)
+         * убираем совсем, а не помечаем замком: эти данные в доступных
+         * здесь источниках отсутствуют физически, поэтому карточка с
+         * замком выглядела бы обещанием, которого стенд всё равно не
+         * выполнит. Раздел «Обработка» — другое дело: там замок уместен,
+         * функция существует и работает на полном доступе.
+         */
         ['topReceivers', 'topSenders', 'topManufacturers'].forEach(function (type) {
             var card = document.querySelector('.action-card[data-analysis="' + type + '"]');
-            if (!card) { return; }
-            card.classList.add('locked');
-            var btn = card.querySelector('.btn');
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = 'Недоступно';
-            }
-            var t = card.querySelector('.action-card-title');
-            if (t) { t.insertAdjacentHTML('beforeend', ' <span class="lock-badge">' + lockSvg + 'другой тариф</span>'); }
+            if (card) { card.style.display = 'none'; }
         });
 
         // Раздел «Обработка»: пункт меню остаётся, содержимое подменяем
