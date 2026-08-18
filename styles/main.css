@@ -204,6 +204,18 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Метка демонстрационного режима в шапке */
+.header-mode {
+    margin-left: 10px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--color-warning);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
 /* Закрытые на этом тарифе возможности: видно, что есть, но не работает */
 .lock-badge {
     display: inline-block;

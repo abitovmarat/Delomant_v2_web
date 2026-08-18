@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.setAttribute('data-role', appRole);
 
     if (isExpert) {
+        // Явная метка режима: без неё непонятно, почему разделы закрыты,
+        // и невозможно на глаз отличить демо-доступ от полного.
+        var modeBadge = document.querySelector('.header-mode');
+        if (modeBadge) { modeBadge.hidden = false; }
+
         var uploadCard = document.querySelector('.upload-card');
         if (uploadCard) { uploadCard.style.display = 'none'; }
         var dataTitle = document.querySelector('#data .module-title');
