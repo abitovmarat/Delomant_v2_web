@@ -115,11 +115,28 @@ document.addEventListener('DOMContentLoaded', function () {
         return '';
     }
 
+    /*
+     * Имя источника и уровень его агрегации. Нужны везде, где мы объясняем
+     * пользователю, почему разрез недоступен: писать «UN Comtrade» на
+     * данных Всемирного банка — вводить в заблуждение, а уровень у них
+     * разный (Comtrade — коды HS6, WITS — крупные товарные разделы).
+     */
+    function dataSourceName() {
+        if (appState.dataSource === 'wits') { return 'World Bank WITS'; }
+        if (appState.dataSource === 'foreign') { return 'зарубежной таможенной статистики'; }
+        return 'UN Comtrade';
+    }
+
+    function dataSourceLevel() {
+        return appState.dataSource === 'wits'
+            ? 'по крупным товарным разделам ТН ВЭД'
+            : 'по кодам ТН ВЭД';
+    }
+
     function renderContractorUnavailable() {
-        var srcName = appState.dataSource === 'wits' ? 'World Bank WITS' : 'UN Comtrade';
         return '<div class="analysis-unavailable">' +
-            '<p>Анализ недоступен на данных ' + srcName + ': статистика агрегирована ' +
-            'по кодам ТН ВЭД и не содержит отправителей, получателей и изготовителей.</p>' +
+            '<p>Анализ недоступен на данных ' + dataSourceName() + ': статистика агрегирована ' +
+            dataSourceLevel() + ' и не содержит отправителей, получателей и изготовителей.</p>' +
             '<p>Для этого разреза нужна выгрузка с контрагентским уровнем данных.</p>' +
             '</div>';
     }
@@ -2595,7 +2612,7 @@ document.addEventListener('DOMContentLoaded', function () {
             applyParsedData({ name: label }, parsed, 'wits');
             appState.sourceNote = 'Источник: World Bank WITS (tradestats-trade), ' +
                 'торговля ' + (isWorld ? 'со всем миром' : 'с: ' + partnerName) +
-                '. Годовые агрегаты в USD.';
+                '. Годовые агрегаты в USD по крупным товарным разделам ТН ВЭД, без веса.';
 
             // Запоминаем загруженное для отдельной кнопки «Скачать данные»
             witsTradeExport = { rows: parsed.rows, headers: parsed.headers, name: label };
@@ -9433,7 +9450,9 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function enrichByDict(data, headers, cfg) {
         if (!isContractorDataAvailable()) {
-            return { skipped: true, note: 'Недоступно на данных UN Comtrade: статистика ООН агрегирована и не содержит контрагентов (получателей, ИНН). Загрузите таможенную выгрузку.' };
+            return { skipped: true, note: 'Недоступно на данных ' + dataSourceName() +
+                ': статистика агрегирована ' + dataSourceLevel() +
+                ' и не содержит контрагентов (получателей, ИНН). Загрузите таможенную выгрузку.' };
         }
 
         var recvCol = findAnyColumn(headers, RECEIVER_COLS);
@@ -9615,7 +9634,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function enrichRegion(data, headers) {
         if (!isContractorDataAvailable()) {
-            return { skipped: true, note: 'Недоступно на данных UN Comtrade: нет ИНН получателя. Загрузите таможенную выгрузку.' };
+            return { skipped: true, note: 'Недоступно на данных ' + dataSourceName() +
+                ': нет ИНН получателя. Загрузите таможенную выгрузку.' };
         }
         var innCol = findAnyColumn(headers, INN_COLS);
         if (!innCol) {
