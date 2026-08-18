@@ -133,6 +133,40 @@ document.addEventListener('DOMContentLoaded', function () {
             : 'по кодам ТН ВЭД';
     }
 
+    /* ================================
+       Справочник названий ТН ВЭД (общий кэш)
+       ================================
+       Один и тот же файл нужен и поиску кода по названию, и подписям в
+       анализах: голый код «081110» ничего не говорит, а «Земляника и
+       клубника мороженая» — говорит. Грузим один раз и лениво: файл
+       большой, а нужен не в каждом сеансе. */
+    var hsNamesData = null;    // {hs6:{code:name}, hs4:{code:name}}
+    var hsNamesPromise = null;
+
+    function loadHsNames() {
+        if (hsNamesPromise) { return hsNamesPromise; }
+        hsNamesPromise = fetch('data/foreign/hs_names_ru.json', { cache: 'force-cache' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                hsNamesData = (d && (d.hs6 || d.hs4)) ? d : { hs6: {}, hs4: {} };
+                return hsNamesData;
+            })
+            .catch(function () {
+                hsNamesData = { hs6: {}, hs4: {} };
+                return hsNamesData;
+            });
+        return hsNamesPromise;
+    }
+
+    /** Название товара по коду; пусто, если справочник не загружен или кода нет. */
+    function hsNameFor(code) {
+        if (!hsNamesData) { return ''; }
+        var c = String(code == null ? '' : code).replace(/\D/g, '');
+        if (!c) { return ''; }
+        return (hsNamesData.hs6 && hsNamesData.hs6[c]) ||
+               (hsNamesData.hs4 && (hsNamesData.hs4[c] || hsNamesData.hs4[c.slice(0, 4)])) || '';
+    }
+
     function renderContractorUnavailable() {
         return '<div class="analysis-unavailable">' +
             '<p>Анализ недоступен на данных ' + dataSourceName() + ': статистика агрегирована ' +
@@ -2179,23 +2213,19 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        // Справочник общий с подписями в анализах — грузится один раз
         function loadNames() {
             if (namesList || loading) { return; }
             loading = true;
-            fetch('data/foreign/hs_names_ru.json', { cache: 'force-cache' })
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (d) {
-                    var list = [];
-                    if (d) {
-                        ['hs6', 'hs4'].forEach(function (lvl) {
-                            var m = d[lvl] || {};
-                            Object.keys(m).forEach(function (code) { list.push([code, m[code]]); });
-                        });
-                    }
-                    namesList = list;
-                    render(input.value);
-                })
-                .catch(function () { loading = false; });
+            loadHsNames().then(function (d) {
+                var list = [];
+                ['hs6', 'hs4'].forEach(function (lvl) {
+                    var m = (d && d[lvl]) || {};
+                    Object.keys(m).forEach(function (code) { list.push([code, m[code]]); });
+                });
+                namesList = list;
+                render(input.value);
+            });
         }
 
         function render(q) {
@@ -5772,6 +5802,14 @@ document.addEventListener('DOMContentLoaded', function () {
         var raw = String(row[column] == null ? '' : row[column]).trim();
         if (!raw) { return ''; }
         if (!isHs) { return raw; }
+        /*
+         * У WITS «код товара» — это название раздела с диапазоном:
+         * «Минеральное топливо, нефть, газ (27-27)». Срезать из него цифры
+         * нельзя: получалось «2727», а из «(72-83)» — «7283», то есть
+         * несуществующие коды вместо понятных разделов. Строку с буквами
+         * оставляем как есть — это уже читаемое имя, а не код.
+         */
+        if (/[A-Za-zА-Яа-я]/.test(raw)) { return raw; }
         var digits = raw.replace(/\D/g, '');
         if (!digits) { return raw; }
         var level = Math.max(2, Math.min(parseInt(hsLevel, 10) || 10, 10));
@@ -5956,9 +5994,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     ? 'было ' + marketFormatValue(row.base, result.metric) + ' → стало 0'
                     : marketFormatValue(row.base, result.metric) + ' → ' + marketFormatValue(row.current, result.metric);
 
+            // Голый код мало о чём говорит — подписываем товар из справочника
+            var hsTitle = hsNameFor(row.key);
+            var titleAttr = hsTitle ? row.key + ' — ' + hsTitle : row.key;
+
             html += '<div class="market-row">' +
                 '<div class="market-row-top">' +
-                    '<span class="market-row-name" title="' + marketEsc(row.key) + '">' + marketEsc(row.key) + '</span>' +
+                    '<span class="market-row-name" title="' + marketEsc(titleAttr) + '">' + marketEsc(row.key) +
+                        (hsTitle ? '<span class="market-row-hs">' + marketEsc(hsTitle) + '</span>' : '') +
+                    '</span>' +
                     '<span class="market-row-pct ' + sign + '">' + pctLabel + '</span>' +
                 '</div>' +
                 '<div class="market-row-values">' + valuesLine +
@@ -5987,6 +6031,18 @@ document.addEventListener('DOMContentLoaded', function () {
         if (result.error) {
             output.innerHTML = '<div class="analysis-empty"><p>' + marketEsc(result.error) + '</p></div>';
             return;
+        }
+
+        /*
+         * В разрезе по ТН ВЭД позиции — это коды. Подтягиваем справочник
+         * названий и перерисовываем: после загрузки hsNamesData всегда
+         * объект (пусть и пустой), поэтому второго захода не будет.
+         */
+        var dimOpt = analysisResults.querySelector('.market-dimension');
+        var isHsDim = dimOpt && dimOpt.options[dimOpt.selectedIndex] &&
+            dimOpt.options[dimOpt.selectedIndex].getAttribute('data-type') === 'hs';
+        if (isHsDim && !hsNamesData) {
+            loadHsNames().then(function () { renderMarketChangesResult(data, headers); });
         }
 
         var deltaClass = result.totalDelta >= 0 ? 'growth' : 'decline';
