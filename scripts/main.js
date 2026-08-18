@@ -540,14 +540,16 @@ document.addEventListener('DOMContentLoaded', function () {
             '  </div>' +
             '  <span class="file-card-status">Объединено</span>' +
             '</div>';
-        uploadTitle.textContent = appState.fileName;
-        uploadDesc.textContent = formatNumber(appState.rawData.length) + ' строк загружено';
+        // Карточки загрузки может не быть: в демонстрационном режиме раздел
+        // «Обработка» вместе с ней заменён витриной
+        if (uploadTitle) { uploadTitle.textContent = appState.fileName; }
+        if (uploadDesc) { uploadDesc.textContent = formatNumber(appState.rawData.length) + ' строк загружено'; }
     }
 
     function showLoading(fileName) {
-        uploadArea.classList.add('loading');
-        uploadTitle.textContent = fileName;
-        uploadDesc.textContent = 'Загрузка...';
+        if (uploadArea) { uploadArea.classList.add('loading'); }
+        if (uploadTitle) { uploadTitle.textContent = fileName; }
+        if (uploadDesc) { uploadDesc.textContent = 'Загрузка...'; }
 
         fileList.innerHTML =
             '<div class="file-card file-card-loading">' +
@@ -560,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function hideLoading() {
-        uploadArea.classList.remove('loading');
+        if (uploadArea) { uploadArea.classList.remove('loading'); }
     }
 
     function handleFile(file) {
@@ -743,8 +745,8 @@ document.addEventListener('DOMContentLoaded', function () {
             '  <span class="file-card-status">Загружен</span>' +
             '</div>';
 
-        uploadTitle.textContent = file.name;
-        uploadDesc.textContent = formatNumber(parsed.rows.length) + ' строк загружено';
+        if (uploadTitle) { uploadTitle.textContent = file.name; }
+        if (uploadDesc) { uploadDesc.textContent = formatNumber(parsed.rows.length) + ' строк загружено'; }
         if (appendRow) appendRow.style.display = '';
     }
 
