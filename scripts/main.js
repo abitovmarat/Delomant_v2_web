@@ -1416,7 +1416,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var note = 'Загружено ' + formatNumber(parsed.rows.length) + ' строк. ';
                 note += parsed.weightCoverage === 100
                     ? 'Вес отчитан по всем строкам.'
-                    : 'Вес отчитан по ' + parsed.weightCoverage + '% строк — расчёт USD/кг возможен только по ним.';
+                    : 'Вес отчитан по ' + parsed.weightCoverage + '% строк, расчёт USD/кг возможен только по ним.';
                 setComtradeStatus(note, parsed.weightCoverage >= 50 ? 'ok' : 'warn');
             })
             .catch(function (err) {
@@ -6035,7 +6035,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '<h3>Сигналы и риски</h3>' +
             '<span class="signals-base">база: ' + marketEsc(res.base.unit) + ' · ' +
             res.base.countries + ' стран · ' + res.base.years.length + ' периодов</span></div>';
-        html += '<p class="signals-note">Все значения посчитаны по загруженным данным — без внешних источников и без моделей.</p>';
+        html += '<p class="signals-note">Все значения посчитаны по загруженным данным, без внешних источников и без моделей.</p>';
         html += '<div class="signals-grid">';
         list.forEach(function (s) {
             html += '<div class="signal-card signal-' + s.level + '">' +
@@ -6773,7 +6773,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<div class="analysis-note">Разбивка по кварталам недоступна: ' +
                 'загружены годовые данные (по одному значению на год). ' +
                 'Чтобы увидеть кварталы Q1–Q4, загрузите данные с частотой ' +
-                '«Месячная» — приложение сложит месяцы в кварталы.</div>';
+                'При месячной частоте приложение сложит месяцы в кварталы.</div>';
             html += '</div>';
         } else if (quarterKeys.length > 0) {
             html += '<div class="analysis-section">';
@@ -10002,7 +10002,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (!target) {
             if (!cfg.createIfMissing) {
-                return { error: 'Нет столбца «' + cfg.targetCols[0] + '» — не на чем учиться. Загрузите файл с вашей разметкой.' };
+                return { error: 'Нет столбца «' + cfg.targetCols[0] + '», не на чем учиться. Загрузите файл с вашей разметкой.' };
             }
             target = cfg.targetCols[0];
             headers.push(target);
@@ -10125,7 +10125,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return { error: 'Нужен столбец «' + COL_HS_CODE + '»' };
         }
         if (!hsNamesData) {
-            return { error: 'Справочник названий не загружен — откройте раздел «Данные» и повторите' };
+            return { error: 'Справочник названий не загружен, откройте раздел «Данные» и повторите' };
         }
         if (headers.indexOf(COL_HS_NAME) === -1) { headers.push(COL_HS_NAME); }
 
@@ -10157,7 +10157,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return { error: 'Нужен столбец со страной' };
         }
         if (!comtradeRegions || comtradeRegions.length === 0) {
-            return { error: 'Справочник регионов не загружен — откройте раздел «Данные» и повторите' };
+            return { error: 'Справочник регионов не загружен, откройте раздел «Данные» и повторите' };
         }
 
         // имя страны → континент (берём только группу «Континенты»:
@@ -10614,7 +10614,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var keys = Object.keys(segmentDict);
         if (enrichDictCount) enrichDictCount.textContent = '(' + keys.length + ')';
         if (!keys.length) {
-            enrichDictList.innerHTML = '<p class="pres-hint">Пока пусто — сегменты определяются правилами. Добавьте запись, если правило ошиблось.</p>';
+            enrichDictList.innerHTML = '<p class="pres-hint">Пока пусто, сегменты определяются правилами. Добавьте запись, если правило ошиблось.</p>';
             return;
         }
         var html = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
@@ -11087,7 +11087,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Inline editing: dblclick on editable elements
         presPreviewSlide.querySelectorAll('[data-editable]').forEach(function (el) {
             el.style.cursor = 'pointer';
-            el.title = 'Двойной клик — редактировать';
+            el.title = 'Двойной клик, чтобы редактировать';
             el.addEventListener('dblclick', function (e) {
                 e.stopPropagation();
                 if (el.contentEditable === 'true') return;
@@ -11205,10 +11205,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         function keyStr(vm, cm) {
             var t = presTrendPhrase(vm.cagrWeight);
-            if (cm.leaderShare >= 70 && t.dir === 'up') return 'Рынок привлекателен высокими темпами роста, но сопряжён с зависимостью от одного поставщика — это ключевой риск';
-            if (t.dir === 'up') return 'Растущий рынок с приемлемым уровнем риска — благоприятен для входа';
-            if (t.dir === 'down') return 'Рынок сжимается — вход требует осторожности и ценовых преимуществ';
-            return 'Стабильный рынок — успех определяется операционной эффективностью в условиях конкуренции';
+            if (cm.leaderShare >= 70 && t.dir === 'up') return 'Рынок привлекателен высокими темпами роста, но зависит от одного поставщика. Это ключевой риск';
+            if (t.dir === 'up') return 'Растущий рынок с приемлемым уровнем риска, благоприятен для входа';
+            if (t.dir === 'down') return 'Рынок сжимается, поэтому вход требует осторожности и ценовых преимуществ';
+            return 'Рынок стабилен, успех определяется операционной эффективностью в условиях конкуренции';
         }
 
         var rows = [
@@ -11250,7 +11250,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var segCol = findAnyColumn(headers, SEGMENT_COLS);
         var yearCol = findColumn(headers, COL_YEAR);
         var wCol = findAnyColumn(headers, WEIGHT_COLS);
-        if (!segCol) return presNoData((slide.title || 'Каналы сбыта') + ' — нет столбца «Сегмент получателя». Выполните обогащение данных.');
+        if (!segCol) return presNoData((slide.title || 'Каналы сбыта') + ': нет столбца «Сегмент получателя». Выполните обогащение данных.');
         if (!wCol || !yearCol || data.length === 0) return presNoData(slide.title || 'Каналы сбыта');
 
         // Сегмент × год по весу
@@ -12475,7 +12475,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (m.leaderShare >= 40) {
                 return m.leader + ' доминирует в поставках' + of + ' (' + presRuNum(m.leaderShare, 1) + '% объёма) при высокой концентрации рынка';
             }
-            return 'Поставки' + of + ' диверсифицированы: ни одна страна не превышает ' + presRuNum(m.leaderShare, 1) + '% — риски по отдельным направлениям снижены';
+            return 'Поставки' + of + ' диверсифицированы: ни одна страна не превышает ' + presRuNum(m.leaderShare, 1) + '%, риски по отдельным направлениям снижены';
         }
 
         if (type === 'price-dynamics' && m.priceMin != null) {
@@ -12533,7 +12533,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else if (m.cagrUsd > m.cagrWeight + 2) {
                     l2 = 'Рост в долларах (' + presRuNum(Math.round(m.cagrUsd)) + '%) опережает физический (' + presRuNum(Math.round(m.cagrWeight)) + '%) — средняя цена закупки растёт';
                 } else {
-                    l2 = 'Долларовая стоимость (' + presRuNum(Math.round(m.cagrUsd)) + '%) растёт соразмерно объёму — средняя цена стабильна';
+                    l2 = 'Долларовая стоимость (' + presRuNum(Math.round(m.cagrUsd)) + '%) растёт соразмерно объёму, средняя цена стабильна';
                 }
                 lines.push(l2 + '.');
             }
@@ -12541,7 +12541,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (m.cagrRub != null && m.cagrUsd != null) {
                 var l3;
                 if (m.cagrRub > m.cagrUsd + 2) {
-                    l3 = 'Рублёвая стоимость растёт быстрее (CAGR ' + presRuNum(Math.round(m.cagrRub)) + '%) из-за ослабления курса — давление на себестоимость для импортёров';
+                    l3 = 'Рублёвая стоимость растёт быстрее (CAGR ' + presRuNum(Math.round(m.cagrRub)) + '%) из-за ослабления курса, это давит на себестоимость для импортёров';
                 } else {
                     l3 = 'Рублёвая стоимость (CAGR ' + presRuNum(Math.round(m.cagrRub)) + '%) отражает динамику долларовых цен и курса';
                 }
@@ -12555,9 +12555,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (m.leaderShare != null) {
                 var c;
-                if (m.leaderShare >= 70) c = 'Рынок монозависим от одного поставщика — это создаёт логистические и ценовые риски';
+                if (m.leaderShare >= 70) c = 'Рынок зависит от одного поставщика, что создаёт логистические и ценовые риски';
                 else if (m.leaderShare >= 40) c = 'Концентрация высокая: лидер формирует основную часть поставок';
-                else c = 'Структура диверсифицирована — зависимость от отдельных стран умеренная';
+                else c = 'Структура диверсифицирована, зависимость от отдельных стран умеренная';
                 if (m.secondName) c += ' (второй по объёму — ' + m.secondName + ', ' + presRuNum(m.secondShare, 1) + '%)';
                 lines.push(c + '.');
             }
@@ -12571,7 +12571,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 lines.push('Средневзвешенная цена варьируется от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения.');
                 var spread = m.priceMin > 0 ? round2((m.priceMax - m.priceMin) / m.priceMin * 100) : 0;
                 if (spread >= 30) {
-                    lines.push('Разброс цен между странами значительный (' + presRuNum(Math.round(spread)) + '%) — выбор поставщика существенно влияет на закупочную стоимость.');
+                    lines.push('Разброс цен между странами значительный (' + presRuNum(Math.round(spread)) + '%), поэтому выбор поставщика существенно влияет на закупочную стоимость.');
                 }
             }
             if (m.leader) {
@@ -12597,7 +12597,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (m.growSegment && m.growSegment.seg) {
                 lines.push('Доля сегмента «' + m.growSegment.seg + '» выросла с ' + presRuNum(m.growSegment.from, 1) +
-                    '% до ' + presRuNum(m.growSegment.to, 1) + '% — структура потребления смещается в его сторону.');
+                    '% до ' + presRuNum(m.growSegment.to, 1) + '%, структура потребления смещается в его сторону.');
             }
             if (m.leadShareFirst != null && m.leadShareLast != null) {
                 var dlt = round2(m.leadShareLast - m.leadShareFirst);
@@ -12618,8 +12618,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (m.usdMax && m.usdMin && m.usdMin > 0) {
                 var vol = round2((m.usdMax - m.usdMin) / m.usdMin * 100);
-                if (vol >= 30) lines.push('Высокая волатильность цен (размах ' + presRuNum(Math.round(vol)) + '%) — рынок подвержен ценовым шокам.');
-                else lines.push('Цены относительно стабильны (размах ' + presRuNum(Math.round(vol)) + '%) — предсказуемый ценовой коридор.');
+                if (vol >= 30) lines.push('Высокая волатильность цен (размах ' + presRuNum(Math.round(vol)) + '%), рынок подвержен ценовым шокам.');
+                else lines.push('Цены относительно стабильны (размах ' + presRuNum(Math.round(vol)) + '%), ценовой коридор предсказуем.');
             }
         }
 
@@ -12679,16 +12679,16 @@ document.addEventListener('DOMContentLoaded', function () {
                     'ключевые показатели подтверждают ' + (t.dir === 'up' ? 'растущий спрос' : (t.dir === 'down' ? 'сжатие спроса' : 'устойчивое состояние')) + ' сегмента.');
             }
             if (cm.leader && cm.leaderShare >= 70) {
-                lines.push('Главный риск — экстремальная зависимость от одного поставщика (' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
+                lines.push('Главный риск это высокая зависимость от одного поставщика (' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
                     '%): диверсификация географии закупок становится приоритетной задачей.');
             } else if (cm.leader) {
                 lines.push('Структура поставок относительно устойчива (лидер ' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
                     '%), что снижает чувствительность рынка к шокам по отдельным направлениям.');
             }
             if (vm.cagrUsd != null && vm.cagrWeight != null && vm.cagrUsd < vm.cagrWeight - 2) {
-                lines.push('Рост физических объёмов опережает стоимостный — рынок растёт за счёт спроса, а не цены; это создаёт условия для входа новых импортёров.');
+                lines.push('Рост физических объёмов опережает стоимостный. Рынок растёт за счёт спроса, а не цены, и это создаёт условия для входа новых импортёров.');
             } else if (vm.cagrRub != null && vm.cagrUsd != null && vm.cagrRub > vm.cagrUsd + 2) {
-                lines.push('Опережающий рост рублёвой стоимости усиливает давление на себестоимость переработчиков — фактор для контроля закупочных цен.');
+                lines.push('Опережающий рост рублёвой стоимости усиливает давление на себестоимость переработчиков. Закупочные цены стоит держать под контролем.');
             }
             lines.push('В среднесрочной перспективе устойчивость рынка будет определяться диверсификацией поставок и управлением валютными и логистическими рисками.');
         }
