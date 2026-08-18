@@ -3275,20 +3275,29 @@ body {
     margin-bottom: 4px;
 }
 
+/* Сброс — вспомогательное действие: текстовая ссылка, а не заметная кнопка */
 .comtrade-reset-btn {
-    padding: 3px 10px;
+    padding: 2px 4px;
     font-size: 12px;
     font-family: inherit;
-    color: var(--color-text-secondary);
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
     cursor: pointer;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    transition: color var(--transition-fast);
 }
 .comtrade-reset-btn:hover {
-    color: var(--color-error);
-    border-color: var(--color-error);
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+}
+
+/* Пара «Год с» / «Год по» — всегда рядом, одним блоком при переносе */
+.comtrade-field-pair {
+    display: flex;
+    gap: 16px;
+}
+.comtrade-field-pair .comtrade-field {
+    min-width: 110px;
 }
 
 .comtrade-regions {

@@ -179,28 +179,32 @@
                                         <option value="M">Месячная</option>
                                     </select>
                                 </label>
-                                <label class="comtrade-field">
-                                    <span class="comtrade-label">Год с</span>
-                                    <input type="number" class="comtrade-year-from" min="1990" max="2030" value="2020">
-                                </label>
-                                <label class="comtrade-field">
-                                    <span class="comtrade-label">Год по</span>
-                                    <input type="number" class="comtrade-year-to" min="1990" max="2030" value="2024">
-                                </label>
+                                <!-- Годы держим вместе: при переносе строки они
+                                     не должны разъезжаться по разным рядам -->
+                                <div class="comtrade-field-pair">
+                                    <label class="comtrade-field">
+                                        <span class="comtrade-label">Год с</span>
+                                        <input type="number" class="comtrade-year-from" min="1990" max="2030" value="2020">
+                                    </label>
+                                    <label class="comtrade-field">
+                                        <span class="comtrade-label">Год по</span>
+                                        <input type="number" class="comtrade-year-to" min="1990" max="2030" value="2024">
+                                    </label>
+                                </div>
                             </div>
 
                             <div class="comtrade-row">
+                                <div class="comtrade-field comtrade-field-grow hs-search">
+                                    <span class="comtrade-label">Справочник кодов — поиск по названию</span>
+                                    <input type="text" class="hs-search-input" placeholder="Название товара, напр. «клубника» или «сыр»" autocomplete="off">
+                                    <div class="hs-search-results" role="listbox" hidden></div>
+                                    <span class="comtrade-hint">Найдите товар по названию и нажмите — код подставится в поле справа.</span>
+                                </div>
                                 <label class="comtrade-field comtrade-field-grow">
                                     <span class="comtrade-label">Коды ТН ВЭД</span>
                                     <input type="text" class="comtrade-codes" placeholder="030617, 0306 — через запятую">
                                     <span class="comtrade-hint">Comtrade работает на уровне HS6. Пусто — вся торговля целиком.</span>
                                 </label>
-                                <div class="comtrade-field comtrade-field-grow hs-search">
-                                    <span class="comtrade-label">Справочник кодов — поиск по названию</span>
-                                    <input type="text" class="hs-search-input" placeholder="Название товара, напр. «клубника» или «сыр»" autocomplete="off">
-                                    <div class="hs-search-results" role="listbox" hidden></div>
-                                    <span class="comtrade-hint">Найдите товар по названию и нажмите — код подставится в поле выше.</span>
-                                </div>
                             </div>
 
                             <div class="comtrade-row">
@@ -280,14 +284,16 @@
                                     </select>
                                     <span class="comtrade-hint">WITS работает только на уровне крупных разделов (животные, топливо, машины…), без отдельных кодов ТН ВЭД.</span>
                                 </label>
-                                <label class="comtrade-field">
-                                    <span class="comtrade-label">Год с</span>
-                                    <input type="number" class="wits-year-from" min="1996" max="2021" value="2017">
-                                </label>
-                                <label class="comtrade-field">
-                                    <span class="comtrade-label">Год по</span>
-                                    <input type="number" class="wits-year-to" min="1996" max="2021" value="2021">
-                                </label>
+                                <div class="comtrade-field-pair">
+                                    <label class="comtrade-field">
+                                        <span class="comtrade-label">Год с</span>
+                                        <input type="number" class="wits-year-from" min="1996" max="2021" value="2017">
+                                    </label>
+                                    <label class="comtrade-field">
+                                        <span class="comtrade-label">Год по</span>
+                                        <input type="number" class="wits-year-to" min="1996" max="2021" value="2021">
+                                    </label>
+                                </div>
                             </div>
 
                             <div class="comtrade-row">
