@@ -204,6 +204,84 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Анализ: сигналы и риски рынка */
+.signals-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+.signals-head h3 { margin: 0; font-size: 18px; }
+.signals-base {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+.signals-note {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin: 0 0 18px;
+}
+
+.signals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+}
+
+.signal-card {
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: var(--color-surface);
+}
+.signal-risk  { border-left-color: var(--color-error); }
+.signal-watch { border-left-color: var(--color-warning); }
+.signal-ok    { border-left-color: var(--color-success); }
+
+.signal-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.signal-title { font-size: 13px; font-weight: 700; }
+.signal-level {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+}
+.signal-risk  .signal-level { background: rgba(220, 38, 38, .12); color: var(--color-error); }
+.signal-watch .signal-level { background: rgba(245, 158, 11, .16); color: #B45309; }
+.signal-ok    .signal-level { background: rgba(22, 163, 74, .12); color: var(--color-success); }
+
+.signal-value {
+    font-size: 22px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    margin-bottom: 8px;
+}
+.signal-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text);
+    margin-bottom: 8px;
+}
+.signal-why {
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--color-text-muted);
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+}
+
 /* Обогащение, неприменимое к текущим данным */
 .enrich-item-off {
     opacity: 0.6;

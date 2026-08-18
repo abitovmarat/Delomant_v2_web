@@ -5688,6 +5688,291 @@ document.addEventListener('DOMContentLoaded', function () {
         return { data: filtered, headers: headers };
     }
 
+    /* ================================
+       Сигналы и риски рынка
+       ================================
+       Считаются арифметикой по уже загруженным данным — без моделей и
+       внешних запросов. Смысл: перевести цифры в утверждения, которые
+       нельзя оспорить, и на которых потом можно строить тексты отчёта.
+
+       Каждый сигнал несёт уровень (ok/watch/risk), число и формулировку
+       с объяснением, почему это важно. */
+
+    function signalLevelWord(level) {
+        return level === 'risk' ? 'Риск' : (level === 'watch' ? 'Внимание' : 'Норма');
+    }
+
+    /** Индекс Херфиндаля–Хиршмана: сумма квадратов долей, 0–10000. */
+    function computeHHI(shares) {
+        return shares.reduce(function (s, p) { return s + p * p; }, 0);
+    }
+
+    function computeMarketSignals(data, headers) {
+        var countryCol = findColumn(headers, 'Страна отправления') ||
+                         findColumn(headers, 'Страна назначения') ||
+                         findColumn(headers, 'Страна-импортёр') ||
+                         findColumn(headers, 'Страна-экспортёр');
+        var yearCol = findColumn(headers, COL_YEAR);
+        var wCol = findAnyColumn(headers, WEIGHT_COLS);
+        var uCol = findAnyColumn(headers, USD_COLS);
+
+        if (!uCol && !wCol) {
+            return { error: 'Нужен столбец стоимости USD или веса.' };
+        }
+
+        // Основная метрика: вес, если он есть (натуральный объём устойчивее
+        // к валютным колебаниям), иначе стоимость
+        var useWeight = !!wCol;
+        var valOf = function (row) {
+            var v = useWeight ? row[wCol] : row[uCol];
+            return typeof v === 'number' ? v : (parseFloat(String(v).replace(',', '.')) || 0);
+        };
+
+        var byCountry = {}, byYear = {}, byCountryYear = {};
+        var total = 0, totalUsd = 0, totalW = 0;
+
+        data.forEach(function (row) {
+            var v = valOf(row);
+            var c = countryCol ? String(row[countryCol] || '').trim() : '';
+            var y = yearCol ? String(row[yearCol] || '').trim() : '';
+            var usd = uCol ? (typeof row[uCol] === 'number' ? row[uCol] : parseFloat(String(row[uCol]).replace(',', '.')) || 0) : 0;
+            var w = wCol ? (typeof row[wCol] === 'number' ? row[wCol] : parseFloat(String(row[wCol]).replace(',', '.')) || 0) : 0;
+
+            total += v; totalUsd += usd; totalW += w;
+            if (c) {
+                if (!byCountry[c]) { byCountry[c] = { v: 0, usd: 0, w: 0 }; }
+                byCountry[c].v += v; byCountry[c].usd += usd; byCountry[c].w += w;
+            }
+            if (y) {
+                if (!byYear[y]) { byYear[y] = { v: 0, usd: 0, w: 0 }; }
+                byYear[y].v += v; byYear[y].usd += usd; byYear[y].w += w;
+            }
+            if (c && y) {
+                var k = c + '|' + y;
+                if (!byCountryYear[k]) { byCountryYear[k] = 0; }
+                byCountryYear[k] += v;
+            }
+        });
+
+        var years = Object.keys(byYear).sort();
+        var countries = Object.keys(byCountry).sort(function (a, b) {
+            return byCountry[b].v - byCountry[a].v;
+        });
+        var signals = [];
+        var unit = useWeight ? 'объёму' : 'стоимости';
+
+        /* --- Концентрация рынка (HHI) --- */
+        if (countries.length > 1 && total > 0) {
+            var shares = countries.map(function (c) { return byCountry[c].v / total * 100; });
+            var hhi = Math.round(computeHHI(shares));
+            var lvl = hhi >= 2500 ? 'risk' : (hhi >= 1500 ? 'watch' : 'ok');
+            signals.push({
+                id: 'hhi', level: lvl, title: 'Концентрация рынка',
+                value: formatNumber(hhi) + ' HHI',
+                text: 'Индекс Херфиндаля–Хиршмана по ' + unit + ' — ' + formatNumber(hhi) + '. ' +
+                    (lvl === 'risk' ? 'Рынок высококонцентрированный: поставки сосредоточены у немногих стран.'
+                     : lvl === 'watch' ? 'Умеренная концентрация: несколько стран определяют рынок.'
+                     : 'Рынок распределённый, зависимости от отдельных поставщиков нет.'),
+                why: 'Порог 1500 — умеренная концентрация, 2500 — высокая (методика антимонопольных ведомств).'
+            });
+
+            /* --- Зависимость от лидера --- */
+            var leadShare = shares[0];
+            var lvl2 = leadShare >= 50 ? 'risk' : (leadShare >= 30 ? 'watch' : 'ok');
+            signals.push({
+                id: 'leader', level: lvl2, title: 'Зависимость от лидера',
+                value: round2(leadShare) + '%',
+                text: 'На ' + countries[0] + ' приходится ' + round2(leadShare) + '% рынка по ' + unit + '. ' +
+                    (lvl2 === 'risk' ? 'Сбой у этого поставщика ударит по большей части поставок.'
+                     : lvl2 === 'watch' ? 'Заметная зависимость — стоит держать альтернативы.'
+                     : 'Критической зависимости от одной страны нет.'),
+                why: 'Доля свыше 50% означает, что замена поставщика потребует перестройки цепочки.'
+            });
+
+            /* --- Сколько стран держат 80% рынка --- */
+            var acc = 0, core = 0;
+            for (var i = 0; i < shares.length; i++) {
+                acc += shares[i]; core++;
+                if (acc >= 80) { break; }
+            }
+            signals.push({
+                id: 'core', level: core <= 2 ? 'watch' : 'ok', title: 'Ядро рынка',
+                value: core + ' из ' + countries.length,
+                text: core + ' ' + (core === 1 ? 'страна обеспечивает' : 'стран(ы) обеспечивают') +
+                    ' 80% поставок из ' + countries.length + ' присутствующих на рынке.',
+                why: 'Показывает, насколько широк реальный выбор поставщиков.'
+            });
+        }
+
+        /* --- Новые и ушедшие страны между первым и последним периодом --- */
+        if (countries.length && years.length >= 2) {
+            var firstY = years[0], lastY = years[years.length - 1];
+            var appeared = [], gone = [];
+            countries.forEach(function (c) {
+                var was = (byCountryYear[c + '|' + firstY] || 0) > 0;
+                var now = (byCountryYear[c + '|' + lastY] || 0) > 0;
+                if (!was && now) { appeared.push(c); }
+                if (was && !now) { gone.push(c); }
+            });
+            if (appeared.length || gone.length) {
+                signals.push({
+                    id: 'churn', level: gone.length > appeared.length ? 'watch' : 'ok',
+                    title: 'Обновление состава поставщиков',
+                    value: '+' + appeared.length + ' / −' + gone.length,
+                    text: 'С ' + firstY + ' по ' + lastY + ' появилось ' + appeared.length +
+                        ' новых стран' + (appeared.length ? ' (' + appeared.slice(0, 3).join(', ') + (appeared.length > 3 ? '…' : '') + ')' : '') +
+                        ', перестало поставлять ' + gone.length +
+                        (gone.length ? ' (' + gone.slice(0, 3).join(', ') + (gone.length > 3 ? '…' : '') + ')' : '') + '.',
+                    why: 'Появление новых поставщиков расширяет выбор, уход — сужает.'
+                });
+            }
+        }
+
+        /* --- Расхождение натуральной и стоимостной динамики --- */
+        if (years.length >= 2 && wCol && uCol) {
+            var f = byYear[years[0]], l = byYear[years[years.length - 1]];
+            if (f.w > 0 && f.usd > 0) {
+                var dW = (l.w / f.w - 1) * 100;
+                var dU = (l.usd / f.usd - 1) * 100;
+                var gap = dU - dW;
+                var lvl3 = Math.abs(gap) >= 15 ? 'watch' : 'ok';
+                signals.push({
+                    id: 'gap', level: lvl3, title: 'Объём против стоимости',
+                    value: (gap >= 0 ? '+' : '') + round2(gap) + ' п.п.',
+                    text: 'За ' + years[0] + '–' + years[years.length - 1] + ' объём изменился на ' +
+                        (dW >= 0 ? '+' : '') + round2(dW) + '%, стоимость — на ' + (dU >= 0 ? '+' : '') + round2(dU) + '%. ' +
+                        (gap > 15 ? 'Стоимость растёт быстрее объёма — рынок дорожает.'
+                         : gap < -15 ? 'Объём растёт быстрее стоимости — цены падают.'
+                         : 'Динамика объёма и стоимости сопоставима.'),
+                    why: 'Расхождение показывает, чем вызван рост рынка: спросом или ценой.'
+                });
+            }
+        }
+
+        /* --- Волатильность цены по годам --- */
+        if (years.length >= 3 && wCol && uCol) {
+            var prices = years.map(function (y) {
+                var a = byYear[y];
+                return a.w > 0 ? a.usd / a.w : null;
+            }).filter(function (p) { return p !== null; });
+            if (prices.length >= 3) {
+                var mean = prices.reduce(function (s, p) { return s + p; }, 0) / prices.length;
+                var sd = Math.sqrt(prices.reduce(function (s, p) { return s + Math.pow(p - mean, 2); }, 0) / prices.length);
+                var cv = mean > 0 ? sd / mean * 100 : 0;
+                var lvl4 = cv >= 25 ? 'risk' : (cv >= 12 ? 'watch' : 'ok');
+                signals.push({
+                    id: 'vol', level: lvl4, title: 'Волатильность цены',
+                    value: round2(cv) + '%',
+                    text: 'Средняя цена по годам колеблется на ' + round2(cv) + '% от среднего уровня ($' +
+                        round2(mean) + '/кг). ' +
+                        (lvl4 === 'risk' ? 'Цена нестабильна — закупку стоит планировать с запасом.'
+                         : lvl4 === 'watch' ? 'Умеренные колебания цены.'
+                         : 'Цена стабильна.'),
+                    why: 'Коэффициент вариации: насколько цена отклоняется от собственного среднего.'
+                });
+            }
+        }
+
+        /* --- Ценовая премия стран относительно рынка --- */
+        if (wCol && uCol && totalW > 0 && countries.length > 1) {
+            var mktPrice = totalUsd / totalW;
+            var prem = countries.filter(function (c) { return byCountry[c].w > 0; })
+                .map(function (c) {
+                    return { name: c, price: byCountry[c].usd / byCountry[c].w,
+                             share: byCountry[c].v / total * 100 };
+                })
+                .filter(function (p) { return p.share >= 3; }) // мелочь искажает картину
+                .map(function (p) { p.prem = (p.price / mktPrice - 1) * 100; return p; })
+                .sort(function (a, b) { return b.prem - a.prem; });
+            if (prem.length >= 2) {
+                var hi = prem[0], lo = prem[prem.length - 1];
+                signals.push({
+                    id: 'premium', level: 'ok', title: 'Ценовой разброс по странам',
+                    value: round2(hi.prem) + '% … ' + round2(lo.prem) + '%',
+                    text: 'Дороже рынка — ' + hi.name + ' ($' + round2(hi.price) + '/кг, ' +
+                        (hi.prem >= 0 ? '+' : '') + round2(hi.prem) + '% к средней $' + round2(mktPrice) + '/кг). ' +
+                        'Дешевле — ' + lo.name + ' ($' + round2(lo.price) + '/кг, ' + round2(lo.prem) + '%).',
+                    why: 'Премия отражает качество, сорт или условия поставки — повод сравнить предложения.'
+                });
+            }
+        }
+
+        /* --- Полнота последнего периода --- */
+        if (years.length >= 3) {
+            var vals = years.map(function (y) { return byYear[y].v; });
+            var prev = vals.slice(0, -1);
+            var avgPrev = prev.reduce(function (s, v) { return s + v; }, 0) / prev.length;
+            var lastV = vals[vals.length - 1];
+            if (avgPrev > 0 && lastV < avgPrev * 0.6) {
+                signals.push({
+                    id: 'partial', level: 'watch', title: 'Последний период неполный',
+                    value: round2(lastV / avgPrev * 100) + '% от среднего',
+                    text: 'За ' + years[years.length - 1] + ' учтено заметно меньше обычного. ' +
+                        'Скорее всего период ещё не закрыт — не сравнивайте его с полными годами напрямую.',
+                    why: 'Защита от вывода «рынок рухнул», когда данные просто ещё не пришли.'
+                });
+            }
+        }
+
+        return {
+            signals: signals,
+            base: { unit: useWeight ? 'вес нетто' : 'стоимость USD',
+                    countries: countries.length, years: years, total: total }
+        };
+    }
+
+    function renderSignalsAnalysis(data, headers) {
+        var res = computeMarketSignals(data, headers);
+        if (res.error) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>' + marketEsc(res.error) + '</p></div>';
+            return;
+        }
+        if (!res.signals.length) {
+            analysisResults.innerHTML = '<div class="analysis-empty"><p>Для сигналов нужны страны и хотя бы два периода.</p></div>';
+            return;
+        }
+
+        var order = { risk: 0, watch: 1, ok: 2 };
+        var list = res.signals.slice().sort(function (a, b) { return order[a.level] - order[b.level]; });
+
+        var html = '<div class="signals-head">' +
+            '<h3>Сигналы и риски</h3>' +
+            '<span class="signals-base">база: ' + marketEsc(res.base.unit) + ' · ' +
+            res.base.countries + ' стран · ' + res.base.years.length + ' периодов</span></div>';
+        html += '<p class="signals-note">Все значения посчитаны по загруженным данным — без внешних источников и без моделей.</p>';
+        html += '<div class="signals-grid">';
+        list.forEach(function (s) {
+            html += '<div class="signal-card signal-' + s.level + '">' +
+                '<div class="signal-top">' +
+                    '<span class="signal-title">' + marketEsc(s.title) + '</span>' +
+                    '<span class="signal-level">' + signalLevelWord(s.level) + '</span>' +
+                '</div>' +
+                '<div class="signal-value">' + marketEsc(s.value) + '</div>' +
+                '<div class="signal-text">' + marketEsc(s.text) + '</div>' +
+                '<div class="signal-why">' + marketEsc(s.why) + '</div>' +
+            '</div>';
+        });
+        html += '</div>';
+        html += '<div class="analysis-export-actions">' +
+            '<button class="btn btn-primary signals-export-xlsx">Скачать XLSX</button>' +
+            '<button class="btn btn-secondary signals-export-csv">Скачать CSV</button></div>';
+        analysisResults.innerHTML = html;
+
+        var rows = list.map(function (s) {
+            return {
+                'Сигнал': s.title, 'Уровень': signalLevelWord(s.level),
+                'Значение': s.value, 'Вывод': s.text, 'Как считается': s.why
+            };
+        });
+        var hdrs = ['Сигнал', 'Уровень', 'Значение', 'Вывод', 'Как считается'];
+        analysisResults.querySelector('.signals-export-xlsx').addEventListener('click', function () {
+            exportAnalysisXLSX(rows, hdrs, 'market_signals');
+        });
+        analysisResults.querySelector('.signals-export-csv').addEventListener('click', function () {
+            exportAnalysisCSV(rows, hdrs, 'market_signals');
+        });
+    }
+
     // Контрагентский уровень (получатели/отправители/изготовители) —
     // отдельный тариф, в экспертном режиме недоступен даже в обход
     // скрытых карточек (напр. через консоль).
@@ -5760,6 +6045,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     companyLabel: 'Изготовитель',
                     exportName: 'top_manufacturers'
                 });
+                return;
+            }
+            if (type === 'signals') {
+                renderSignalsAnalysis(data, headers);
                 return;
             }
             if (type === 'marketChanges') {
