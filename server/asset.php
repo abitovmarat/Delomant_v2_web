@@ -67,11 +67,32 @@ if (!is_file($path)) {
  * + ETag/Last-Modified: неизменный файл отдаётся быстрым 304, новая сборка
  * подхватывается обычным обновлением страницы.
  */
+/*
+ * Предсжатая версия. Снимки зарубежной таможни весят по 3+ МБ, и отдача
+ * такого объёма срывалась на полпути — JSON приходил усечённым каждый раз
+ * в новом месте. Рядом с файлом сборка кладёт .gz (меньше в 4–5 раз);
+ * если браузер сообщил, что понимает gzip, отдаём его и помечаем
+ * Content-Encoding — распаковка на стороне браузера прозрачна для fetch.
+ */
+$useGzip = false;
+$gzPath  = $path . '.gz';
+if (is_file($gzPath) &&
+    strpos(strtolower((string)($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '')), 'gzip') !== false) {
+    $useGzip = true;
+    $path = $gzPath;
+}
+
 $mtime = filemtime($path);
 $size  = filesize($path);
-$etag  = '"' . $mtime . '-' . $size . '"';
+// Кодировка входит в ETag: иначе сжатый и обычный ответы делили бы один
+// ключ кэша, и браузер мог получить не тот вариант.
+$etag  = '"' . $mtime . '-' . $size . ($useGzip ? '-gz' : '') . '"';
 
 header('Content-Type: ' . $type);
+header('Vary: Accept-Encoding');
+if ($useGzip) {
+    header('Content-Encoding: gzip');
+}
 header('Cache-Control: private, no-cache');
 header('ETag: ' . $etag);
 header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');

@@ -39,6 +39,6 @@ RewriteRule ^(app|assets|cache)(/|$) - [F]
 <FilesMatch "^(config|comtrade_key|users)\.php$">
     Require all denied
 </FilesMatch>
-<FilesMatch "\.dat$">
+<FilesMatch "\.dat(\.gz)?$">
     Require all denied
 </FilesMatch>

@@ -26,6 +26,7 @@
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 
 const OUT = 'dist';
 
@@ -100,8 +101,27 @@ let appHtml = read('index.html')
     .replace('src="scripts/main.js"', 'src="scripts/main.js?v=' + buildId + '"')
     .replace('src="scripts/foreign_customs.js"', 'src="scripts/foreign_customs.js?v=' + buildId + '"');
 sizes.push(['app/index.html', write('app/index.html', appHtml)]);
+/*
+ * Ассеты кладём и в исходном виде, и предсжатыми (.gz).
+ *
+ * Зачем: снимки зарубежной таможни весят по 3+ МБ, и отдача такого объёма
+ * через PHP срывалась — JSON приходил усечённым каждый раз в новом месте.
+ * Gzip уменьшает их примерно в 4–5 раз, поэтому вероятность обрыва падает,
+ * а загрузка ускоряется. asset.php отдаёт .gz, если браузер сообщил, что
+ * понимает gzip; иначе — обычный файл, поэтому оба варианта нужны.
+ */
 for (const [src, dst] of ASSETS) {
-    sizes.push([dst, write(dst, read(src))]);
+    const data = read(src);
+    sizes.push([dst, write(dst, data)]);
+
+    // Мелочь сжимать незачем — выигрыш меньше накладных расходов
+    if (Buffer.byteLength(data, 'latin1') > 65536) {
+        const gz = gzipSync(Buffer.from(data, 'latin1'), { level: 9 });
+        const full = join(OUT, dst + '.gz');
+        mkdirSync(dirname(full), { recursive: true });
+        writeFileSync(full, gz);
+        sizes.push([dst + '.gz', gz.length]);
+    }
 }
 
 const pad = Math.max(...sizes.map(([n]) => n.length));
