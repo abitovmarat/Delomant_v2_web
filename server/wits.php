@@ -239,6 +239,26 @@ if ($body === false) {
 if ($status === 429) {
     fail(429, 'WITS: превышен лимит запросов, повторите через несколько секунд');
 }
+/*
+ * 404 у WITS — это «NoRecordsFound», а не сбой: по такой комбинации
+ * страны/товара/года данных просто нет. Особенно часто у TRAINS: он
+ * отстаёт от торговой статистики на несколько лет, и горизонт у каждой
+ * страны свой (проверено: у России последний год 2021, у Египта 2019).
+ * Отдаём пустой набор, чтобы фронтенд показал «нет ставки», а не ошибку.
+ */
+if ($status === 404) {
+    $empty = json_encode([
+        'datasource' => $datasource,
+        'indicator'  => $isTrains ? ('TRAINS/' . $datatype) : $indicator,
+        'count'      => 0,
+        'data'       => [],
+        'note'       => 'no-records',
+    ], JSON_UNESCAPED_UNICODE);
+    file_put_contents($cacheFile, $empty, LOCK_EX);
+    header('X-Wits-Cache: miss');
+    echo $empty;
+    exit;
+}
 if ($status !== 200) {
     fail(502, 'WITS вернул ' . $status);
 }

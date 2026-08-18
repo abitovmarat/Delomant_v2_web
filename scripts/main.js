@@ -1986,14 +1986,23 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         if (wanted.length === 0) { wanted = Object.keys(byCode).slice(0, 15); }
 
-        // Год: последний из выгрузки. TRAINS отстаёт от Comtrade, поэтому
-        // при отсутствии данных отступаем на несколько лет назад.
+        /*
+         * Годы. TRAINS заметно отстаёт от торговой статистики, и горизонт у
+         * каждой страны свой: проверено — у России последний год 2021, у
+         * Египта 2019. Поэтому просим широкое окно назад от последнего года
+         * выгрузки и берём по каждой стране самый свежий найденный год.
+         * WITS отдаёт несколько лет одним запросом, так что это дёшево.
+         */
         var years = (comtradePresentation.yearRows || [])
             .filter(function (r) { return r['Год'] !== 'CAGR'; })
             .map(function (r) { return parseInt(r['Год'], 10); })
             .filter(function (y) { return !isNaN(y); });
         var lastYear = years.length ? Math.max.apply(null, years) : new Date().getFullYear() - 3;
-        var askYears = [lastYear, lastYear - 1, lastYear - 2, lastYear - 3].filter(function (y) { return y >= 1988; });
+        var askYears = [];
+        for (var back = 0; back <= 9; back++) {
+            var y = lastYear - back;
+            if (y >= 1988) { askYears.push(y); }
+        }
 
         tariffBlock.hidden = false;
         tariffBlock.innerHTML = '<div class="tariff-note">Загружаем тарифные ставки WITS TRAINS…</div>';
@@ -2059,7 +2068,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var withRate = out.filter(function (r) { return r.rate !== null; });
         if (withRate.length === 0) {
             tariffBlock.innerHTML = '<div class="tariff-note">По коду ' + marketEsc(hs) +
-                ' тарифные ставки в TRAINS не найдены. Обычно это значит, что страны ещё не отчитались за выбранные годы.</div>';
+                ' тарифных ставок не нашлось. База TRAINS отстаёт от торговой статистики ' +
+                'на несколько лет, и по некоторым странам данных нет вовсе — это ограничение источника, ' +
+                'а не ошибка загрузки.</div>';
             return;
         }
 
@@ -2073,7 +2084,9 @@ document.addEventListener('DOMContentLoaded', function () {
             'Показана ставка РНБ (режим наибольшего благоприятствования) — базовая, ' +
             'без торговых соглашений. «Разброс» — минимальная и максимальная ставка внутри позиции: ' +
             'средняя может скрывать разные подкатегории товара. ' +
-            'Страны одного союза (ЕС) имеют общую ставку.</div>';
+            'Страны одного союза (ЕС) имеют общую ставку. ' +
+            '<b>Год указан у каждой строки:</b> база тарифов отстаёт от торговой статистики, ' +
+            'и у разных стран последний доступный год свой — прочерк значит, что страна не отчиталась.</div>';
 
         var maxT = withRate.reduce(function (m, r) { return Math.max(m, r.tonnes || 0); }, 0) || 1;
         var maxR = withRate.reduce(function (m, r) { return Math.max(m, r.rate || 0); }, 0) || 1;
