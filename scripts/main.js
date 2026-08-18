@@ -69,8 +69,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         '<li>Выгрузка обработанного массива в Excel или CSV</li>' +
                     '</ul>' +
                     '<p class="locked-note">Источники, доступные в этом режиме (UN Comtrade, ' +
-                    'World Bank WITS, зарубежная таможня), приходят уже подготовленными — ' +
-                    'обработка им не требуется, анализ работает сразу.</p>' +
+                    'World Bank WITS, зарубежная таможня), приходят уже подготовленными. ' +
+                    'Обработка им не нужна, анализ работает сразу.</p>' +
                 '</div>';
         }
     }
@@ -1871,7 +1871,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // --- Инсайты (динамические) ---
-        var insight1 = 'Крупнейший ' + buyer + ' — <b>' + esc(leader['Страна']) + '</b>: ' +
+        var insight1 = 'Крупнейший ' + buyer + ' это <b>' + esc(leader['Страна']) + '</b>: ' +
             (typeof leader['Доля по объёму, %'] === 'number' ? round2(leader['Доля по объёму, %']) + '% всего ' + flowNoun + ' региона' : '') +
             (ratio ? ', в ' + round2(ratio) + '× больше ближайшей страны' : '');
         var insight2;
@@ -1885,23 +1885,23 @@ document.addEventListener('DOMContentLoaded', function () {
         var priceMin = priceItems.length ? priceItems[priceItems.length - 1] : null;
         var priceMax = priceItems.length ? priceItems[0] : null;
         var insight3 = priceMin && priceMax
-            ? 'Цена входа различается по странам: от <b>$' + round2(priceMin.v) + '/кг</b> до <b>$' + round2(priceMax.v) + '/кг</b> — объём и премиальность рынка не совпадают'
+            ? 'Цена входа сильно различается: от <b>$' + round2(priceMin.v) + '/кг</b> до <b>$' + round2(priceMax.v) + '/кг</b>. Объём закупок и премиальность рынка не совпадают'
             : 'Средняя импортная цена по странам';
 
         // --- Выводы ---
         var takes = [];
-        takes.push('<b>' + esc(leader['Страна']) + '</b> — рынок №1 по объёму (' +
+        takes.push('<b>' + esc(leader['Страна']) + '</b> занимает первое место по объёму (' +
             (typeof leader['Доля по объёму, %'] === 'number' ? round2(leader['Доля по объёму, %']) + '%, ' : '') +
             fmtT(leader['Объём (тонн)']) + ' за период)' +
             (leaderTrend !== null ? (leaderTrend < 0 ? ', но с нисходящим трендом' : ' и с растущим спросом') : '') + '.');
         if (grower && grower !== leader['Страна'] && growerPct > 0) {
-            takes.push('<b>' + esc(grower) + '</b> — точка роста: ' + (growerPct >= 0 ? '+' : '') + round2(growerPct) + '% за период, кандидат на перспективу.');
+            takes.push('<b>' + esc(grower) + '</b> растёт быстрее всех: ' + (growerPct >= 0 ? '+' : '') + round2(growerPct) + '% за период. Хороший кандидат на перспективу.');
         }
         if (reexport) {
-            takes.push('<b>Нидерланды и Бельгию не путать со спросом</b> — крупные хабы (Роттердам, Антверпен), значительная часть их объёма это реэкспорт, а не конечное потребление.');
+            takes.push('<b>Нидерланды и Бельгию не стоит путать со спросом.</b> Это крупные хабы, Роттердам и Антверпен, и заметная часть их объёма приходится на реэкспорт, а не на конечное потребление.');
         }
         if (priceMax && priceMin) {
-            takes.push('<b>Ценовое позиционирование:</b> премиальный рынок — ' + esc(priceMax.name) + ' ($' + round2(priceMax.v) + '/кг), самый дешёвый вход — ' + esc(priceMin.name) + ' ($' + round2(priceMin.v) + '/кг).');
+            takes.push('<b>Ценовое позиционирование.</b> Дороже всего покупает ' + esc(priceMax.name) + ' ($' + round2(priceMax.v) + '/кг), дешевле всего ' + esc(priceMin.name) + ' ($' + round2(priceMin.v) + '/кг).');
         }
         var takesHtml = takes.map(function (t, i) {
             return '<div class="lead-take"><div class="dot">' + (i + 1) + '</div><p>' + t + '</p></div>';
@@ -1950,7 +1950,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pages += '<section class="page"><div class="insight">' + insight2 + '</div><div class="body">' +
                 '<div class="chart-no">Диаграмма 2.</div><div class="chart-title">Динамика ' + flowNoun + ' по ключевым странам, ' + firstYear + '–' + lastYear + ', тыс. тонн</div>' +
                 lineSvg + '<div class="legend">' + legendHtml + '</div>' +
-                '<div style="margin-top:22px" class="note"><b>Ключевой вывод:</b> при выборе целевого рынка смотреть не только на текущий объём, но и на тренд — лидерство во времени не абсолютно.</div></div>' +
+                '<div style="margin-top:22px" class="note"><b>Ключевой вывод.</b> При выборе целевого рынка смотрите и на объём, и на тренд. Лидерство во времени не бывает вечным.</div></div>' +
                 '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
         }
 
@@ -1959,7 +1959,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pages += '<section class="page"><div class="insight">' + insight3 + '</div><div class="body">' +
                 '<div class="chart-no">Диаграмма 3.</div><div class="chart-title">Средняя импортная цена по странам, ' + firstYear + '–' + lastYear + ', USD/кг</div>' +
                 '<div class="bars">' + bars2 + '</div>' +
-                (reexport ? '<div style="margin-top:24px" class="note"><b>Важно при интерпретации:</b> Нидерланды и Бельгия — логистические хабы; часть их «импорта» это реэкспорт, а не конечное потребление. Германия, Польша, Италия ближе к конечным рынкам.</div>' : '') +
+                (reexport ? '<div style="margin-top:24px" class="note"><b>Важно при интерпретации.</b> Нидерланды и Бельгия это логистические хабы, часть их «импорта» приходится на реэкспорт, а не на конечное потребление. Германия, Польша и Италия ближе к конечным рынкам.</div>' : '') +
                 '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
         }
 
@@ -1981,7 +1981,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }).join('');
 
             pages += '<section class="page"><div class="insight">' +
-                (bestTr ? 'Лучшее сочетание спроса и низкого барьера — <b>' + esc(bestTr.country) +
+                (bestTr ? 'Лучшее сочетание спроса и низкого барьера у страны <b>' + esc(bestTr.country) +
                     '</b>: ' + fmtInt(bestTr.tonnes / 1000) + ' тыс. т при пошлине ' + round2(bestTr.rate) + '%'
                     : 'Тарифные барьеры входа по странам') +
                 '</div><div class="body">' +
@@ -1990,8 +1990,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 (codeStr ? ', код ' + esc(codeStr) : '') + '</div>' +
                 '<div class="bars">' + trBars + '</div>' +
                 '<div style="margin-top:24px" class="note"><b>Как читать:</b> показана базовая ставка режима ' +
-                'наибольшего благоприятствования — пошлина без торговых соглашений. Объём говорит, ' +
-                'сколько рынок покупает, ставка — сколько стоит на него зайти. Страны одного ' +
+                'наибольшего благоприятствования, то есть пошлина без торговых соглашений. Объём говорит, ' +
+                'сколько рынок покупает, а ставка во сколько обойдётся вход. Страны одного ' +
                 'таможенного союза (ЕС) имеют общую ставку.</div>' +
                 '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote +
                 '</span><span>' + (++pageNo) + '</span></div></section>';
@@ -2001,11 +2001,11 @@ document.addEventListener('DOMContentLoaded', function () {
         pages += '<section class="page"><div class="insight">Выводы и рекомендации</div><div class="body">' +
             takesHtml +
             '<div style="margin-top:28px" class="chart-no">Источник данных</div><table class="src">' +
-            '<tr><td>Источник</td><td>UN Comtrade — база внешнеторговой статистики ООН (' + partnerCtx + ')</td></tr>' +
+            '<tr><td>Источник</td><td>UN Comtrade, база внешнеторговой статистики ООН (' + partnerCtx + ')</td></tr>' +
             (codeStr ? '<tr><td>Товар</td><td>ТН ВЭД ' + esc(codeStr) + ' (уровень HS6)</td></tr>' : '') +
-            '<tr><td>Охват</td><td>' + p.summaryRows.length + ' стран · направление — ' + (isImport ? 'импорт' : 'экспорт') + ' · период ' + firstYear + '–' + lastYear + '</td></tr>' +
+            '<tr><td>Охват</td><td>' + p.summaryRows.length + ' стран · направление ' + (isImport ? 'импорт' : 'экспорт') + ' · период ' + firstYear + '–' + lastYear + '</td></tr>' +
             '<tr><td>Единицы</td><td>Тонны (нетто-вес) и тыс. USD. Данные не содержат сведений об отправителях, получателях и изготовителях</td></tr>' +
-            (tariffRows.length > 0 ? '<tr><td>Тарифы</td><td>WITS TRAINS (UNCTAD) — ставка РНБ по коду ' +
+            (tariffRows.length > 0 ? '<tr><td>Тарифы</td><td>WITS TRAINS (UNCTAD), ставка РНБ по коду ' +
                 (codeStr ? esc(codeStr) : '') + ', последний доступный год по каждой стране</td></tr>' : '') +
             '<tr><td>Выгружено</td><td>' + dateStr + '</td></tr></table>' +
             '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
@@ -2185,7 +2185,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (withRate.length === 0) {
             tariffBlock.innerHTML = '<div class="tariff-note">По коду ' + marketEsc(hs) +
                 ' тарифных ставок не нашлось. База TRAINS отстаёт от торговой статистики ' +
-                'на несколько лет, и по некоторым странам данных нет вовсе — это ограничение источника, ' +
+                'на несколько лет, а по некоторым странам данных нет вовсе. Это ограничение источника, ' +
                 'а не ошибка загрузки.</div>';
             return;
         }
@@ -2196,13 +2196,13 @@ document.addEventListener('DOMContentLoaded', function () {
             '<span class="tariff-source">WITS TRAINS · ставка РНБ</span></div>';
         html += '<div class="tariff-explain">' +
             '<b>Как это читать.</b> Comtrade показывает, <i>сколько</i> страна закупает, ' +
-            'но не говорит, <i>по какой пошлине</i>. Ставка ниже — дешевле зайти на рынок. ' +
-            'Показана ставка РНБ (режим наибольшего благоприятствования) — базовая, ' +
-            'без торговых соглашений. «Разброс» — минимальная и максимальная ставка внутри позиции: ' +
-            'средняя может скрывать разные подкатегории товара. ' +
+            'но не говорит, <i>по какой пошлине</i>. Чем ставка ниже, тем дешевле зайти на рынок. ' +
+            'Показана базовая ставка РНБ, то есть режим наибольшего благоприятствования ' +
+            'без торговых соглашений. В колонке «разброс» стоят минимальная и максимальная ставка ' +
+            'внутри позиции: за средним значением могут прятаться разные подкатегории товара. ' +
             'Страны одного союза (ЕС) имеют общую ставку. ' +
             '<b>Год указан у каждой строки:</b> база тарифов отстаёт от торговой статистики, ' +
-            'и у разных стран последний доступный год свой — прочерк значит, что страна не отчиталась.</div>';
+            'и у разных стран последний доступный год свой. Прочерк значит, что страна не отчиталась.</div>';
 
         var maxT = withRate.reduce(function (m, r) { return Math.max(m, r.tonnes || 0); }, 0) || 1;
         var maxR = withRate.reduce(function (m, r) { return Math.max(m, r.rate || 0); }, 0) || 1;
@@ -5778,11 +5778,11 @@ document.addEventListener('DOMContentLoaded', function () {
             signals.push({
                 id: 'hhi', level: lvl, title: 'Концентрация рынка',
                 value: formatNumber(hhi) + ' HHI',
-                text: 'Индекс Херфиндаля–Хиршмана по ' + unit + ' — ' + formatNumber(hhi) + '. ' +
-                    (lvl === 'risk' ? 'Рынок высококонцентрированный: поставки сосредоточены у немногих стран.'
-                     : lvl === 'watch' ? 'Умеренная концентрация: несколько стран определяют рынок.'
+                text: 'Индекс Херфиндаля–Хиршмана по ' + unit + ' равен ' + formatNumber(hhi) + '. ' +
+                    (lvl === 'risk' ? 'Рынок высококонцентрированный, поставки сосредоточены у немногих стран.'
+                     : lvl === 'watch' ? 'Концентрация умеренная, рынок определяют несколько стран.'
                      : 'Рынок распределённый, зависимости от отдельных поставщиков нет.'),
-                why: 'Порог 1500 — умеренная концентрация, 2500 — высокая (методика антимонопольных ведомств).'
+                why: 'Значение выше 1500 говорит об умеренной концентрации, выше 2500 о высокой. Так считают антимонопольные ведомства.'
             });
 
             /* --- Зависимость от лидера --- */
@@ -5794,9 +5794,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: round2(leadShare) + '%',
                 text: 'На ' + countries[0] + ' приходится ' + round2(leadShare) + '% рынка по ' + unit + '. ' +
                     (lvl2 === 'risk' ? 'Сбой у этого поставщика ударит по большей части поставок.'
-                     : lvl2 === 'watch' ? 'Заметная зависимость — стоит держать альтернативы.'
+                     : lvl2 === 'watch' ? 'Зависимость заметная, стоит держать запасные варианты.'
                      : 'Критической зависимости от одной страны нет.'),
-                why: 'Доля свыше 50% означает, что замена поставщика потребует перестройки цепочки.'
+                why: 'Если на одну страну приходится больше половины рынка, заменить её быстро не получится.'
             });
 
             /* --- Сколько стран держат 80% рынка --- */
@@ -5811,7 +5811,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: core + ' из ' + countries.length,
                 text: core + ' ' + (core === 1 ? 'страна обеспечивает' : 'стран(ы) обеспечивают') +
                     ' 80% поставок из ' + countries.length + ' присутствующих на рынке.',
-                why: 'Показывает, насколько широк реальный выбор поставщиков.'
+                why: 'Чем меньше стран держат основную долю, тем уже реальный выбор поставщиков.'
             });
         }
 
@@ -5835,7 +5835,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         ' новых стран' + (appeared.length ? ' (' + appeared.slice(0, 3).join(', ') + (appeared.length > 3 ? '…' : '') + ')' : '') +
                         ', перестало поставлять ' + gone.length +
                         (gone.length ? ' (' + gone.slice(0, 3).join(', ') + (gone.length > 3 ? '…' : '') + ')' : '') + '.',
-                    why: 'Появление новых поставщиков расширяет выбор, уход — сужает.'
+                    why: 'Новые поставщики расширяют выбор, а уход прежних его сужает.'
                 });
             }
         }
@@ -5853,11 +5853,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     id: 'gap', level: lvl3, title: 'Объём против стоимости',
                     value: (gap >= 0 ? '+' : '') + round2(gap) + ' п.п.',
                     text: 'За ' + years[0] + '–' + years[years.length - 1] + ' объём изменился на ' +
-                        (dW >= 0 ? '+' : '') + round2(dW) + '%, стоимость — на ' + (dU >= 0 ? '+' : '') + round2(dU) + '%. ' +
-                        (gap > 15 ? 'Стоимость растёт быстрее объёма — рынок дорожает.'
-                         : gap < -15 ? 'Объём растёт быстрее стоимости — цены падают.'
+                        (dW >= 0 ? '+' : '') + round2(dW) + '%, а стоимость на ' + (dU >= 0 ? '+' : '') + round2(dU) + '%. ' +
+                        (gap > 15 ? 'Стоимость растёт быстрее объёма, значит рынок дорожает.'
+                         : gap < -15 ? 'Объём растёт быстрее стоимости, значит цены падают.'
                          : 'Динамика объёма и стоимости сопоставима.'),
-                    why: 'Расхождение показывает, чем вызван рост рынка: спросом или ценой.'
+                    why: 'По расхождению видно, чем вызван рост рынка: спросом или подорожанием.'
                 });
             }
         }
@@ -5879,10 +5879,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     value: round2(cv) + '%',
                     text: 'Средняя цена по годам колеблется на ' + round2(cv) + '% от среднего уровня ($' +
                         round2(mean) + '/кг). ' +
-                        (lvl4 === 'risk' ? 'Цена нестабильна — закупку стоит планировать с запасом.'
+                        (lvl4 === 'risk' ? 'Цена нестабильна, закупку стоит планировать с запасом.'
                          : lvl4 === 'watch' ? 'Умеренные колебания цены.'
                          : 'Цена стабильна.'),
-                    why: 'Коэффициент вариации: насколько цена отклоняется от собственного среднего.'
+                    why: 'Коэффициент вариации показывает, насколько сильно цена отклоняется от своего среднего значения.'
                 });
             }
         }
@@ -5904,10 +5904,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 signals.push({
                     id: 'premium', level: 'ok', title: 'Ценовой разброс по странам',
                     value: round2(hi.prem) + '% … ' + round2(lo.prem) + '%',
-                    text: 'Дороже рынка — ' + hi.name + ' ($' + round2(hi.price) + '/кг, ' +
+                    text: 'Дороже всего покупает ' + hi.name + ' ($' + round2(hi.price) + '/кг, ' +
                         (hi.prem >= 0 ? '+' : '') + round2(hi.prem) + '% к средней $' + round2(mktPrice) + '/кг). ' +
-                        'Дешевле — ' + lo.name + ' ($' + round2(lo.price) + '/кг, ' + round2(lo.prem) + '%).',
-                    why: 'Премия отражает качество, сорт или условия поставки — повод сравнить предложения.'
+                        'Дешевле всего ' + lo.name + ' ($' + round2(lo.price) + '/кг, ' + round2(lo.prem) + '%).',
+                    why: 'Разница в цене обычно объясняется качеством, сортом или условиями поставки. Стоит сравнить предложения.'
                 });
             }
         }
@@ -5924,8 +5924,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     id: 'partial', level: 'watch', title: 'Последний период неполный',
                     value: round2(lastV / avgPrev * 100) + '% от среднего',
                     text: 'За ' + years[years.length - 1] + ' учтено заметно меньше обычного. ' +
-                        'Скорее всего период ещё не закрыт — не сравнивайте его с полными годами напрямую.',
-                    why: 'Защита от вывода «рынок рухнул», когда данные просто ещё не пришли.'
+                        'Скорее всего период ещё не закрыт, поэтому не сравнивайте его с полными годами напрямую.',
+                    why: 'Страхует от вывода «рынок рухнул» в ситуации, когда данные за период просто не успели прийти.'
                 });
             }
         }
@@ -5965,7 +5965,7 @@ document.addEventListener('DOMContentLoaded', function () {
             recs.push({ level: 'ok', action: 'Рассмотреть расширение закупок',
                 because: 'Рынок растёт (' + (m.growthV >= 0 ? '+' : '') + round2(m.growthV) +
                     '% по объёму), при этом поставки распределены между многими странами (HHI ' +
-                    formatNumber(m.hhi) + ') — есть из кого выбирать.' });
+                    formatNumber(m.hhi) + '), так что выбор поставщиков есть.' });
         }
         if (growing && concentrated) {
             recs.push({ level: 'watch', action: 'Искать альтернативных поставщиков',
@@ -5975,16 +5975,16 @@ document.addEventListener('DOMContentLoaded', function () {
         if (dependent) {
             recs.push({ level: 'risk', action: 'Снизить зависимость от ключевого поставщика',
                 because: 'На ' + m.leadName + ' приходится ' + round2(m.leadShare) +
-                    '% рынка — сбой у него затронет большую часть поставок.' });
+                    '% рынка. Сбой у него затронет большую часть поставок.' });
         }
         if (shrinking && pricierMkt) {
             recs.push({ level: 'risk', action: 'Готовиться к дефициту и росту цен',
-                because: 'Объём падает (' + round2(m.growthV) + '%), а стоимость держится или растёт — ' +
-                    'признак сокращения предложения, а не спроса.' });
+                because: 'Объём падает (' + round2(m.growthV) + '%), а стоимость держится или растёт. Это ' +
+                    'похоже на сокращение предложения, а не спроса.' });
         }
         if (growing && cheaperMkt) {
             recs.push({ level: 'ok', action: 'Благоприятное окно для закупки',
-                because: 'Объём растёт, а цены снижаются — предложение опережает спрос.' });
+                because: 'Объём растёт, а цены снижаются. Предложение опережает спрос.' });
         }
         if (m.appeared && m.appeared.length) {
             recs.push({ level: 'watch', action: 'Квалифицировать новых поставщиков',
@@ -6001,17 +6001,17 @@ document.addEventListener('DOMContentLoaded', function () {
         if (m.cv !== null && m.cv >= 25) {
             recs.push({ level: 'watch', action: 'Фиксировать цену контрактом',
                 because: 'Цена колеблется на ' + round2(m.cv) +
-                    '% от среднего уровня — закупка по споту несёт ценовой риск.' });
+                    '% от среднего уровня, поэтому закупка по споту несёт ценовой риск.' });
         }
         if (m.premiumHi && m.premiumLo && (m.premiumHi.prem - m.premiumLo.prem) >= 40) {
             recs.push({ level: 'ok', action: 'Сравнить условия дорогих и дешёвых направлений',
                 because: 'Разница цен между ' + m.premiumHi.name + ' и ' + m.premiumLo.name +
                     ' превышает ' + round2(m.premiumHi.prem - m.premiumLo.prem) +
-                    ' п.п. — стоит понять, чем она объясняется: сортом, качеством или логистикой.' });
+                    ' п.п. Стоит понять, чем она объясняется: сортом, качеством или логистикой.' });
         }
         if (m.partial) {
             recs.push({ level: 'watch', action: 'Не сравнивать последний период с полными годами',
-                because: 'За последний период учтено заметно меньше данных — вероятно, он ещё не закрыт.' });
+                because: 'За последний период учтено заметно меньше данных, скорее всего он ещё не закрыт.' });
         }
 
         return recs;
@@ -10390,14 +10390,14 @@ document.addEventListener('DOMContentLoaded', function () {
         {
             id: 'segment',
             label: 'Сегмент получателя',
-            description: 'Опт / розница / производство / кондитерская / HoReCa / дистрибуция — по названию и словарю',
+            description: 'Опт, розница, производство, кондитерская, HoReCa или дистрибуция. Определяется по названию и словарю',
             adds: [COL_SEGMENT],
             run: enrichSegment
         },
         {
             id: 'region',
             label: 'Регион получателя (по ИНН)',
-            description: 'Субъект РФ по первым двум цифрам ИНН — для анализа продаж по регионам. Это регион налогового органа, обычно совпадает с местом компании',
+            description: 'Субъект РФ по первым двум цифрам ИНН, чтобы смотреть продажи по регионам. Это регион налогового органа, обычно он совпадает с местом компании',
             adds: [COL_REGION],
             run: enrichRegion
         },
@@ -10411,14 +10411,14 @@ document.addEventListener('DOMContentLoaded', function () {
         {
             id: 'product',
             label: 'Продукт получателя',
-            description: 'Чем занимается получатель — по вашей разметке. Требует файл с размеченным столбцом',
+            description: 'Чем занимается получатель, по вашей разметке. Нужен файл с размеченным столбцом',
             adds: [PRODUCT_COLS[0]],
             run: enrichProduct
         },
         {
             id: 'price-kg',
             label: 'Цена за килограмм',
-            description: 'Стоимость USD за кг по каждой строке — для сравнения и поиска аномалий',
+            description: 'Стоимость USD за кг по каждой строке, чтобы сравнивать цены и искать аномалии',
             adds: [COL_PRICE_KG],
             run: enrichPriceKg
         },
@@ -10426,21 +10426,21 @@ document.addEventListener('DOMContentLoaded', function () {
         {
             id: 'hs-name',
             label: 'Наименование товара по коду',
-            description: 'Расшифровывает код ТН ВЭД в название товара — работает и на статистике ООН, где есть только коды',
+            description: 'Расшифровывает код ТН ВЭД в название товара. Работает и на статистике ООН, где есть только коды',
             adds: [COL_HS_NAME],
             run: enrichHsName
         },
         {
             id: 'geo',
             label: 'Регион мира по стране',
-            description: 'Континент страны (Европа, Азия, Африка…) — чтобы группировать выгрузку по регионам, а не по отдельным странам',
+            description: 'Континент страны: Европа, Азия, Африка и так далее. Позволяет группировать выгрузку по регионам, а не по отдельным странам',
             adds: [COL_GEO],
             run: enrichGeo
         },
         {
             id: 'tariff',
             label: 'Ставка ввозной пошлины',
-            description: 'Базовая ставка РНБ по стране и коду ТН ВЭД из WITS TRAINS — видно, сколько стоит зайти на рынок, а не только сколько он покупает',
+            description: 'Базовая ставка РНБ по стране и коду ТН ВЭД из WITS TRAINS. Показывает, во сколько обойдётся вход на рынок',
             adds: [COL_TARIFF, COL_TARIFF_Y],
             run: enrichTariff
         }

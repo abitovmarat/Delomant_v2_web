@@ -573,7 +573,7 @@
         if (ser) {
             sel.innerHTML = d.meta.periods.map(function (p, i) {
                 return '<option value="' + i + '"' + (i === state.periodIdx ? ' selected' : '') + '>' +
-                    esc(d.meta.period_labels[i]) + (d.meta.partial[i] ? ' — неполный' : '') + '</option>';
+                    esc(d.meta.period_labels[i]) + (d.meta.partial[i] ? ' (неполный)' : '') + '</option>';
             }).join('');
         }
         // В ряде без партнёра искать по нему нечего — поле скрываем
@@ -583,10 +583,10 @@
         document.getElementById('fc-qhs').placeholder =
             ((ctry || ser) ? (d.meta.hs_level === 4 ? 'HS4' : 'HS6') : 'HS6') + ' или название товара…';
         document.getElementById('fc-foot').textContent = 'Показаны топ-300 по текущему фильтру и сортировке. ' +
-            (ser ? 'Значения — за выбранный период; спарклайн — за все периоды, пунктиром отмечен неполный. Δ считается к предыдущему периоду.'
+            (ser ? 'Значения показаны за выбранный период, спарклайн за все периоды. Пунктиром отмечен неполный период. Δ считается к предыдущему.'
                  : ctry ? 'Детализация до контрагента невозможна: в источнике только коды.'
-                        : 'Клик по строке — все коды этого импортёра.') +
-            ' Клик по заголовку — сортировка.';
+                        : 'Клик по строке открывает все коды этого импортёра.') +
+            ' Клик по заголовку сортирует таблицу.';
         document.getElementById('fc-tiles').innerHTML = tiles(d.meta).map(function (t) {
             return '<div class="fc-tile"><div class="v">' + t[1] + '</div><div class="l">' + t[0] + '</div></div>';
         }).join('');
