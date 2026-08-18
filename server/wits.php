@@ -53,11 +53,21 @@ function fail(int $status, string $message): void
 
 /* --- Разбор и проверка параметров --------------------------------- */
 
-// Датасорс: торговля или тарифы. Только эти два — произвольный не пускаем.
+/*
+ * Датасорс. Только известные — произвольный не пускаем.
+ *
+ * tradestats-* работают на уровне 16 товарных разделов (product/all) и
+ * НЕ принимают конкретные коды ТН ВЭД: запрос с product/081110 отвечает
+ * «Invalid Product Code» (проверено). Для разбора конкретных позиций
+ * есть отдельный датасет trn (UNCTAD TRAINS) — он отдаёт тарифные
+ * ставки как раз по HS6 и берёт несколько стран и лет за один запрос.
+ */
 $datasource = (string)($_GET['datasource'] ?? 'tradestats-trade');
-if ($datasource !== 'tradestats-trade' && $datasource !== 'tradestats-tariff') {
-    fail(400, 'datasource должен быть tradestats-trade или tradestats-tariff');
+$allowedSources = ['tradestats-trade', 'tradestats-tariff', 'trn'];
+if (!in_array($datasource, $allowedSources, true)) {
+    fail(400, 'datasource должен быть tradestats-trade, tradestats-tariff или trn');
 }
+$isTrains = ($datasource === 'trn');
 
 /**
  * Списки значений через запятую: проверяем каждый элемент по шаблону и
@@ -91,8 +101,19 @@ function countryCode(string $raw, int $max, string $label): string
     return strtolower(codeList($up, '/^[A-Z]{3}$/', $max, $label));
 }
 
-$reporter = countryCode((string)($_GET['reporter'] ?? ''), 10, 'Репортёр');
-$partner  = countryCode((string)($_GET['partner']  ?? 'WLD'), 10, 'Партнёр');
+/*
+ * Коды стран. У tradestats это ISO3-буквы (rus, deu), у TRAINS — числовые
+ * M49 (643, 276), те же, что у UN Comtrade: это и позволяет связать
+ * тарифы с уже загруженной выгрузкой Comtrade без таблицы соответствий.
+ * Партнёр 000 у TRAINS означает «весь мир» (базовая ставка РНБ).
+ */
+if ($isTrains) {
+    $reporter = codeList((string)($_GET['reporter'] ?? ''), '/^\d{1,4}$/', 40, 'Репортёр');
+    $partner  = codeList((string)($_GET['partner']  ?? '000'), '/^\d{1,4}$/', 10, 'Партнёр');
+} else {
+    $reporter = countryCode((string)($_GET['reporter'] ?? ''), 10, 'Репортёр');
+    $partner  = countryCode((string)($_GET['partner']  ?? 'WLD'), 10, 'Партнёр');
+}
 
 // Годы: 4 знака, не больше 15 за запрос.
 $year = codeList((string)($_GET['year'] ?? ''), '/^\d{4}$/', 15, 'Год');
@@ -118,8 +139,15 @@ $indicatorWhitelist = [
     'MFN-SMPL-AVRG', 'MFN-WGHTD-AVRG',  // ставка режима наибольшего благоприятствования
 ];
 $indicator = strtoupper(trim((string)($_GET['indicator'] ?? 'MPRT-TRD-VL')));
-if (!in_array($indicator, $indicatorWhitelist, true)) {
+if (!$isTrains && !in_array($indicator, $indicatorWhitelist, true)) {
     fail(400, 'Неизвестный индикатор: ' . $indicator);
+}
+
+// TRAINS вместо индикатора принимает тип данных: как отчитались (reported)
+// или оценка WITS там, где отчёта нет (aveestimated).
+$datatype = strtolower(trim((string)($_GET['datatype'] ?? 'reported')));
+if ($datatype !== 'reported' && $datatype !== 'aveestimated') {
+    fail(400, 'datatype должен быть reported или aveestimated');
 }
 
 /* --- Кэш ----------------------------------------------------------- */
@@ -134,15 +162,27 @@ $toWits = static function (string $s): string {
     return str_replace(',', ';', $s);
 };
 
-$path = sprintf(
-    '%s/reporter/%s/year/%s/partner/%s/product/%s/indicator/%s',
-    $datasource,
-    $toWits($reporter),
-    $toWits($year),
-    $toWits($partner),
-    $toWits($product),
-    rawurlencode($indicator)
-);
+// У TRAINS свой порядок сегментов и datatype вместо индикатора
+if ($isTrains) {
+    $path = sprintf(
+        'trn/reporter/%s/partner/%s/product/%s/year/%s/datatype/%s',
+        $toWits($reporter),
+        $toWits($partner),
+        $toWits($product),
+        $toWits($year),
+        rawurlencode($datatype)
+    );
+} else {
+    $path = sprintf(
+        '%s/reporter/%s/year/%s/partner/%s/product/%s/indicator/%s',
+        $datasource,
+        $toWits($reporter),
+        $toWits($year),
+        $toWits($partner),
+        $toWits($product),
+        rawurlencode($indicator)
+    );
+}
 
 $cacheKey  = sha1($path);
 $cacheFile = CACHE_DIR . '/wits_' . $cacheKey . '.json';
@@ -212,7 +252,7 @@ if ($records === null) {
 
 $result = json_encode([
     'datasource' => $datasource,
-    'indicator'  => $indicator,
+    'indicator'  => $isTrains ? ('TRAINS/' . $datatype) : $indicator,
     'count'      => count($records),
     'data'       => $records,
 ], JSON_UNESCAPED_UNICODE);
@@ -254,7 +294,7 @@ function parseWitsSdmx(string $xml): ?array
             foreach ($obs->attributes() as $k => $v) {
                 $oAttr[(string)$k] = (string)$v;
             }
-            $out[] = [
+            $rec = [
                 'reporter'  => $sAttr['REPORTER']    ?? '',
                 'partner'   => $sAttr['PARTNER']     ?? '',
                 'product'   => $sAttr['PRODUCTCODE'] ?? '',
@@ -263,6 +303,16 @@ function parseWitsSdmx(string $xml): ?array
                 'value'     => isset($oAttr['OBS_VALUE']) ? (float)$oAttr['OBS_VALUE'] : null,
                 'source'    => $oAttr['DATASOURCE']  ?? ($sAttr['DATASOURCE'] ?? ''),
             ];
+            // Поля TRAINS: тип ставки и разброс тарифных линий внутри позиции.
+            // Разброс важен: средняя 17,6% может скрывать линии от 14,4 до 20,8.
+            if (isset($oAttr['TARIFFTYPE'])) {
+                $rec['tariffType'] = $oAttr['TARIFFTYPE'];
+                $rec['measure']    = $oAttr['OBS_VALUE_MEASURE'] ?? '';
+                $rec['lines']      = isset($oAttr['TOTALNOOFLINES']) ? (int)$oAttr['TOTALNOOFLINES'] : null;
+                $rec['minRate']    = isset($oAttr['MIN_RATE']) ? (float)$oAttr['MIN_RATE'] : null;
+                $rec['maxRate']    = isset($oAttr['MAX_RATE']) ? (float)$oAttr['MAX_RATE'] : null;
+            }
+            $out[] = $rec;
         }
     }
     return $out;

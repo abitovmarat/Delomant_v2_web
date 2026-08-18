@@ -1233,8 +1233,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (comtradeOriginalBtn) { comtradeOriginalBtn.hidden = true; }
         if (comtradePresentationBtn) { comtradePresentationBtn.hidden = true; }
         if (comtradeReportBtn) { comtradeReportBtn.hidden = true; }
+        if (comtradeTariffBtn) { comtradeTariffBtn.hidden = true; }
+        if (tariffBlock) { tariffBlock.hidden = true; tariffBlock.innerHTML = ''; }
         comtradeRawRows = [];
         comtradePresentation = null;
+        comtradeTariffData = null;
         setComtradeStatus('Запрос 1 из ' + batches.length + '…', 'progress');
 
         var collected = [];
@@ -1270,6 +1273,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Записка формируется из той же сводки, что и Excel-презентация
                 if (comtradeReportBtn && comtradePresentation.summaryRows.length > 0) {
                     comtradeReportBtn.hidden = false;
+                }
+                // Тарифы TRAINS доступны только по конкретному коду ТН ВЭД
+                var tariffCode = (params.codes || [])[0];
+                if (comtradeTariffBtn && tariffCode && tariffCode !== 'TOTAL' && tariffCode !== 'ALL') {
+                    comtradeTariffBtn.hidden = false;
                 }
 
                 // Ярлык и подпись источника зависят от партнёра: «импорт РФ»
@@ -1796,6 +1804,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var CSS = comtradeReportCss();
         var pages = '';
+        var pageNo = 1; // титул
 
         // 1. Титул
         pages += '<section class="page cover">' +
@@ -1818,7 +1827,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '</div>' +
             '<div class="chart-no">Диаграмма 1.</div><div class="chart-title">ТОП-' + top.length + ' стран по объёму ' + flowNoun + ', суммарно ' + firstYear + '–' + lastYear + '</div>' +
             '<div class="bars">' + bars1 + '</div></div>' +
-            '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>2</span></div></section>';
+            '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
 
         // 3. Динамика
         if (lineSvg) {
@@ -1826,7 +1835,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<div class="chart-no">Диаграмма 2.</div><div class="chart-title">Динамика ' + flowNoun + ' по ключевым странам, ' + firstYear + '–' + lastYear + ', тыс. тонн</div>' +
                 lineSvg + '<div class="legend">' + legendHtml + '</div>' +
                 '<div style="margin-top:22px" class="note"><b>Ключевой вывод:</b> при выборе целевого рынка смотреть не только на текущий объём, но и на тренд — лидерство во времени не абсолютно.</div></div>' +
-                '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>3</span></div></section>';
+                '<div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
         }
 
         // 4. Цены
@@ -1835,10 +1844,44 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<div class="chart-no">Диаграмма 3.</div><div class="chart-title">Средняя импортная цена по странам, ' + firstYear + '–' + lastYear + ', USD/кг</div>' +
                 '<div class="bars">' + bars2 + '</div>' +
                 (reexport ? '<div style="margin-top:24px" class="note"><b>Важно при интерпретации:</b> Нидерланды и Бельгия — логистические хабы; часть их «импорта» это реэкспорт, а не конечное потребление. Германия, Польша, Италия ближе к конечным рынкам.</div>' : '') +
-                '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>4</span></div></section>';
+                '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
         }
 
-        // 5. Выводы + источник
+        // Тарифные барьеры — только если пользователь их загрузил (WITS TRAINS).
+        // Это то, чего нет в Comtrade: ставка пошлины по той же позиции.
+        var tariffRows = (comtradeTariffData || []).filter(function (r) { return r.rate !== null; });
+        if (tariffRows.length > 0) {
+            var maxTr = tariffRows.reduce(function (m, r) { return Math.max(m, r.rate); }, 0) || 1;
+            var bestTr = tariffRows.slice().sort(function (x, y) {
+                return (y.tonnes / (1 + y.rate)) - (x.tonnes / (1 + x.rate));
+            })[0];
+            var trBars = tariffRows.slice(0, 10).map(function (r) {
+                var w = (r.rate / maxTr * 100).toFixed(1);
+                var lead = bestTr && r.country === bestTr.country ? ' lead' : '';
+                return '<div class="bar-row"><div class="bar-name">' + esc(r.country) + '</div>' +
+                    '<div class="bar-track"><div class="bar-fill' + lead + '" style="width:' + w + '%"></div></div>' +
+                    '<div class="bar-val"><b>' + round2(r.rate) + '%</b> <span class="sh">· ' +
+                    fmtInt((r.tonnes || 0) / 1000) + ' тыс. т</span></div></div>';
+            }).join('');
+
+            pages += '<section class="page"><div class="insight">' +
+                (bestTr ? 'Лучшее сочетание спроса и низкого барьера — <b>' + esc(bestTr.country) +
+                    '</b>: ' + fmtInt(bestTr.tonnes / 1000) + ' тыс. т при пошлине ' + round2(bestTr.rate) + '%'
+                    : 'Тарифные барьеры входа по странам') +
+                '</div><div class="body">' +
+                '<div class="chart-no">Диаграмма 4.</div>' +
+                '<div class="chart-title">Ставка ввозной пошлины (РНБ) и объём закупок' +
+                (codeStr ? ', код ' + esc(codeStr) : '') + '</div>' +
+                '<div class="bars">' + trBars + '</div>' +
+                '<div style="margin-top:24px" class="note"><b>Как читать:</b> показана базовая ставка режима ' +
+                'наибольшего благоприятствования — пошлина без торговых соглашений. Объём говорит, ' +
+                'сколько рынок покупает, ставка — сколько стоит на него зайти. Страны одного ' +
+                'таможенного союза (ЕС) имеют общую ставку.</div>' +
+                '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote +
+                '</span><span>' + (++pageNo) + '</span></div></section>';
+        }
+
+        // Выводы + источник
         pages += '<section class="page"><div class="insight">Выводы и рекомендации</div><div class="body">' +
             takesHtml +
             '<div style="margin-top:28px" class="chart-no">Источник данных</div><table class="src">' +
@@ -1846,8 +1889,10 @@ document.addEventListener('DOMContentLoaded', function () {
             (codeStr ? '<tr><td>Товар</td><td>ТН ВЭД ' + esc(codeStr) + ' (уровень HS6)</td></tr>' : '') +
             '<tr><td>Охват</td><td>' + p.summaryRows.length + ' стран · направление — ' + (isImport ? 'импорт' : 'экспорт') + ' · период ' + firstYear + '–' + lastYear + '</td></tr>' +
             '<tr><td>Единицы</td><td>Тонны (нетто-вес) и тыс. USD. Данные не содержат сведений об отправителях, получателях и изготовителях</td></tr>' +
+            (tariffRows.length > 0 ? '<tr><td>Тарифы</td><td>WITS TRAINS (UNCTAD) — ставка РНБ по коду ' +
+                (codeStr ? esc(codeStr) : '') + ', последний доступный год по каждой стране</td></tr>' : '') +
             '<tr><td>Выгружено</td><td>' + dateStr + '</td></tr></table>' +
-            '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>5</span></div></section>';
+            '</div><div class="footer"><span class="wm">DELOMANT</span><span>' + footNote + '</span><span>' + (++pageNo) + '</span></div></section>';
 
         return '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">' +
             '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
@@ -1886,6 +1931,199 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (comtradeReportBtn) {
         comtradeReportBtn.addEventListener('click', downloadComtradeReport);
+    }
+
+    /* ================================
+       Тарифные барьеры (WITS TRAINS) поверх выгрузки Comtrade
+       ================================
+       Comtrade говорит, СКОЛЬКО страна ввозит, но молчит о том, ПО КАКОЙ
+       ставке. Тарифы живут в отдельном датасете WITS — TRAINS. Ключевое:
+       tradestats-* работают только на 16 товарных разделах и не принимают
+       конкретный код (проверено: «Invalid Product Code»), а TRAINS отдаёт
+       ставку ровно по HS6 — то есть по той же позиции, что мы загрузили.
+
+       Связать источники удалось без таблицы соответствий: коды стран у
+       TRAINS числовые M49 — те же, что reporterCode у Comtrade. */
+
+    var comtradeTariffBtn = document.querySelector('.comtrade-tariff-btn');
+    var tariffBlock = document.querySelector('.tariff-block');
+    var comtradeTariffData = null; // [{country, code, rate, min, max, lines}] — и для записки
+
+    /** Коды стран (M49) из сырого ответа Comtrade: код → русское имя. */
+    function comtradeReporterCodes() {
+        var names = {};
+        comtradeCountries.forEach(function (c) { names[String(c.code)] = c.name; });
+
+        var map = {};
+        comtradeRawRows.forEach(function (r) {
+            var code = r.reporterCode;
+            if (code === undefined || code === null) { return; }
+            map[String(code)] = names[String(code)] || ('код ' + code);
+        });
+        return map;
+    }
+
+    function loadComtradeTariffs() {
+        if (!comtradePresentation || !tariffBlock) { return; }
+        var params = comtradePresentation.reportParams || {};
+        var codes = params.codes || [];
+        var hs = codes[0];
+
+        if (!hs || hs === 'TOTAL' || hs === 'ALL') {
+            tariffBlock.hidden = false;
+            tariffBlock.innerHTML = '<div class="tariff-note">Тарифы показываются для конкретного кода ТН ВЭД. ' +
+                'Укажите код в поле «Коды ТН ВЭД» и загрузите данные заново.</div>';
+            return;
+        }
+
+        var byCode = comtradeReporterCodes();
+        // Ограничиваем список: тарифы интересны по значимым рынкам, а у
+        // прокси стоит потолок на число стран в одном запросе.
+        var topNames = comtradePresentation.summaryRows.slice(0, 15).map(function (r) { return r['Страна']; });
+        var wanted = [];
+        Object.keys(byCode).forEach(function (code) {
+            if (topNames.indexOf(byCode[code]) !== -1) { wanted.push(code); }
+        });
+        if (wanted.length === 0) { wanted = Object.keys(byCode).slice(0, 15); }
+
+        // Год: последний из выгрузки. TRAINS отстаёт от Comtrade, поэтому
+        // при отсутствии данных отступаем на несколько лет назад.
+        var years = (comtradePresentation.yearRows || [])
+            .filter(function (r) { return r['Год'] !== 'CAGR'; })
+            .map(function (r) { return parseInt(r['Год'], 10); })
+            .filter(function (y) { return !isNaN(y); });
+        var lastYear = years.length ? Math.max.apply(null, years) : new Date().getFullYear() - 3;
+        var askYears = [lastYear, lastYear - 1, lastYear - 2, lastYear - 3].filter(function (y) { return y >= 1988; });
+
+        tariffBlock.hidden = false;
+        tariffBlock.innerHTML = '<div class="tariff-note">Загружаем тарифные ставки WITS TRAINS…</div>';
+
+        var url = WITS_PROXY_URL + '?datasource=trn' +
+            '&reporter=' + encodeURIComponent(wanted.join(',')) +
+            '&partner=000' +
+            '&product=' + encodeURIComponent(hs) +
+            '&year=' + encodeURIComponent(askYears.join(',')) +
+            '&datatype=reported';
+
+        fetch(url, { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                if (json.error) { throw new Error(json.error); }
+                renderComtradeTariffs(json.data || [], byCode, hs);
+            })
+            .catch(function (e) {
+                tariffBlock.innerHTML = '<div class="tariff-note tariff-note-error">Не удалось загрузить тарифы: ' +
+                    marketEsc(e.message) + '</div>';
+            });
+    }
+
+    /** Соединяем ставку с объёмом: по каждой стране берём самый свежий год. */
+    function renderComtradeTariffs(rows, byCode, hs) {
+        var latest = {}; // код страны → запись с максимальным годом
+        rows.forEach(function (r) {
+            if (r.value === null || r.value === undefined) { return; }
+            var code = String(parseInt(r.reporter, 10)); // «276» и «0276» — одно и то же
+            var year = parseInt(r.year, 10);
+            if (!latest[code] || year > latest[code].year) {
+                latest[code] = {
+                    year: year, rate: r.value, min: r.minRate, max: r.maxRate,
+                    lines: r.lines, type: r.tariffType || 'MFN'
+                };
+            }
+        });
+
+        // Имя страны → код, чтобы подтянуть ставку к строке сводки
+        var nameToCode = {};
+        Object.keys(byCode).forEach(function (code) {
+            nameToCode[byCode[code]] = String(parseInt(code, 10));
+        });
+
+        var out = [];
+        comtradePresentation.summaryRows.slice(0, 15).forEach(function (row) {
+            var name = row['Страна'];
+            var t = latest[nameToCode[name]];
+            out.push({
+                country: name,
+                tonnes: row['Объём (тонн)'],
+                share: row['Доля по объёму, %'],
+                price: row['Средняя цена, USD/кг'],
+                rate: t ? t.rate : null,
+                min: t ? t.min : null,
+                max: t ? t.max : null,
+                lines: t ? t.lines : null,
+                year: t ? t.year : null
+            });
+        });
+        comtradeTariffData = out;
+
+        var withRate = out.filter(function (r) { return r.rate !== null; });
+        if (withRate.length === 0) {
+            tariffBlock.innerHTML = '<div class="tariff-note">По коду ' + marketEsc(hs) +
+                ' тарифные ставки в TRAINS не найдены. Обычно это значит, что страны ещё не отчитались за выбранные годы.</div>';
+            return;
+        }
+
+        // Пояснение — чтобы пользователь понимал, что именно он видит
+        var html = '<div class="tariff-head">' +
+            '<h4>Тарифные барьеры входа · код ' + marketEsc(hs) + '</h4>' +
+            '<span class="tariff-source">WITS TRAINS · ставка РНБ</span></div>';
+        html += '<div class="tariff-explain">' +
+            '<b>Как это читать.</b> Comtrade показывает, <i>сколько</i> страна закупает, ' +
+            'но не говорит, <i>по какой пошлине</i>. Ставка ниже — дешевле зайти на рынок. ' +
+            'Показана ставка РНБ (режим наибольшего благоприятствования) — базовая, ' +
+            'без торговых соглашений. «Разброс» — минимальная и максимальная ставка внутри позиции: ' +
+            'средняя может скрывать разные подкатегории товара. ' +
+            'Страны одного союза (ЕС) имеют общую ставку.</div>';
+
+        var maxT = withRate.reduce(function (m, r) { return Math.max(m, r.tonnes || 0); }, 0) || 1;
+        var maxR = withRate.reduce(function (m, r) { return Math.max(m, r.rate || 0); }, 0) || 1;
+
+        html += '<div class="tariff-list">';
+        out.forEach(function (r) {
+            var barVol = Math.max(3, Math.round((r.tonnes || 0) / maxT * 100));
+            var rateTxt = r.rate === null ? '—' : round2(r.rate) + '%';
+            var barRate = r.rate === null ? 0 : Math.max(3, Math.round(r.rate / maxR * 100));
+            // Хороший рынок = большой объём при низкой ставке
+            var cls = r.rate === null ? 'unknown' : (r.rate <= 5 ? 'low' : (r.rate <= 15 ? 'mid' : 'high'));
+            // Компактно: год и разброс линий. Подробности — в подсказке.
+            var hasSpread = r.min !== null && r.max !== null &&
+                r.min !== undefined && r.max !== undefined && r.min !== r.max;
+            var spread = hasSpread ? ' · ' + round2(r.min) + '–' + round2(r.max) + '%' : '';
+            var spreadTitle = hasSpread
+                ? 'Внутри позиции ' + (r.lines || '') + ' тарифных линий со ставками от ' +
+                  round2(r.min) + '% до ' + round2(r.max) + '%'
+                : '';
+
+            html += '<div class="tariff-row">' +
+                '<div class="tariff-country">' + marketEsc(r.country) + '</div>' +
+                '<div class="tariff-metric">' +
+                    '<div class="tariff-bar"><div class="tariff-fill vol" style="width:' + barVol + '%"></div></div>' +
+                    '<span class="tariff-val">' + formatNumber(Math.round((r.tonnes || 0) / 1000)) + ' тыс. т</span>' +
+                '</div>' +
+                '<div class="tariff-metric">' +
+                    '<div class="tariff-bar"><div class="tariff-fill rate ' + cls + '" style="width:' + barRate + '%"></div></div>' +
+                    '<span class="tariff-val tariff-rate ' + cls + '">' + rateTxt + '</span>' +
+                '</div>' +
+                '<div class="tariff-extra" title="' + marketEsc(spreadTitle) + '">' +
+                    (r.year || '') + spread + '</div>' +
+            '</div>';
+        });
+        html += '</div>';
+
+        // Короткий вывод: где сочетание «много покупают» и «низкая ставка»
+        var best = withRate.slice().sort(function (a, b) {
+            return (b.tonnes / (1 + b.rate)) - (a.tonnes / (1 + a.rate));
+        })[0];
+        if (best) {
+            html += '<div class="tariff-verdict">Лучшее сочетание объёма и низкой ставки: <b>' +
+                marketEsc(best.country) + '</b> — ' + formatNumber(Math.round(best.tonnes / 1000)) +
+                ' тыс. т при ставке ' + round2(best.rate) + '%.</div>';
+        }
+        tariffBlock.innerHTML = html;
+    }
+
+    if (comtradeTariffBtn) {
+        comtradeTariffBtn.addEventListener('click', loadComtradeTariffs);
     }
 
     /* ================================

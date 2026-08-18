@@ -204,6 +204,132 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Тарифные барьеры (WITS TRAINS) поверх выгрузки Comtrade */
+.tariff-block {
+    margin-top: 20px;
+    padding: 18px 20px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.tariff-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.tariff-head h4 {
+    margin: 0;
+    font-size: 15px;
+}
+.tariff-source {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tariff-explain {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--color-text-secondary);
+    background: var(--color-primary-light);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+}
+.tariff-explain b { color: var(--color-text); }
+
+.tariff-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tariff-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 1fr 130px;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    background: var(--color-bg);
+}
+
+.tariff-country {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tariff-metric {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.tariff-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-border);
+    overflow: hidden;
+    min-width: 30px;
+}
+.tariff-fill { height: 100%; border-radius: 999px; }
+.tariff-fill.vol { background: var(--color-primary); }
+.tariff-fill.rate.low  { background: var(--color-success); }
+.tariff-fill.rate.mid  { background: var(--color-warning); }
+.tariff-fill.rate.high { background: var(--color-error); }
+
+.tariff-val {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+.tariff-rate { font-weight: 700; }
+.tariff-rate.low  { color: var(--color-success); }
+.tariff-rate.mid  { color: var(--color-warning); }
+.tariff-rate.high { color: var(--color-error); }
+
+.tariff-extra {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tariff-verdict {
+    margin-top: 14px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    background: rgba(22, 163, 74, 0.10);
+    color: var(--color-text);
+    font-size: 13px;
+}
+
+.tariff-note {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+.tariff-note-error { color: var(--color-error); }
+
+@media (max-width: 900px) {
+    .tariff-row { grid-template-columns: 1fr 1fr; }
+    .tariff-country { grid-column: 1 / -1; }
+    .tariff-extra { grid-column: 1 / -1; text-align: left; }
+}
+
 /* Справочник кодов ТН ВЭД — выпадающий список результатов поиска */
 /* Растущее поле: код и справочник встают рядом, на узком экране переносятся */
 .comtrade-field-grow {
