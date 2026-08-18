@@ -5376,7 +5376,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function renderProcessingMessage(text) {
+        // Модуля может не быть: в демонстрационном режиме он заменён витриной
         var container = document.querySelector('.processing-preview');
+        if (!container) { return; }
         container.innerHTML =
             '<div class="preview-placeholder">' +
             '  <p class="preview-placeholder-text">' + text + '</p>' +
@@ -5385,6 +5387,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderPreviewResult(data, log, headers) {
         var container = document.querySelector('.processing-preview');
+        if (!container) { return; }
         var html = '<h3 class="processing-section-title">Отчёт об обработке</h3>';
 
         html += '<div class="processing-log">';
