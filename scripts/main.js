@@ -5638,26 +5638,57 @@ document.addEventListener('DOMContentLoaded', function () {
         return formatNumber(Math.round(value));
     }
 
+    var MARKET_KIND_META = {
+        growth:      { icon: '📈', sign: 'positive' },
+        decline:     { icon: '📉', sign: 'negative' },
+        new:         { icon: '✨', sign: 'positive' },
+        disappeared: { icon: '👋', sign: 'negative' }
+    };
+
+    /*
+     * Карточки-строки вместо сухой таблицы: имя позиции, база → текущее
+     * значение, цветная пилюля с % и полоса-бар, наглядно показывающая
+     * масштаб изменения относительно самой заметной позиции в списке.
+     */
     function marketChangeTable(title, rows, result, topN, kind) {
+        var meta = MARKET_KIND_META[kind] || { icon: '', sign: 'positive' };
+        var shown = rows.slice(0, topN);
+        var maxAbs = shown.reduce(function (m, r) { return Math.max(m, Math.abs(r.delta)); }, 0) || 1;
+
         var html = '<section class="market-change-section market-change-' + kind + '">';
-        html += '<h4>' + marketEsc(title) + ' <span>' + formatNumber(rows.length) + '</span></h4>';
-        html += '<div class="data-table-wrapper"><table class="data-table market-change-table">';
-        html += '<thead><tr><th>' + marketEsc(result.dimensionLabel) + '</th>' +
-            '<th>' + marketEsc(result.basePeriod) + '</th><th>' + marketEsc(result.currentPeriod) + '</th>' +
-            '<th>Изменение</th><th>Изменение, %</th></tr></thead><tbody>';
-        rows.slice(0, topN).forEach(function (row) {
-            var pct = row.pct == null ? 'новая база' : (row.pct >= 0 ? '+' : '') + round2(row.pct) + '%';
-            html += '<tr><td>' + marketEsc(row.key) + '</td>' +
-                '<td class="numeric">' + marketFormatValue(row.base, result.metric) + '</td>' +
-                '<td class="numeric">' + marketFormatValue(row.current, result.metric) + '</td>' +
-                '<td class="numeric market-delta ' + (row.delta >= 0 ? 'positive' : 'negative') + '">' +
-                    (row.delta >= 0 ? '+' : '') + marketFormatValue(row.delta, result.metric) + '</td>' +
-                '<td class="numeric">' + pct + '</td></tr>';
-        });
-        if (!rows.length) {
-            html += '<tr><td colspan="5" class="market-change-empty">Нет позиций</td></tr>';
+        html += '<h4><span class="market-change-icon" aria-hidden="true">' + meta.icon + '</span>' +
+            marketEsc(title) + '<span class="market-change-count">' + formatNumber(rows.length) + '</span></h4>';
+
+        if (!shown.length) {
+            html += '<div class="market-change-empty">Нет позиций</div></section>';
+            return html;
         }
-        html += '</tbody></table></div></section>';
+
+        html += '<div class="market-change-list">';
+        shown.forEach(function (row) {
+            var sign = row.delta >= 0 ? 'positive' : 'negative';
+            var pctLabel = row.pct == null
+                ? (kind === 'new' ? 'новая позиция' : 'позиция ушла')
+                : (row.pct >= 0 ? '+' : '') + round2(row.pct) + '%';
+            var barWidth = Math.max(4, Math.round(Math.abs(row.delta) / maxAbs * 100));
+            var valuesLine = (kind === 'new')
+                ? 'было 0 → стало ' + marketFormatValue(row.current, result.metric)
+                : (kind === 'disappeared')
+                    ? 'было ' + marketFormatValue(row.base, result.metric) + ' → стало 0'
+                    : marketFormatValue(row.base, result.metric) + ' → ' + marketFormatValue(row.current, result.metric);
+
+            html += '<div class="market-row">' +
+                '<div class="market-row-top">' +
+                    '<span class="market-row-name" title="' + marketEsc(row.key) + '">' + marketEsc(row.key) + '</span>' +
+                    '<span class="market-row-pct ' + sign + '">' + pctLabel + '</span>' +
+                '</div>' +
+                '<div class="market-row-values">' + valuesLine +
+                    ' <span class="market-row-delta ' + sign + '">(' + (row.delta >= 0 ? '+' : '') +
+                    marketFormatValue(row.delta, result.metric) + ')</span></div>' +
+                '<div class="market-row-bar"><div class="market-row-fill ' + sign + '" style="width:' + barWidth + '%"></div></div>' +
+            '</div>';
+        });
+        html += '</div></section>';
         return html;
     }
 
