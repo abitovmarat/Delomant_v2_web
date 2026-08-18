@@ -192,7 +192,7 @@ function renderCabinet(?string $name): void
         background: #2F2BC7; border-radius: 12px; transition: background .15s ease;
     }
     .cta:hover { background: #211CB0; }
-    .cta-top { margin-bottom: 6px; }
+    .cta-row { text-align: center; margin-bottom: 6px; }
     .guide-title {
         margin: 26px 0 14px; font-size: 15px; font-weight: 700; color: #0F172A;
         padding-top: 20px; border-top: 1px solid #E2E8F0;
@@ -221,7 +221,7 @@ function renderCabinet(?string $name): void
 
             <!-- Кнопка идёт до инструкции: она длинная, и искать переход
                  под ней пришлось бы прокруткой. -->
-            <a class="cta cta-top" href="/?stand=1">Открыть демо-стенд →</a>
+            <div class="cta-row"><a class="cta" href="/?stand=1">Открыть демо-стенд →</a></div>
             <div class="guide-title">Как пользоваться</div>
 
             <div class="steps">
