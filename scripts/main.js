@@ -707,6 +707,8 @@ document.addEventListener('DOMContentLoaded', function () {
         updateProcessingState();
         renderColumnsList();
         updateRatioSelects();
+        // Набор доступных обогащений зависит от источника и столбцов
+        renderEnrichList();
         updateCustomMappingSelects();
         updateVisualizationFields();
     }
@@ -9501,6 +9503,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_SEGMENT  = 'Сегмент';
     var COL_PRICE_KG = 'Цена, USD/кг';
     var COL_REGION   = 'Регион получателя';
+    var COL_HS_NAME  = 'Наименование товара (ТН ВЭД)';
+    var COL_GEO      = 'Регион мира';
 
     var LS_SEGMENT_DICT = 'delomant_segment_dictionary';
     var segmentDict = {};
@@ -9694,6 +9698,82 @@ document.addEventListener('DOMContentLoaded', function () {
     var WEIGHT_COLS = ['Вес нетто, кг', 'G38 (Вес нетто, кг)'];
     var USD_COLS    = ['Статистическая стоимость, USD', 'G46 (Статистическая стоимость, USD.)', 'USD статистическая'];
 
+    /*
+     * Название товара по коду ТН ВЭД.
+     *
+     * Работает на любых данных с кодом — в том числе на агрегатах Comtrade
+     * и WITS, где контрагентов нет и остальные обогатители бессильны.
+     * Справочник тот же, что у поиска кода: hs6, при промахе — hs4.
+     */
+    function enrichHsName(data, headers) {
+        var codeCol = findColumn(headers, COL_HS_CODE);
+        if (!codeCol) {
+            return { error: 'Нужен столбец «' + COL_HS_CODE + '»' };
+        }
+        if (!hsNamesData) {
+            return { error: 'Справочник названий не загружен — откройте раздел «Данные» и повторите' };
+        }
+        if (headers.indexOf(COL_HS_NAME) === -1) { headers.push(COL_HS_NAME); }
+
+        var filled = 0, missed = 0;
+        data.forEach(function (row) {
+            if (row[COL_HS_NAME]) { return; }
+            var name = hsNameFor(row[codeCol]);
+            if (name) { row[COL_HS_NAME] = name; filled++; }
+            else { missed++; }
+        });
+        return {
+            filled: filled,
+            note: missed > 0
+                ? ('Не нашлось в справочнике: ' + formatNumber(missed) + ' строк')
+                : ''
+        };
+    }
+
+    /*
+     * Регион мира по стране. Берём те же группы, что и в выборе стран
+     * (континенты), — тогда разрезы «Данных» и анализа сходятся.
+     */
+    function enrichGeo(data, headers) {
+        var countryCol = findColumn(headers, 'Страна отправления') ||
+                         findColumn(headers, 'Страна назначения') ||
+                         findColumn(headers, 'Страна-импортёр') ||
+                         findColumn(headers, 'Страна-экспортёр');
+        if (!countryCol) {
+            return { error: 'Нужен столбец со страной' };
+        }
+        if (!comtradeRegions || comtradeRegions.length === 0) {
+            return { error: 'Справочник регионов не загружен — откройте раздел «Данные» и повторите' };
+        }
+
+        // имя страны → континент (берём только группу «Континенты»:
+        // экономические блоки пересекаются, одна страна попала бы в несколько)
+        var nameByCode = {};
+        comtradeCountries.forEach(function (c) { nameByCode[String(c.code)] = c.name; });
+
+        var regionByCountry = {};
+        comtradeRegions.forEach(function (r) {
+            if (r.group !== 'Континенты') { return; }
+            (r.codes || []).forEach(function (code) {
+                var nm = nameByCode[String(code)];
+                if (nm && !regionByCountry[nm]) { regionByCountry[nm] = r.name; }
+            });
+        });
+
+        if (headers.indexOf(COL_GEO) === -1) { headers.push(COL_GEO); }
+        var filled = 0, missed = 0;
+        data.forEach(function (row) {
+            if (row[COL_GEO]) { return; }
+            var reg = regionByCountry[String(row[countryCol] || '').trim()];
+            if (reg) { row[COL_GEO] = reg; filled++; }
+            else { missed++; }
+        });
+        return {
+            filled: filled,
+            note: missed > 0 ? ('Страна не найдена в справочнике: ' + formatNumber(missed) + ' строк') : ''
+        };
+    }
+
     function enrichPriceKg(data, headers) {
         var existing = findAnyColumn(headers, PRICE_COLS);
         if (existing) {
@@ -9820,6 +9900,21 @@ document.addEventListener('DOMContentLoaded', function () {
             description: 'Стоимость USD за кг по каждой строке — для сравнения и поиска аномалий',
             adds: [COL_PRICE_KG],
             run: enrichPriceKg
+        },
+        // Работают и на агрегатах (Comtrade, WITS), где контрагентов нет
+        {
+            id: 'hs-name',
+            label: 'Наименование товара по коду',
+            description: 'Расшифровывает код ТН ВЭД в название товара — работает и на статистике ООН, где есть только коды',
+            adds: [COL_HS_NAME],
+            run: enrichHsName
+        },
+        {
+            id: 'geo',
+            label: 'Регион мира по стране',
+            description: 'Континент страны (Европа, Азия, Африка…) — чтобы группировать выгрузку по регионам, а не по отдельным странам',
+            adds: [COL_GEO],
+            run: enrichGeo
         }
     ];
 
@@ -9834,15 +9929,51 @@ document.addEventListener('DOMContentLoaded', function () {
         return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    /*
+     * Применимо ли обогащение к загруженным данным.
+     *
+     * Часть обогатителей работает по контрагенту, которого в агрегатах ООН
+     * и Всемирного банка нет вовсе. Без пометки пользователь отмечал всё
+     * подряд и получал список ошибок вместо результата.
+     */
+    function enricherAvailability(e, headers) {
+        var needContractor = ['segment', 'region', 'holding', 'product'];
+        if (needContractor.indexOf(e.id) !== -1 && !isContractorDataAvailable()) {
+            return 'В данных ' + dataSourceName() + ' нет компаний-контрагентов';
+        }
+        if (!headers || !headers.length) { return ''; }
+        if (e.id === 'hs-name' && !findColumn(headers, COL_HS_CODE)) {
+            return 'Нет столбца с кодом ТН ВЭД';
+        }
+        if (e.id === 'price-kg' &&
+            (!findAnyColumn(headers, WEIGHT_COLS) || !findAnyColumn(headers, USD_COLS))) {
+            return 'Нужны вес и стоимость USD';
+        }
+        if (e.id === 'geo' && !(findColumn(headers, 'Страна отправления') ||
+            findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна-импортёр') ||
+            findColumn(headers, 'Страна-экспортёр'))) {
+            return 'Нет столбца со страной';
+        }
+        return '';
+    }
+
     function renderEnrichList() {
         if (!enrichList) return;
+        var headers = getActiveHeaders();
         var html = '';
         ENRICHERS.forEach(function (e) {
-            html += '<label class="enrich-item" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--color-border);border-radius:8px;cursor:pointer">';
-            html += '<input type="checkbox" class="enrich-cb" value="' + e.id + '" checked style="margin-top:3px">';
+            var why = enricherAvailability(e, headers);
+            var off = !!why;
+            html += '<label class="enrich-item' + (off ? ' enrich-item-off' : '') +
+                '" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--color-border);border-radius:8px;cursor:pointer">';
+            html += '<input type="checkbox" class="enrich-cb" value="' + e.id + '"' +
+                (off ? ' disabled' : ' checked') + ' style="margin-top:3px">';
             html += '<span><span style="font-weight:600">' + escEnrich(e.label) + '</span>';
             html += '<br><span style="font-size:12px;color:var(--color-text-secondary)">' + escEnrich(e.description) + '</span>';
             html += '<br><span style="font-size:11px;color:var(--color-text-muted)">Столбцы: ' + e.adds.map(escEnrich).join(', ') + ' · без нейросети</span>';
+            if (off) {
+                html += '<br><span class="enrich-why">Недоступно: ' + escEnrich(why) + '</span>';
+            }
             html += '</span></label>';
         });
         enrichList.innerHTML = html;
@@ -9904,6 +10035,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var selected = Array.prototype.map.call(document.querySelectorAll('.enrich-cb:checked'), function (cb) { return cb.value; });
         if (!selected.length) { alert('Выберите хотя бы одно обогащение.'); return; }
+
+        /*
+         * Справочники грузятся лениво, а обогатители синхронные. Если нужный
+         * справочник ещё не в памяти — дотягиваем и повторяем запуск, иначе
+         * пришлось бы просить пользователя сходить в другой раздел.
+         */
+        if (selected.indexOf('hs-name') !== -1 && !hsNamesData) {
+            loadHsNames().then(runEnrichment);
+            return;
+        }
+        if (selected.indexOf('geo') !== -1 && (!comtradeRegions || !comtradeRegions.length)) {
+            Promise.all([loadComtradeCountries(), loadComtradeRegions()]).then(runEnrichment);
+            return;
+        }
 
         var results = [];
         ENRICHERS.forEach(function (e) {

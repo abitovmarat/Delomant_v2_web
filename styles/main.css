@@ -204,6 +204,18 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Обогащение, неприменимое к текущим данным */
+.enrich-item-off {
+    opacity: 0.6;
+    cursor: default !important;
+}
+.enrich-why {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--color-warning);
+}
+
 /* Метка демонстрационного режима в шапке */
 .header-mode {
     margin-left: 10px;
