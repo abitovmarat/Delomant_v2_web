@@ -715,10 +715,31 @@
         });
     }
 
+    /*
+     * Разбираем ответ сами, а не через r.json(): файлы здесь многомегабайтные,
+     * и при обрыве передачи встроенный парсер сообщает «unterminated string at
+     * column N» — по такой ошибке непонятно, что делать. Сверяем полученную
+     * длину с обещанной в Content-Length и объясняем, что файл недокачался.
+     */
     function fetchJson(url) {
         return fetch(url, { cache: 'no-store' }).then(function (r) {
             if (!r.ok) { throw new Error('HTTP ' + r.status + ' ' + url); }
-            return r.json();
+            var declared = parseInt(r.headers.get('Content-Length') || '', 10);
+            return r.text().then(function (text) {
+                var got = text.length;
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    var name = url.split('/').pop();
+                    var short = !isNaN(declared) && declared > 0
+                        ? ' (получено ' + Math.round(got / 1024) + ' КБ из ~' +
+                          Math.round(declared / 1024) + ' КБ)'
+                        : ' (получено ' + Math.round(got / 1024) + ' КБ)';
+                    throw new Error('Файл «' + name + '» дошёл не полностью' + short +
+                        '. Обновите страницу — обычно помогает; если повторяется, ' +
+                        'данные на сервере залиты не до конца.');
+                }
+            });
         });
     }
 

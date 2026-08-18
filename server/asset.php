@@ -84,5 +84,33 @@ if ($ifNoneMatch === $etag ||
     exit;
 }
 
+/*
+ * Отдача большого файла.
+ *
+ * Заявленный Content-Length должен совпадать с числом реально отданных
+ * байт. Если поверх включено сжатие (zlib.output_compression) или остался
+ * буфер вывода, счёт расходится: браузер верит заголовку и обрывает чтение
+ * на середине, а фронтенд получает усечённый JSON («unterminated string»
+ * на многомегабайтных data/foreign/*.json). Поэтому сжатие для этих
+ * ответов выключаем и чистим буферы.
+ *
+ * Читаем и шлём кусками: readfile() на файле в несколько мегабайт может
+ * упереться в memory_limit и оборваться.
+ */
+@ini_set('zlib.output_compression', '0');
+while (ob_get_level() > 0) { @ob_end_clean(); }
+
 header('Content-Length: ' . $size);
-readfile($path);
+
+$fh = fopen($path, 'rb');
+if ($fh === false) {
+    http_response_code(500);
+    exit;
+}
+while (!feof($fh)) {
+    $chunk = fread($fh, 262144);
+    if ($chunk === false) { break; }
+    echo $chunk;
+    flush();
+}
+fclose($fh);
