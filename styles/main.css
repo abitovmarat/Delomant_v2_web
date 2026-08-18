@@ -319,6 +319,10 @@ body {
 .rec-watch::before { background: var(--color-warning); }
 .rec-ok::before    { background: var(--color-success); }
 
+/* Всё содержимое во второй колонке, рядом с точкой-маркером */
+.rec-card > *:not(.rec-body) { grid-column: 2; }
+.rec-body { grid-column: 2; min-width: 0; }
+
 .rec-action {
     font-size: 14px;
     font-weight: 700;

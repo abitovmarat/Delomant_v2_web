@@ -6067,9 +6067,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<span class="signals-base">выведено правилами из показателей выше</span></div>';
             html += '<div class="recs-list">';
             recs.forEach(function (r) {
+                // Оба текста в одной обёртке: карточка это сетка «точка + текст»,
+                // без неё второй абзац уезжал в колонку под точку и ломался
+                // по одному слову в строке
                 html += '<div class="rec-card rec-' + r.level + '">' +
-                    '<div class="rec-action">' + marketEsc(r.action) + '</div>' +
-                    '<div class="rec-because">' + marketEsc(r.because) + '</div>' +
+                    '<div class="rec-body">' +
+                        '<div class="rec-action">' + marketEsc(r.action) + '</div>' +
+                        '<div class="rec-because">' + marketEsc(r.because) + '</div>' +
+                    '</div>' +
                 '</div>';
             });
             html += '</div>';
