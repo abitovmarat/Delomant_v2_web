@@ -127,23 +127,7 @@
             <main class="content" role="main">
                 <!-- Data Module -->
                 <section id="data" class="module module-data active">
-                    <h2 class="module-title">Загрузка пользовательских данных</h2>
-
-                    <div class="upload-card">
-                        <div class="upload-area">
-                            <span class="upload-icon">📁</span>
-                            <div class="upload-body">
-                                <h3 class="upload-title">Перетащите файл сюда</h3>
-                                <p class="upload-description">или нажмите для выбора</p>
-                            </div>
-                            <input type="file" class="upload-input" accept=".csv,.xlsx,.xls" aria-label="Выбрать файл для загрузки">
-                        </div>
-                        <div class="upload-append-row" style="display:none">
-                            <button class="btn btn-secondary upload-append-btn">+ Добавить файл</button>
-                            <input type="file" class="upload-append-input" accept=".csv,.xlsx,.xls" aria-label="Добавить файл к данным">
-                            <span class="upload-append-hint">Строки добавятся к уже загруженным данным</span>
-                        </div>
-                    </div>
+                    <h2 class="module-title">Источники данных</h2>
 
                     <div class="comtrade-card">
                         <div class="comtrade-head">
@@ -334,6 +318,30 @@
                 <!-- Processing Module -->
                 <section id="processing" class="module module-processing">
                     <h2 class="module-title">Обработка данных</h2>
+
+                    <!-- Загрузка своей выгрузки живёт здесь же: файл и операции
+                         над ним — один сценарий, разносить их по разделам незачем.
+                         Раздел «Данные» остался под внешние источники. -->
+                    <div class="upload-card">
+                        <div class="upload-area">
+                            <span class="upload-icon">📁</span>
+                            <div class="upload-body">
+                                <h3 class="upload-title">Перетащите файл сюда</h3>
+                                <p class="upload-description">или нажмите для выбора — CSV, XLS, XLSX</p>
+                            </div>
+                            <input type="file" class="upload-input" accept=".csv,.xlsx,.xls" aria-label="Выбрать файл для загрузки">
+                        </div>
+                        <div class="upload-append-row" style="display:none">
+                            <button class="btn btn-secondary upload-append-btn">+ Добавить файл</button>
+                            <input type="file" class="upload-append-input" accept=".csv,.xlsx,.xls" aria-label="Добавить файл к данным">
+                            <span class="upload-append-hint">Строки добавятся к уже загруженным данным</span>
+                        </div>
+                    </div>
+
+                    <!-- Статус загруженного файла виден и здесь: карточка
+                         дублируется в оба раздела, чтобы не уходить за ней
+                         в «Данные» после загрузки. -->
+                    <div class="file-list"></div>
 
                     <div class="processing-container">
                         <div class="processing-operations">

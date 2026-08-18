@@ -22,11 +22,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var modeBadge = document.querySelector('.header-mode');
         if (modeBadge) { modeBadge.hidden = false; }
 
-        var uploadCard = document.querySelector('.upload-card');
-        if (uploadCard) { uploadCard.style.display = 'none'; }
-        var dataTitle = document.querySelector('#data .module-title');
-        if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
-
         /*
          * Закрытые возможности не прячем, а помечаем замком: пользователь
          * должен видеть, что раздел существует (иначе система выглядит
@@ -55,9 +50,10 @@ document.addEventListener('DOMContentLoaded', function () {
             processingModule.innerHTML =
                 '<h2 class="module-title">Обработка данных <span class="lock-badge">🔒 другой тариф</span></h2>' +
                 '<div class="locked-module">' +
-                    '<p class="locked-lead">Раздел приводит сырую таможенную выгрузку к виду, ' +
-                    'пригодному для анализа. В демонстрационном режиме он закрыт.</p>' +
+                    '<p class="locked-lead">Раздел принимает вашу таможенную выгрузку в Excel или CSV ' +
+                    'и приводит её к виду, пригодному для анализа. В демонстрационном режиме он закрыт.</p>' +
                     '<ul class="locked-list">' +
+                        '<li>Загрузка своей выгрузки (CSV, XLS, XLSX), несколько файлов подряд</li>' +
                         '<li>Сопоставление столбцов выгрузки со справочником полей</li>' +
                         '<li>Извлечение года, квартала и месяца из даты выпуска</li>' +
                         '<li>Пересчёт стоимости в рубли по курсу ЦБ на дату</li>' +
@@ -392,7 +388,23 @@ document.addEventListener('DOMContentLoaded', function () {
     var uploadArea = document.querySelector('.upload-area');
     var uploadTitle = document.querySelector('.upload-title');
     var uploadDesc = document.querySelector('.upload-description');
-    var fileList = document.querySelector('.file-list');
+    /*
+     * Карточка загруженного файла живёт в двух местах: в «Данных» (там её
+     * рисуют внешние источники) и в «Обработке» (там загружают свой файл).
+     * Пишем сразу в оба контейнера, чтобы статус был виден в том разделе,
+     * где пользователь сейчас находится.
+     */
+    var fileListNodes = document.querySelectorAll('.file-list');
+    var fileList = {
+        set innerHTML(html) {
+            Array.prototype.forEach.call(fileListNodes, function (node) {
+                node.innerHTML = html;
+            });
+        },
+        get innerHTML() {
+            return fileListNodes.length ? fileListNodes[0].innerHTML : '';
+        }
+    };
 
     if (uploadArea) {
         uploadArea.addEventListener('dragover', function (e) {
