@@ -787,23 +787,42 @@
      * column N» — по такой ошибке непонятно, что делать. Сверяем полученную
      * длину с обещанной в Content-Length и объясняем, что файл недокачался.
      */
-    function fetchJson(url) {
+    /*
+     * Загрузка снимка с повтором.
+     *
+     * Файлы здесь многомегабайтные, и передача иногда срывается на середине —
+     * причём каждый раз в новом месте, то есть файл на сервере цел. Обычный
+     * повтор такие обрывы вытягивает, поэтому пробуем несколько раз, прежде
+     * чем показывать ошибку. Разбираем текст сами: встроенный r.json() при
+     * обрыве говорит «unterminated string at column N», по такой ошибке
+     * непонятно ни что случилось, ни насколько недокачалось.
+     */
+    function fetchJson(url, attempt) {
+        attempt = attempt || 0;
+        var MAX_TRIES = 3;
+
         return fetch(url, { cache: 'no-store' }).then(function (r) {
             if (!r.ok) { throw new Error('HTTP ' + r.status + ' ' + url); }
             var declared = parseInt(r.headers.get('Content-Length') || '', 10);
+            var enc = r.headers.get('Content-Encoding') || 'нет';
             return r.text().then(function (text) {
-                var got = text.length;
                 try {
                     return JSON.parse(text);
                 } catch (e) {
+                    if (attempt + 1 < MAX_TRIES) {
+                        return fetchJson(url, attempt + 1); // ещё попытка
+                    }
                     var name = url.split('/').pop();
-                    var short = !isNaN(declared) && declared > 0
-                        ? ' (получено ' + Math.round(got / 1024) + ' КБ из ~' +
-                          Math.round(declared / 1024) + ' КБ)'
-                        : ' (получено ' + Math.round(got / 1024) + ' КБ)';
-                    throw new Error('Файл «' + name + '» дошёл не полностью' + short +
-                        '. Обновите страницу — обычно помогает; если повторяется, ' +
-                        'данные на сервере залиты не до конца.');
+                    var got = Math.round(text.length / 1024);
+                    var info = 'получено ' + got + ' КБ';
+                    if (!isNaN(declared) && declared > 0) {
+                        info += ', заявлено ' + Math.round(declared / 1024) + ' КБ';
+                    } else {
+                        info += ', размер сервером не заявлен';
+                    }
+                    info += ', сжатие: ' + enc + ', попыток: ' + MAX_TRIES;
+                    throw new Error('Файл «' + name + '» дошёл не полностью (' + info +
+                        '). Передача обрывается на стороне сервера.');
                 }
             });
         });
