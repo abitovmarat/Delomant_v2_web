@@ -26,7 +26,15 @@ document.addEventListener('DOMContentLoaded', function () {
          * Закрытые возможности не прячем, а помечаем замком: пользователь
          * должен видеть, что раздел существует (иначе система выглядит
          * беднее, чем есть), но не может им воспользоваться.
+         *
+         * Иконка — контурный SVG на currentColor, а не эмодзи: цветной
+         * глиф не подчиняется теме и на тёмном фоне бокового меню выбивался.
          */
+        var lockSvg = '<svg class="lock-ico" viewBox="0 0 24 24" fill="none" ' +
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+            'stroke-linejoin="round" aria-hidden="true">' +
+            '<rect x="4" y="10.5" width="16" height="10.5" rx="2.2"/>' +
+            '<path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>';
         ['topReceivers', 'topSenders', 'topManufacturers'].forEach(function (type) {
             var card = document.querySelector('.action-card[data-analysis="' + type + '"]');
             if (!card) { return; }
@@ -37,18 +45,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 btn.textContent = 'Недоступно';
             }
             var t = card.querySelector('.action-card-title');
-            if (t) { t.insertAdjacentHTML('beforeend', ' <span class="lock-badge">🔒 другой тариф</span>'); }
+            if (t) { t.insertAdjacentHTML('beforeend', ' <span class="lock-badge">' + lockSvg + 'другой тариф</span>'); }
         });
 
         // Раздел «Обработка»: пункт меню остаётся, содержимое подменяем
         // витриной — что этот раздел делает и почему сейчас закрыт.
         var processingNav = document.querySelector('.sidebar-nav-item[href="#processing"] .sidebar-nav-text');
-        if (processingNav) { processingNav.insertAdjacentHTML('beforeend', ' <span class="lock-badge">🔒</span>'); }
+        if (processingNav) { processingNav.insertAdjacentHTML('beforeend', ' <span class="lock-badge lock-badge-icon" title="Недоступно в демонстрационном режиме">' + lockSvg + '</span>'); }
 
         var processingModule = document.getElementById('processing');
         if (processingModule) {
             processingModule.innerHTML =
-                '<h2 class="module-title">Обработка данных <span class="lock-badge">🔒 другой тариф</span></h2>' +
+                '<h2 class="module-title">Обработка данных <span class="lock-badge">' + lockSvg + 'другой тариф</span></h2>' +
                 '<div class="locked-module">' +
                     '<p class="locked-lead">Раздел принимает вашу таможенную выгрузку в Excel или CSV ' +
                     'и приводит её к виду, пригодному для анализа. В демонстрационном режиме он закрыт.</p>' +
