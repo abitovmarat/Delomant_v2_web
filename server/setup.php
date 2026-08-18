@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $body .= "// Хеш экспертного пароля (ограниченный доступ для проверяющих).\n\$AUTH_HASH_EXPERT = " . var_export($hashExpert, true) . ";\n";
         }
         if (file_put_contents($configFile, $body, LOCK_EX) === false) {
-            $error = 'Не удалось записать config.php — проверьте права на папку.';
+            $error = 'Не удалось записать config.php, проверьте права на папку.';
         } else {
             @chmod($configFile, 0600);
             $done = true;
@@ -125,7 +125,7 @@ header('Content-Type: text/html; charset=UTF-8');
             <input type="password" id="p1" name="password" autofocus required autocomplete="new-password">
             <label for="p2">Повторите пароль</label>
             <input type="password" id="p2" name="password2" required autocomplete="new-password">
-            <label for="pe" style="margin-top:10px">Пароль для проверяющих <span style="color:#94A3B8">(необязательно — ограниченный доступ без загрузки данных)</span></label>
+            <label for="pe" style="margin-top:10px">Пароль для проверяющих <span style="color:#94A3B8">(необязательно, это ограниченный доступ без загрузки данных)</span></label>
             <input type="password" id="pe" name="password_expert" autocomplete="new-password">
             <button type="submit">Сохранить</button>
         </form>

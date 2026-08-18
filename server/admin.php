@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (saveUsers($usersFile, $users)) {
                     $notice = 'Аккаунт «' . $login . '» создан.';
                 } else {
-                    $error = 'Не удалось записать users.php — проверьте права на папку.';
+                    $error = 'Не удалось записать users.php, проверьте права на папку.';
                     unset($users[$login]);
                 }
             }
