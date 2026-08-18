@@ -282,6 +282,54 @@ body {
     border-top: 1px solid var(--color-border);
 }
 
+/* Рекомендации: действия, выведенные из сигналов правилами */
+.recs-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 26px 0 12px;
+}
+.recs-head h3 { margin: 0; font-size: 18px; }
+
+.recs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.rec-card {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 13px 16px;
+    background: var(--color-surface);
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+.rec-card::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+}
+.rec-risk::before  { background: var(--color-error); }
+.rec-watch::before { background: var(--color-warning); }
+.rec-ok::before    { background: var(--color-success); }
+
+.rec-action {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.rec-because {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
 /* Обогащение, неприменимое к текущим данным */
 .enrich-item-off {
     opacity: 0.6;

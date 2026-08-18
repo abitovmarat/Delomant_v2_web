@@ -5760,11 +5760,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var signals = [];
         var unit = useWeight ? 'объёму' : 'стоимости';
+        // Числа для матрицы рекомендаций: правила работают по значениям,
+        // а не по текстам, поэтому собираем их отдельно от формулировок
+        var m = {
+            hhi: null, leadShare: null, leadName: '', core: null,
+            growthV: null, growthUsd: null, gap: null, cv: null,
+            appeared: [], gone: [], premiumHi: null, premiumLo: null,
+            partial: false, years: 0
+        };
 
         /* --- Концентрация рынка (HHI) --- */
         if (countries.length > 1 && total > 0) {
             var shares = countries.map(function (c) { return byCountry[c].v / total * 100; });
             var hhi = Math.round(computeHHI(shares));
+            m.hhi = hhi;
             var lvl = hhi >= 2500 ? 'risk' : (hhi >= 1500 ? 'watch' : 'ok');
             signals.push({
                 id: 'hhi', level: lvl, title: 'Концентрация рынка',
@@ -5778,6 +5787,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             /* --- Зависимость от лидера --- */
             var leadShare = shares[0];
+            m.leadShare = leadShare; m.leadName = countries[0];
             var lvl2 = leadShare >= 50 ? 'risk' : (leadShare >= 30 ? 'watch' : 'ok');
             signals.push({
                 id: 'leader', level: lvl2, title: 'Зависимость от лидера',
@@ -5795,6 +5805,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 acc += shares[i]; core++;
                 if (acc >= 80) { break; }
             }
+            m.core = core;
             signals.push({
                 id: 'core', level: core <= 2 ? 'watch' : 'ok', title: 'Ядро рынка',
                 value: core + ' из ' + countries.length,
@@ -5814,6 +5825,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!was && now) { appeared.push(c); }
                 if (was && !now) { gone.push(c); }
             });
+            m.appeared = appeared; m.gone = gone;
             if (appeared.length || gone.length) {
                 signals.push({
                     id: 'churn', level: gone.length > appeared.length ? 'watch' : 'ok',
@@ -5835,6 +5847,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var dW = (l.w / f.w - 1) * 100;
                 var dU = (l.usd / f.usd - 1) * 100;
                 var gap = dU - dW;
+                m.growthV = dW; m.growthUsd = dU; m.gap = gap;
                 var lvl3 = Math.abs(gap) >= 15 ? 'watch' : 'ok';
                 signals.push({
                     id: 'gap', level: lvl3, title: 'Объём против стоимости',
@@ -5859,6 +5872,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var mean = prices.reduce(function (s, p) { return s + p; }, 0) / prices.length;
                 var sd = Math.sqrt(prices.reduce(function (s, p) { return s + Math.pow(p - mean, 2); }, 0) / prices.length);
                 var cv = mean > 0 ? sd / mean * 100 : 0;
+                m.cv = cv;
                 var lvl4 = cv >= 25 ? 'risk' : (cv >= 12 ? 'watch' : 'ok');
                 signals.push({
                     id: 'vol', level: lvl4, title: 'Волатильность цены',
@@ -5886,6 +5900,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .sort(function (a, b) { return b.prem - a.prem; });
             if (prem.length >= 2) {
                 var hi = prem[0], lo = prem[prem.length - 1];
+                m.premiumHi = hi; m.premiumLo = lo;
                 signals.push({
                     id: 'premium', level: 'ok', title: 'Ценовой разброс по странам',
                     value: round2(hi.prem) + '% … ' + round2(lo.prem) + '%',
@@ -5904,6 +5919,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var avgPrev = prev.reduce(function (s, v) { return s + v; }, 0) / prev.length;
             var lastV = vals[vals.length - 1];
             if (avgPrev > 0 && lastV < avgPrev * 0.6) {
+                m.partial = true;
                 signals.push({
                     id: 'partial', level: 'watch', title: 'Последний период неполный',
                     value: round2(lastV / avgPrev * 100) + '% от среднего',
@@ -5914,11 +5930,91 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        m.years = years.length;
         return {
             signals: signals,
+            metrics: m,
             base: { unit: useWeight ? 'вес нетто' : 'стоимость USD',
                     countries: countries.length, years: years, total: total }
         };
+    }
+
+    /*
+     * Матрица рекомендаций.
+     *
+     * Действие выводится правилами из уже посчитанных чисел, а не
+     * свободным текстом: основание рекомендации остаётся прозрачным и
+     * проверяемым, а формулировку при желании можно потом причесать
+     * моделью, не трогая саму логику.
+     *
+     * Порог роста ±10% выбран как заметное изменение, которое не спишешь
+     * на статистический шум в годовых данных.
+     */
+    function computeRecommendations(m) {
+        var recs = [];
+        var GROW = 10, DROP = -10;
+        var concentrated = m.hhi !== null && m.hhi >= 2500;
+        var dependent = m.leadShare !== null && m.leadShare >= 50;
+        var growing = m.growthV !== null && m.growthV >= GROW;
+        var shrinking = m.growthV !== null && m.growthV <= DROP;
+        // Цена: если стоимость росла быстрее объёма — рынок дорожал
+        var pricierMkt = m.gap !== null && m.gap >= 10;
+        var cheaperMkt = m.gap !== null && m.gap <= -10;
+
+        if (growing && !concentrated) {
+            recs.push({ level: 'ok', action: 'Рассмотреть расширение закупок',
+                because: 'Рынок растёт (' + (m.growthV >= 0 ? '+' : '') + round2(m.growthV) +
+                    '% по объёму), при этом поставки распределены между многими странами (HHI ' +
+                    formatNumber(m.hhi) + ') — есть из кого выбирать.' });
+        }
+        if (growing && concentrated) {
+            recs.push({ level: 'watch', action: 'Искать альтернативных поставщиков',
+                because: 'Рынок растёт, но сильно концентрирован (HHI ' + formatNumber(m.hhi) +
+                    '): вход возможен, однако торг будет вести сильная сторона.' });
+        }
+        if (dependent) {
+            recs.push({ level: 'risk', action: 'Снизить зависимость от ключевого поставщика',
+                because: 'На ' + m.leadName + ' приходится ' + round2(m.leadShare) +
+                    '% рынка — сбой у него затронет большую часть поставок.' });
+        }
+        if (shrinking && pricierMkt) {
+            recs.push({ level: 'risk', action: 'Готовиться к дефициту и росту цен',
+                because: 'Объём падает (' + round2(m.growthV) + '%), а стоимость держится или растёт — ' +
+                    'признак сокращения предложения, а не спроса.' });
+        }
+        if (growing && cheaperMkt) {
+            recs.push({ level: 'ok', action: 'Благоприятное окно для закупки',
+                because: 'Объём растёт, а цены снижаются — предложение опережает спрос.' });
+        }
+        if (m.appeared && m.appeared.length) {
+            recs.push({ level: 'watch', action: 'Квалифицировать новых поставщиков',
+                because: 'На рынке появились: ' + m.appeared.slice(0, 4).join(', ') +
+                    (m.appeared.length > 4 ? ' и другие' : '') +
+                    '. Новые направления стоит проверить до того, как они понадобятся срочно.' });
+        }
+        if (m.gone && m.gone.length) {
+            recs.push({ level: 'watch', action: 'Проверить причины ухода поставщиков',
+                because: 'Перестали поставлять: ' + m.gone.slice(0, 4).join(', ') +
+                    (m.gone.length > 4 ? ' и другие' : '') +
+                    '. Если это регуляторные ограничения, они могут затронуть и другие направления.' });
+        }
+        if (m.cv !== null && m.cv >= 25) {
+            recs.push({ level: 'watch', action: 'Фиксировать цену контрактом',
+                because: 'Цена колеблется на ' + round2(m.cv) +
+                    '% от среднего уровня — закупка по споту несёт ценовой риск.' });
+        }
+        if (m.premiumHi && m.premiumLo && (m.premiumHi.prem - m.premiumLo.prem) >= 40) {
+            recs.push({ level: 'ok', action: 'Сравнить условия дорогих и дешёвых направлений',
+                because: 'Разница цен между ' + m.premiumHi.name + ' и ' + m.premiumLo.name +
+                    ' превышает ' + round2(m.premiumHi.prem - m.premiumLo.prem) +
+                    ' п.п. — стоит понять, чем она объясняется: сортом, качеством или логистикой.' });
+        }
+        if (m.partial) {
+            recs.push({ level: 'watch', action: 'Не сравнивать последний период с полными годами',
+                because: 'За последний период учтено заметно меньше данных — вероятно, он ещё не закрыт.' });
+        }
+
+        return recs;
     }
 
     function renderSignalsAnalysis(data, headers) {
@@ -5953,6 +6049,24 @@ document.addEventListener('DOMContentLoaded', function () {
             '</div>';
         });
         html += '</div>';
+
+        // Рекомендации: что делать с тем, что показали сигналы
+        var recs = computeRecommendations(res.metrics);
+        if (recs.length) {
+            var rOrder = { risk: 0, watch: 1, ok: 2 };
+            recs.sort(function (a, b) { return rOrder[a.level] - rOrder[b.level]; });
+            html += '<div class="recs-head"><h3>Что делать</h3>' +
+                '<span class="signals-base">выведено правилами из показателей выше</span></div>';
+            html += '<div class="recs-list">';
+            recs.forEach(function (r) {
+                html += '<div class="rec-card rec-' + r.level + '">' +
+                    '<div class="rec-action">' + marketEsc(r.action) + '</div>' +
+                    '<div class="rec-because">' + marketEsc(r.because) + '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+        }
+
         html += '<div class="analysis-export-actions">' +
             '<button class="btn btn-primary signals-export-xlsx">Скачать XLSX</button>' +
             '<button class="btn btn-secondary signals-export-csv">Скачать CSV</button></div>';
@@ -5960,11 +6074,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var rows = list.map(function (s) {
             return {
-                'Сигнал': s.title, 'Уровень': signalLevelWord(s.level),
+                'Раздел': 'Сигнал',
+                'Название': s.title, 'Уровень': signalLevelWord(s.level),
                 'Значение': s.value, 'Вывод': s.text, 'Как считается': s.why
             };
-        });
-        var hdrs = ['Сигнал', 'Уровень', 'Значение', 'Вывод', 'Как считается'];
+        }).concat(recs.map(function (r) {
+            return {
+                'Раздел': 'Рекомендация',
+                'Название': r.action, 'Уровень': signalLevelWord(r.level),
+                'Значение': '', 'Вывод': r.because, 'Как считается': 'Правило матрицы решений'
+            };
+        }));
+        var hdrs = ['Раздел', 'Название', 'Уровень', 'Значение', 'Вывод', 'Как считается'];
         analysisResults.querySelector('.signals-export-xlsx').addEventListener('click', function () {
             exportAnalysisXLSX(rows, hdrs, 'market_signals');
         });
