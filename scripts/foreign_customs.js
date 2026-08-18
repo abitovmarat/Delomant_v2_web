@@ -105,6 +105,15 @@
         '#foreign .fc-tile .l{font-size:12px;color:var(--fc-mut);margin-top:2px}' +
         '#foreign .fc-ctrl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}' +
         '#foreign .fc-ctrl input{flex:1;min-width:170px;padding:9px 12px;border:1px solid var(--fc-line);border-radius:9px;background:var(--fc-bg);color:var(--fc-fg);font-size:14px}' +
+        // Справочник «название → код» под полем фильтра
+        '#foreign .fc-hsbox{position:relative;display:flex;flex:1;min-width:170px}' +
+        '#foreign .fc-hsbox input{width:100%}' +
+        '#foreign .fc-hslist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:260px;overflow-y:auto;' +
+            'background:var(--fc-card);border:1px solid var(--fc-line);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18)}' +
+        '#foreign .fc-hsitem{display:flex;gap:9px;align-items:baseline;padding:8px 11px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--fc-line)}' +
+        '#foreign .fc-hsitem:last-child{border-bottom:none}' +
+        '#foreign .fc-hsitem:hover{background:var(--fc-bg)}' +
+        '#foreign .fc-hsitem b{flex:0 0 auto;color:var(--fc-acc);font-family:ui-monospace,monospace;font-size:12.5px}' +
         '#foreign .fc-btn{padding:9px 14px;border:1px solid var(--fc-cob);border-radius:9px;background:var(--fc-cob);color:#fff;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap}' +
         '#foreign .fc-cnt{color:var(--fc-mut);font-size:13px;white-space:nowrap}' +
         '#foreign .fc-wrap{overflow-x:auto;border:1px solid var(--fc-line);border-radius:12px}' +
@@ -165,7 +174,10 @@
         '<div id="fc-drill"></div>' +
         '<div class="fc-ctrl">' +
             '<input id="fc-q" type="search" autocomplete="off">' +
-            '<input id="fc-qhs" type="search" autocomplete="off">' +
+            '<span class="fc-hsbox">' +
+                '<input id="fc-qhs" type="search" autocomplete="off">' +
+                '<span class="fc-hslist" id="fc-hslist" hidden></span>' +
+            '</span>' +
             '<select id="fc-period" class="fc-sel" hidden></select>' +
             '<button class="fc-btn" id="fc-xlsx">Экспорт в Excel</button>' +
             '<button class="fc-btn" id="fc-use" hidden>Использовать как данные</button>' +
@@ -198,7 +210,22 @@
             });
         });
         root.querySelector('#fc-q').addEventListener('input', renderTable);
-        root.querySelector('#fc-qhs').addEventListener('input', renderTable);
+        root.querySelector('#fc-qhs').addEventListener('input', function () {
+            renderTable();
+            renderHsHints();
+        });
+        // Клик по подсказке подставляет код и сразу фильтрует таблицу
+        root.querySelector('#fc-hslist').addEventListener('click', function (e) {
+            var it = e.target.closest ? e.target.closest('.fc-hsitem') : null;
+            if (!it) { return; }
+            document.getElementById('fc-qhs').value = it.getAttribute('data-code');
+            this.hidden = true;
+            renderTable();
+        });
+        document.addEventListener('click', function (e) {
+            var box = document.getElementById('fc-hslist');
+            if (box && e.target.id !== 'fc-qhs' && !box.contains(e.target)) { box.hidden = true; }
+        });
         root.querySelector('#fc-xlsx').addEventListener('click', exportXlsx);
         root.querySelector('#fc-use').addEventListener('click', sendToApp);
         root.querySelector('#fc-period').addEventListener('change', function () {
@@ -388,6 +415,45 @@
             });
         }
         return rows.slice().sort(function (a, b) { return (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0) * dir; });
+    }
+
+    /*
+     * Подсказка «название → код» под полем фильтра.
+     *
+     * Предлагаем только коды, которые реально есть в открытой вкладке:
+     * подсказать код из общего справочника легко, но выбрав его,
+     * пользователь получил бы пустую таблицу.
+     */
+    function renderHsHints() {
+        var box = document.getElementById('fc-hslist');
+        var input = document.getElementById('fc-qhs');
+        if (!box || !input) { return; }
+
+        var q = (input.value || '').trim().toUpperCase();
+        // Подсказка нужна, когда ищут словом; по цифрам код и так виден
+        if (q.length < 2 || !/[A-ZА-Я]/.test(q)) { box.hidden = true; return; }
+
+        var d = current();
+        if (!d) { box.hidden = true; return; }
+        var ser = isSeries(), ctry = isCountry();
+        var codeI = ser ? 0 : ctry ? 0 : 2;
+
+        var seen = {}, hits = [];
+        for (var i = 0; i < d.rows.length && hits.length < 12; i++) {
+            var code = String(d.rows[i][codeI] || '');
+            if (!code || seen[code]) { continue; }
+            var nm = ser ? (d.meta.names[code] || '') : ctry ? d.rows[i][1] : hsName(code);
+            if (!nm || String(nm).toUpperCase().indexOf(q) < 0) { continue; }
+            seen[code] = 1;
+            hits.push([code, nm]);
+        }
+
+        if (!hits.length) { box.hidden = true; return; }
+        box.innerHTML = hits.map(function (h) {
+            return '<span class="fc-hsitem" data-code="' + esc(h[0]) + '">' +
+                '<b>' + esc(h[0]) + '</b>' + esc(h[1]) + '</span>';
+        }).join('');
+        box.hidden = false;
     }
 
     function renderTable() {

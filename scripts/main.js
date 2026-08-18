@@ -22,12 +22,48 @@ document.addEventListener('DOMContentLoaded', function () {
         var dataTitle = document.querySelector('#data .module-title');
         if (dataTitle) { dataTitle.textContent = 'Источники данных'; }
 
-        // Контрагентский уровень (получатели/отправители/изготовители) —
-        // отдельный тариф, в экспертном режиме не показываем карточки.
+        /*
+         * Закрытые возможности не прячем, а помечаем замком: пользователь
+         * должен видеть, что раздел существует (иначе система выглядит
+         * беднее, чем есть), но не может им воспользоваться.
+         */
         ['topReceivers', 'topSenders', 'topManufacturers'].forEach(function (type) {
             var card = document.querySelector('.action-card[data-analysis="' + type + '"]');
-            if (card) { card.style.display = 'none'; }
+            if (!card) { return; }
+            card.classList.add('locked');
+            var btn = card.querySelector('.btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Недоступно';
+            }
+            var t = card.querySelector('.action-card-title');
+            if (t) { t.insertAdjacentHTML('beforeend', ' <span class="lock-badge">🔒 другой тариф</span>'); }
         });
+
+        // Раздел «Обработка»: пункт меню остаётся, содержимое подменяем
+        // витриной — что этот раздел делает и почему сейчас закрыт.
+        var processingNav = document.querySelector('.sidebar-nav-item[href="#processing"] .sidebar-nav-text');
+        if (processingNav) { processingNav.insertAdjacentHTML('beforeend', ' <span class="lock-badge">🔒</span>'); }
+
+        var processingModule = document.getElementById('processing');
+        if (processingModule) {
+            processingModule.innerHTML =
+                '<h2 class="module-title">Обработка данных <span class="lock-badge">🔒 другой тариф</span></h2>' +
+                '<div class="locked-module">' +
+                    '<p class="locked-lead">Раздел приводит сырую таможенную выгрузку к виду, ' +
+                    'пригодному для анализа. В демонстрационном режиме он закрыт.</p>' +
+                    '<ul class="locked-list">' +
+                        '<li>Сопоставление столбцов выгрузки со справочником полей</li>' +
+                        '<li>Извлечение года, квартала и месяца из даты выпуска</li>' +
+                        '<li>Пересчёт стоимости в рубли по курсу ЦБ на дату</li>' +
+                        '<li>Очистка наименований и приведение единиц измерения</li>' +
+                        '<li>Выгрузка обработанного массива в Excel или CSV</li>' +
+                    '</ul>' +
+                    '<p class="locked-note">Источники, доступные в этом режиме (UN Comtrade, ' +
+                    'World Bank WITS, зарубежная таможня), приходят уже подготовленными — ' +
+                    'обработка им не требуется, анализ работает сразу.</p>' +
+                '</div>';
+        }
     }
 
     // Идентификация в шапке. Логин индивидуального аккаунта приходит из

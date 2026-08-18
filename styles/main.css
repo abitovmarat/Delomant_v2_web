@@ -204,6 +204,58 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* Закрытые на этом тарифе возможности: видно, что есть, но не работает */
+.lock-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.action-card.locked {
+    opacity: 0.62;
+}
+.action-card.locked .btn {
+    cursor: not-allowed;
+}
+
+.locked-module {
+    max-width: 720px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 24px 28px;
+}
+.locked-lead {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--color-text);
+    margin-bottom: 18px;
+}
+.locked-list {
+    margin: 0 0 18px 20px;
+    padding: 0;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    line-height: 1.9;
+}
+.locked-note {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--color-text-secondary);
+    background: var(--color-primary-light);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 6px;
+    padding: 11px 14px;
+}
+
 /* Тарифные барьеры (WITS TRAINS) поверх выгрузки Comtrade */
 .tariff-block {
     margin-top: 20px;
