@@ -707,7 +707,9 @@ document.addEventListener('DOMContentLoaded', function () {
         updateProcessingState();
         renderColumnsList();
         updateRatioSelects();
-        // Набор доступных обогащений зависит от источника и столбцов
+        // Набор доступных обогащений зависит от источника и столбцов,
+        // а ставки относятся к прежним странам и кодам — сбрасываем
+        tariffCache = null;
         renderEnrichList();
         updateCustomMappingSelects();
         updateVisualizationFields();
@@ -9505,6 +9507,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_REGION   = 'Регион получателя';
     var COL_HS_NAME  = 'Наименование товара (ТН ВЭД)';
     var COL_GEO      = 'Регион мира';
+    var COL_TARIFF   = 'Ставка пошлины, %';
+    var COL_TARIFF_Y = 'Год ставки';
 
     var LS_SEGMENT_DICT = 'delomant_segment_dictionary';
     var segmentDict = {};
@@ -9774,6 +9778,113 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
+    /*
+     * Ставка ввозной пошлины (WITS TRAINS) отдельной колонкой.
+     *
+     * Comtrade отвечает, сколько страна ввозит, но не по какой ставке.
+     * Ставки живут в TRAINS и совпадают по ключу: коды стран там числовые
+     * M49 — те же, что reporterCode у Comtrade. Запрос берёт все страны и
+     * коды выгрузки разом, поэтому обогащение стоит одного обращения.
+     *
+     * Данные приходят асинхронно, а обогатители синхронные, поэтому ставки
+     * заранее складываются в tariffCache (см. prefetchTariffs).
+     */
+    var tariffCache = null; // 'код страны|код товара' → {rate, year}
+
+    function tariffKeysFrom(data, headers) {
+        var codeCol = findColumn(headers, COL_HS_CODE);
+        var countryCol = findColumn(headers, 'Страна отправления') ||
+                         findColumn(headers, 'Страна назначения') ||
+                         findColumn(headers, 'Страна-импортёр') ||
+                         findColumn(headers, 'Страна-экспортёр');
+        if (!codeCol || !countryCol) { return null; }
+
+        var codeByName = {};
+        comtradeCountries.forEach(function (c) { codeByName[c.name] = String(c.code); });
+
+        var countries = {}, products = {};
+        data.forEach(function (row) {
+            var cc = codeByName[String(row[countryCol] || '').trim()];
+            if (cc) { countries[cc] = 1; }
+            var hs = String(row[codeCol] || '').replace(/\D/g, '');
+            if (hs.length >= 4) { products[hs.slice(0, 6)] = 1; }
+        });
+        return {
+            codeCol: codeCol, countryCol: countryCol, codeByName: codeByName,
+            // Прокси ограничивает длину списков — берём столько, сколько примет
+            countries: Object.keys(countries).slice(0, 40),
+            products: Object.keys(products).slice(0, 40)
+        };
+    }
+
+    /** Тянет ставки для стран и кодов выгрузки; результат кладёт в tariffCache. */
+    function prefetchTariffs(data, headers) {
+        var k = tariffKeysFrom(data, headers);
+        if (!k || !k.countries.length || !k.products.length) {
+            tariffCache = {};
+            return Promise.resolve();
+        }
+        // TRAINS отстаёт от торговой статистики, и горизонт у стран разный —
+        // просим широкое окно и берём по каждой паре самый свежий год
+        var thisYear = new Date().getFullYear();
+        var years = [];
+        for (var y = thisYear - 1; y >= thisYear - 10; y--) { years.push(y); }
+
+        var url = WITS_PROXY_URL + '?datasource=trn' +
+            '&reporter=' + encodeURIComponent(k.countries.join(',')) +
+            '&partner=000' +
+            '&product=' + encodeURIComponent(k.products.join(',')) +
+            '&year=' + encodeURIComponent(years.join(',')) +
+            '&datatype=reported';
+
+        return fetch(url, { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (json) {
+                var map = {};
+                (json.data || []).forEach(function (r) {
+                    if (r.value === null || r.value === undefined) { return; }
+                    var key = String(parseInt(r.reporter, 10)) + '|' + String(r.product);
+                    var yr = parseInt(r.year, 10);
+                    if (!map[key] || yr > map[key].year) {
+                        map[key] = { rate: r.value, year: yr };
+                    }
+                });
+                tariffCache = map;
+            })
+            .catch(function () { tariffCache = {}; });
+    }
+
+    function enrichTariff(data, headers) {
+        var k = tariffKeysFrom(data, headers);
+        if (!k) { return { error: 'Нужны столбцы со страной и кодом ТН ВЭД' }; }
+        if (!tariffCache) { return { error: 'Ставки не загружены' }; }
+        if (!Object.keys(tariffCache).length) {
+            return { skipped: true, note: 'Ставок по этим странам и кодам в базе TRAINS не нашлось: ' +
+                'она отстаёт от торговой статистики, и не все страны отчитываются.' };
+        }
+
+        if (headers.indexOf(COL_TARIFF) === -1) { headers.push(COL_TARIFF); }
+        if (headers.indexOf(COL_TARIFF_Y) === -1) { headers.push(COL_TARIFF_Y); }
+
+        var filled = 0, missed = 0;
+        data.forEach(function (row) {
+            if (row[COL_TARIFF] !== undefined && row[COL_TARIFF] !== '') { return; }
+            var cc = k.codeByName[String(row[k.countryCol] || '').trim()];
+            var hs = String(row[k.codeCol] || '').replace(/\D/g, '').slice(0, 6);
+            var hit = cc && hs ? tariffCache[String(parseInt(cc, 10)) + '|' + hs] : null;
+            if (hit) {
+                row[COL_TARIFF] = round2(hit.rate);
+                row[COL_TARIFF_Y] = hit.year;
+                filled++;
+            } else { missed++; }
+        });
+        return {
+            filled: filled,
+            note: missed > 0 ? ('Ставка не найдена: ' + formatNumber(missed) +
+                ' строк (страна не отчиталась за доступные годы)') : ''
+        };
+    }
+
     function enrichPriceKg(data, headers) {
         var existing = findAnyColumn(headers, PRICE_COLS);
         if (existing) {
@@ -9915,6 +10026,13 @@ document.addEventListener('DOMContentLoaded', function () {
             description: 'Континент страны (Европа, Азия, Африка…) — чтобы группировать выгрузку по регионам, а не по отдельным странам',
             adds: [COL_GEO],
             run: enrichGeo
+        },
+        {
+            id: 'tariff',
+            label: 'Ставка ввозной пошлины',
+            description: 'Базовая ставка РНБ по стране и коду ТН ВЭД из WITS TRAINS — видно, сколько стоит зайти на рынок, а не только сколько он покупает',
+            adds: [COL_TARIFF, COL_TARIFF_Y],
+            run: enrichTariff
         }
     ];
 
@@ -9949,10 +10067,15 @@ document.addEventListener('DOMContentLoaded', function () {
             (!findAnyColumn(headers, WEIGHT_COLS) || !findAnyColumn(headers, USD_COLS))) {
             return 'Нужны вес и стоимость USD';
         }
-        if (e.id === 'geo' && !(findColumn(headers, 'Страна отправления') ||
+        var hasCountry = findColumn(headers, 'Страна отправления') ||
             findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна-импортёр') ||
-            findColumn(headers, 'Страна-экспортёр'))) {
+            findColumn(headers, 'Страна-экспортёр');
+        if (e.id === 'geo' && !hasCountry) {
             return 'Нет столбца со страной';
+        }
+        if (e.id === 'tariff') {
+            if (!hasCountry) { return 'Нет столбца со страной'; }
+            if (!findColumn(headers, COL_HS_CODE)) { return 'Нет столбца с кодом ТН ВЭД'; }
         }
         return '';
     }
@@ -10047,6 +10170,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (selected.indexOf('geo') !== -1 && (!comtradeRegions || !comtradeRegions.length)) {
             Promise.all([loadComtradeCountries(), loadComtradeRegions()]).then(runEnrichment);
+            return;
+        }
+        // Ставки приходят из WITS, поэтому тянем их до синхронного прохода
+        if (selected.indexOf('tariff') !== -1 && !tariffCache) {
+            if (enrichRunBtn) { enrichRunBtn.disabled = true; }
+            loadComtradeCountries()
+                .then(function () { return prefetchTariffs(data, headers); })
+                .then(function () {
+                    if (enrichRunBtn) { enrichRunBtn.disabled = false; }
+                    runEnrichment();
+                });
             return;
         }
 
