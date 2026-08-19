@@ -58,8 +58,8 @@ document.addEventListener('DOMContentLoaded', function () {
             processingModule.innerHTML =
                 '<h2 class="module-title">Обработка данных <span class="lock-badge">' + lockSvg + 'другой тариф</span></h2>' +
                 '<div class="locked-module">' +
-                    '<p class="locked-lead">Раздел принимает вашу таможенную выгрузку в Excel или CSV ' +
-                    'и приводит её к виду, пригодному для анализа. В демонстрационном режиме он закрыт.</p>' +
+                    '<p class="locked-lead">Раздел позволяет загружать пользовательские данные из файлов Excel или CSV ' +
+                    'и подготавливать их к анализу. В демонстрационном режиме он закрыт.</p>' +
                     '<ul class="locked-list">' +
                         '<li>Загрузка своей выгрузки (CSV, XLS, XLSX), несколько файлов подряд</li>' +
                         '<li>Сопоставление столбцов выгрузки со справочником полей</li>' +
