@@ -48,6 +48,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (card) { card.style.display = 'none'; }
         });
 
+        // Словарь сегментов ведётся по ИНН и названиям компаний, то есть
+        // относится к тому же контрагентскому уровню
+        var dictSection = document.querySelector('.enrich-dict-section');
+        if (dictSection) { dictSection.style.display = 'none'; }
+
         // Раздел «Обработка»: пункт меню остаётся, содержимое подменяем
         // витриной — что этот раздел делает и почему сейчас закрыт.
         var processingNav = document.querySelector('.sidebar-nav-item[href="#processing"] .sidebar-nav-text');
@@ -10477,8 +10482,11 @@ document.addEventListener('DOMContentLoaded', function () {
      * и Всемирного банка нет вовсе. Без пометки пользователь отмечал всё
      * подряд и получал список ошибок вместо результата.
      */
+    // Обогащения, работающие по контрагенту: компания, ИНН, холдинг
+    var CONTRACTOR_ENRICHERS = ['segment', 'region', 'holding', 'product'];
+
     function enricherAvailability(e, headers) {
-        var needContractor = ['segment', 'region', 'holding', 'product'];
+        var needContractor = CONTRACTOR_ENRICHERS;
         if (needContractor.indexOf(e.id) !== -1 && !isContractorDataAvailable()) {
             return 'В данных ' + dataSourceName() + ' нет компаний-контрагентов';
         }
@@ -10508,6 +10516,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var headers = getActiveHeaders();
         var html = '';
         ENRICHERS.forEach(function (e) {
+            /*
+             * В демонстрационном доступе контрагентские обогащения не
+             * показываем совсем. Пометка «недоступно» описывала бы закрытую
+             * функцию, а данных для неё в доступных источниках нет.
+             */
+            if (isExpert && CONTRACTOR_ENRICHERS.indexOf(e.id) !== -1) { return; }
             var why = enricherAvailability(e, headers);
             var off = !!why;
             html += '<label class="enrich-item' + (off ? ' enrich-item-off' : '') +
@@ -10610,6 +10624,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var results = [];
         ENRICHERS.forEach(function (e) {
             if (selected.indexOf(e.id) === -1) return;
+            // Защита от запуска в обход интерфейса, как в анализах
+            if (isExpert && CONTRACTOR_ENRICHERS.indexOf(e.id) !== -1) { return; }
             var res = e.run(data, headers) || {};
             res.label = e.label;
             results.push(res);
