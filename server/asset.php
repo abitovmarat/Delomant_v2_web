@@ -28,11 +28,8 @@ if (empty($_SESSION['auth'])) {
  * Сессия больше не нужна — закрываем её сразу.
  *
  * PHP держит файл сессии заблокированным до конца скрипта, поэтому
- * параллельные запросы к asset.php выстраивались в очередь: модуль
- * зарубежной таможни тянет несколько многомегабайтных снимков разом,
- * и пока отдавался первый, остальные ждали и срывались по таймауту —
- * отсюда усечённый JSON. Дальше идёт только чтение файла с диска,
- * запись в сессию не потребуется.
+ * параллельные запросы к asset.php выстраивались бы в очередь. Дальше идёт
+ * только чтение файла с диска, запись в сессию не потребуется.
  */
 session_write_close();
 
@@ -50,27 +47,8 @@ $map = [
     'creg' => ['comtrade_regions.dat',      'application/json; charset=UTF-8'],
     'wits' => ['wits_countries.dat',        'application/json; charset=UTF-8'],
     'witsreg' => ['wits_regions.dat',       'application/json; charset=UTF-8'],
-    'fcjs' => ['foreign_customs.js.dat',    'application/javascript; charset=UTF-8'],
-    'fchs' => ['fc_hs_names.dat',           'application/json; charset=UTF-8'],
-    'fcco' => ['fc_co.dat',                 'application/json; charset=UTF-8'],
-    'fcpe' => ['fc_pe.dat',                 'application/json; charset=UTF-8'],
-    'fckz' => ['fc_kz.dat',                 'application/json; charset=UTF-8'],
-    'fckg' => ['fc_kg.dat',                 'application/json; charset=UTF-8'],
-    'fckgs'=> ['fc_kgs.dat',                'application/json; charset=UTF-8'],
-    'fckzs'=> ['fc_kzs.dat',                'application/json; charset=UTF-8'],
-    'fckzd'=> ['fc_kzd.dat',                'application/json; charset=UTF-8'],
+    'hsnames' => ['hs_names_ru.dat',         'application/json; charset=UTF-8'],
 ];
-
-/*
- * Ассеты с контрагентским уровнем данных.
- *
- * Колумбия и Перу собраны по модели «фирма»: там идентификаторы и названия
- * импортёров. Словарь компаний содержит российские наименования. В
- * демонстрационном доступе контрагентские разрезы закрыты в интерфейсе, но
- * без этой проверки файлы всё равно отдавались по прямому запросу, и
- * ограничение обходилось в один клик. Роль проверяем на сервере.
- */
-const CONTRACTOR_KEYS = ['fcco', 'fcpe', 'dict'];
 
 $key = (string)($_GET['f'] ?? '');
 if (!isset($map[$key])) {
@@ -78,7 +56,8 @@ if (!isset($map[$key])) {
     exit;
 }
 
-if (in_array($key, CONTRACTOR_KEYS, true) && (($_SESSION['role'] ?? 'full') !== 'full')) {
+// Пользовательский справочник компаний не входит в демонстрационный доступ.
+if ($key === 'dict' && (($_SESSION['role'] ?? 'full') !== 'full')) {
     http_response_code(403);
     exit;
 }
@@ -99,11 +78,8 @@ if (!is_file($path)) {
  * подхватывается обычным обновлением страницы.
  */
 /*
- * Предсжатая версия. Снимки зарубежной таможни весят по 3+ МБ, и отдача
- * такого объёма срывалась на полпути — JSON приходил усечённым каждый раз
- * в новом месте. Рядом с файлом сборка кладёт .gz (меньше в 4–5 раз);
- * если браузер сообщил, что понимает gzip, отдаём его и помечаем
- * Content-Encoding — распаковка на стороне браузера прозрачна для fetch.
+ * Предсжатая версия. Рядом с крупным файлом сборка кладёт .gz; если браузер
+ * сообщил, что понимает gzip, отдаём его и помечаем Content-Encoding.
  */
 $useGzip = false;
 $gzPath  = $path . '.gz';
@@ -143,8 +119,8 @@ if ($ifNoneMatch === $etag ||
  * байт. Если поверх включено сжатие (zlib.output_compression) или остался
  * буфер вывода, счёт расходится: браузер верит заголовку и обрывает чтение
  * на середине, а фронтенд получает усечённый JSON («unterminated string»
- * на многомегабайтных data/foreign/*.json). Поэтому сжатие для этих
- * ответов выключаем и чистим буферы.
+ * на крупном JSON). Поэтому сжатие для этих ответов выключаем и чистим
+ * буферы.
  *
  * Читаем и шлём кусками: readfile() на файле в несколько мегабайт может
  * упереться в memory_limit и оборваться.

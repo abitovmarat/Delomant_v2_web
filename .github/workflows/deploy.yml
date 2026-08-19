@@ -34,6 +34,8 @@ jobs:
       #
       # mirror без --delete не трогает config.php (хеш пароля создаётся на
       # сервере через setup.php, в dist не входит) — вход переживает выкладку.
+      # Удаление ниже касается только точного списка устаревших ассетов
+      # исключённого модуля; остальные серверные файлы не затрагиваются.
       - name: Deploy via lftp (FTPS)
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
@@ -50,6 +52,24 @@ jobs:
             set net:max-retries 2;
             set net:timeout 60;
             open -u '$FTP_USERNAME','$FTP_PASSWORD' '$FTP_SERVER';
+            rm -f '$FTP_SERVER_DIR/assets/foreign_customs.js.dat';
+            rm -f '$FTP_SERVER_DIR/assets/foreign_customs.js.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_hs_names.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_hs_names.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_co.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_co.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_pe.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_pe.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kz.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kz.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kg.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kg.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kgs.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kgs.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kzs.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kzs.dat.gz';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kzd.dat';
+            rm -f '$FTP_SERVER_DIR/assets/fc_kzd.dat.gz';
             mirror -R --verbose --no-perms ./dist/ '$FTP_SERVER_DIR';
           "
           echo 'Deploy complete.'

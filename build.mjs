@@ -51,15 +51,7 @@ const ASSETS = [
     ['data/comtrade_regions.json',   'assets/comtrade_regions.dat'],
     ['data/wits_countries.json',     'assets/wits_countries.dat'],
     ['data/wits_regions.json',       'assets/wits_regions.dat'],
-    ['scripts/foreign_customs.js',   'assets/foreign_customs.js.dat'],
-    ['data/foreign/hs_names_ru.json','assets/fc_hs_names.dat'],
-    ['data/foreign/co_aggregate.json','assets/fc_co.dat'],
-    ['data/foreign/pe_aggregate.json','assets/fc_pe.dat'],
-    ['data/foreign/kz_aggregate.json','assets/fc_kz.dat'],
-    ['data/foreign/kg_aggregate.json','assets/fc_kg.dat'],
-    ['data/foreign/kg_series.json',   'assets/fc_kgs.dat'],
-    ['data/foreign/kz_series.json',   'assets/fc_kzs.dat'],
-    ['data/foreign/kz_dynamic.json',  'assets/fc_kzd.dat'],
+    ['data/hs_names_ru.json',        'assets/hs_names_ru.dat'],
 ];
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');
@@ -98,17 +90,13 @@ if (process.env.COMTRADE_KEY) {
 const buildId = Date.now().toString(36);
 let appHtml = read('index.html')
     .replace('href="styles/main.css"', 'href="styles/main.css?v=' + buildId + '"')
-    .replace('src="scripts/main.js"', 'src="scripts/main.js?v=' + buildId + '"')
-    .replace('src="scripts/foreign_customs.js"', 'src="scripts/foreign_customs.js?v=' + buildId + '"');
+    .replace('src="scripts/main.js"', 'src="scripts/main.js?v=' + buildId + '"');
 sizes.push(['app/index.html', write('app/index.html', appHtml)]);
 /*
  * Ассеты кладём и в исходном виде, и предсжатыми (.gz).
  *
- * Зачем: снимки зарубежной таможни весят по 3+ МБ, и отдача такого объёма
- * через PHP срывалась — JSON приходил усечённым каждый раз в новом месте.
- * Gzip уменьшает их примерно в 4–5 раз, поэтому вероятность обрыва падает,
- * а загрузка ускоряется. asset.php отдаёт .gz, если браузер сообщил, что
- * понимает gzip; иначе — обычный файл, поэтому оба варианта нужны.
+ * Предсжатые копии ускоряют загрузку крупных справочников. asset.php отдаёт
+ * .gz, если браузер сообщил, что понимает gzip; иначе — обычный файл.
  */
 for (const [src, dst] of ASSETS) {
     const data = read(src);

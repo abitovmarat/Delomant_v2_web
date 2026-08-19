@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
        которую index.php подставляет при отдаче приложения. В режиме
        'expert' (доступ для проверяющих реестра) скрывается загрузка
        пользовательских выгрузок — стенд демонстрирует функциональность
-       на безопасных источниках (UN Comtrade, WITS, зарубежная таможня),
+       на безопасных источниках (UN Comtrade и WITS),
        не выступая хранилищем чужих таможенных деклараций. */
     var roleMeta = document.querySelector('meta[name="app-role"]');
     var appRole = roleMeta ? roleMeta.getAttribute('content') : 'full';
@@ -73,8 +73,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         '<li>Очистка наименований и приведение единиц измерения</li>' +
                         '<li>Сохранение обработанных данных в Excel или CSV</li>' +
                     '</ul>' +
-                    '<p class="locked-note">Источники, доступные в этом режиме (UN Comtrade, ' +
-                    'World Bank WITS, зарубежная таможня), приходят уже подготовленными. ' +
+                    '<p class="locked-note">Источники, доступные в этом режиме (UN Comtrade и ' +
+                    'World Bank WITS), приходят уже подготовленными. ' +
                     'Обработка им не нужна, анализ работает сразу.</p>' +
                 '</div>';
         }
@@ -157,11 +157,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (appState.dataSource === 'wits') {
             return appState.sourceNote || 'Источник: World Bank WITS, мировая торговая статистика';
         }
-        // Зарубежная таможня: журнал источника кладёт сюда сам модуль —
-        // такие данные тоже обязаны называть происхождение в материалах наружу
-        if (appState.dataSource === 'foreign') {
-            return appState.sourceNote || 'Источник: зарубежная таможенная статистика';
-        }
         return '';
     }
 
@@ -173,7 +168,6 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function dataSourceName() {
         if (appState.dataSource === 'wits') { return 'World Bank WITS'; }
-        if (appState.dataSource === 'foreign') { return 'зарубежной таможенной статистики'; }
         return 'UN Comtrade';
     }
 
@@ -195,7 +189,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function loadHsNames() {
         if (hsNamesPromise) { return hsNamesPromise; }
-        hsNamesPromise = fetch('data/foreign/hs_names_ru.json', { cache: 'force-cache' })
+        hsNamesPromise = fetch('data/hs_names_ru.json', { cache: 'force-cache' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
                 hsNamesData = (d && (d.hs6 || d.hs4)) ? d : { hs6: {}, hs4: {} };
@@ -685,19 +679,6 @@ document.addEventListener('DOMContentLoaded', function () {
             pendingLookupMode = false;
         });
     }
-
-    /*
-     * Единственная точка, через которую внешние модули (сейчас — «Зарубежная
-     * таможня») отдают приложению готовую таблицу. Не расширять произвольно:
-     * это узкий контракт, а не публичный API всего main.js.
-     */
-    window.DelomantData = {
-        apply: function (label, parsed, source, note) {
-            applyParsedData({ name: label }, parsed, source || 'file');
-            appState.sourceNote = note || '';
-        },
-        hasData: function () { return getActiveData().length > 0; }
-    };
 
     function applyParsedData(file, parsed, source) {
         appState.rawData = parsed.rows;
@@ -2271,10 +2252,9 @@ document.addEventListener('DOMContentLoaded', function () {
     /* ================================
        Справочник кодов ТН ВЭД (поиск по названию)
        ================================
-       Данные — data/foreign/hs_names_ru.json (hs6/hs4 → рус. название),
-       тот же файл, что и в модуле зарубежной таможни. Грузится лениво при
-       первом обращении. Клик по результату подставляет код в поле «Коды
-       ТН ВЭД». */
+       Данные — data/hs_names_ru.json (hs6/hs4 → рус. название). Грузится
+       лениво при первом обращении. Клик по результату подставляет код в
+       поле «Коды ТН ВЭД». */
     (function initHsSearch() {
         var input = document.querySelector('.hs-search-input');
         var results = document.querySelector('.hs-search-results');
