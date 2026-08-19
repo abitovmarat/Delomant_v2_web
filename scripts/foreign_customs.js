@@ -114,28 +114,41 @@
     function injectStyles() {
         if (document.getElementById('fc-style')) { return; }
         var css =
+        // Используем общую светлую палитру приложения — такую же, как в
+        // карточках UN Comtrade и WITS в разделе «Источники данных».
+        '#foreign{--fc-bg:var(--color-surface);--fc-fg:var(--color-text);--fc-mut:var(--color-text-secondary);' +
+            '--fc-lbl:var(--color-text-secondary);--fc-line:var(--color-border);--fc-cob:var(--color-primary);' +
+            '--fc-acc:var(--color-primary);--fc-tile:var(--color-bg)}' +
+        '#foreign #fc-root{background:var(--fc-bg);border:1px solid var(--fc-line);border-radius:var(--radius-md);' +
+            'padding:var(--space-xl);margin-bottom:var(--space-xl)}' +
         '#foreign .fc-note{color:var(--fc-mut);font-size:13px;margin:.2em 0 1em;max-width:80ch}' +
-        '#foreign .fc-tabs{display:flex;gap:8px;margin-bottom:14px}' +
-        '#foreign .fc-tab{padding:8px 16px;border:1px solid var(--fc-line);border-radius:9px;background:var(--fc-tile);color:var(--fc-fg);cursor:pointer;font-size:14px;font-weight:600}' +
+        '#foreign .fc-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}' +
+        '#foreign .fc-tab{padding:6px 12px;border:1px solid var(--fc-line);border-radius:999px;background:var(--fc-bg);' +
+            'color:var(--fc-fg);cursor:pointer;font-family:inherit;font-size:13px;font-weight:500}' +
+        '#foreign .fc-tab:hover{border-color:var(--fc-cob);color:var(--fc-cob)}' +
         '#foreign .fc-tab.on{background:var(--fc-cob);color:#fff;border-color:var(--fc-cob)}' +
         '#foreign .fc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}' +
-        '#foreign .fc-tile{background:var(--fc-tile);border:1px solid var(--fc-line);border-radius:12px;padding:12px 14px}' +
+        '#foreign .fc-tile{background:var(--fc-tile);border:1px solid var(--fc-line);border-radius:var(--radius-md);padding:12px 14px}' +
         '#foreign .fc-tile .v{font-size:20px;font-weight:700;color:var(--fc-cob)}' +
         '#foreign .fc-tile .l{font-size:12px;color:var(--fc-mut);margin-top:2px}' +
         '#foreign .fc-ctrl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}' +
-        '#foreign .fc-ctrl input{flex:1;min-width:170px;padding:9px 12px;border:1px solid var(--fc-line);border-radius:9px;background:var(--fc-bg);color:var(--fc-fg);font-size:14px}' +
+        '#foreign .fc-ctrl input{flex:1;min-width:170px;padding:8px 12px;border:1px solid var(--fc-line);border-radius:var(--radius-sm);' +
+            'background:var(--fc-bg);color:var(--fc-fg);font-family:inherit;font-size:13px}' +
+        '#foreign .fc-ctrl input:focus,#foreign .fc-sel:focus{outline:none;border-color:var(--fc-cob)}' +
         // Справочник «название → код» под полем фильтра
         '#foreign .fc-hsbox{position:relative;display:flex;flex:1;min-width:170px}' +
         '#foreign .fc-hsbox input{width:100%}' +
         '#foreign .fc-hslist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:260px;overflow-y:auto;' +
-            'background:var(--fc-bg);border:1px solid var(--fc-line);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.28)}' +
+            'background:var(--fc-bg);border:1px solid var(--fc-line);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg)}' +
         '#foreign .fc-hsitem{display:flex;gap:9px;align-items:baseline;padding:8px 11px;cursor:pointer;font-size:13px;color:var(--fc-fg);border-bottom:1px solid var(--fc-line)}' +
         '#foreign .fc-hsitem:last-child{border-bottom:none}' +
         '#foreign .fc-hsitem:hover{background:var(--fc-tile)}' +
         '#foreign .fc-hsitem b{flex:0 0 auto;color:var(--fc-acc);font-family:ui-monospace,monospace;font-size:12.5px}' +
-        '#foreign .fc-btn{padding:9px 14px;border:1px solid var(--fc-cob);border-radius:9px;background:var(--fc-cob);color:#fff;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap}' +
+        '#foreign .fc-btn{padding:10px 20px;border:1px solid var(--fc-cob);border-radius:var(--radius-sm);background:var(--fc-cob);' +
+            'color:#fff;cursor:pointer;font-family:inherit;font-size:14px;font-weight:500;white-space:nowrap}' +
+        '#foreign .fc-btn:hover{background:var(--color-primary-dark);border-color:var(--color-primary-dark)}' +
         '#foreign .fc-cnt{color:var(--fc-mut);font-size:13px;white-space:nowrap}' +
-        '#foreign .fc-wrap{overflow-x:auto;border:1px solid var(--fc-line);border-radius:12px}' +
+        '#foreign .fc-wrap{overflow-x:auto;border:1px solid var(--fc-line);border-radius:var(--radius-md);background:var(--fc-bg)}' +
         // table-layout:fixed — иначе браузер тянет таблицу под самую длинную ячейку
         // (в статистике КЗ описания товара доходят до ~1000 знаков) и она выходит за экран
         '#foreign table.fc-tbl{border-collapse:collapse;width:100%;font-size:13px;min-width:720px;table-layout:fixed}' +
@@ -149,17 +162,15 @@
         '#foreign .fc-prod{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
         '#foreign .fc-foot{color:var(--fc-mut);font-size:12px;margin-top:10px}' +
         // ряды: селектор периода, дельта, спарклайн
-        '#foreign .fc-sel{padding:9px 12px;border:1px solid var(--fc-line);border-radius:9px;background:var(--fc-bg);color:var(--fc-fg);font-size:13px;font-weight:600}' +
+        '#foreign .fc-sel{padding:8px 12px;border:1px solid var(--fc-line);border-radius:var(--radius-sm);background:var(--fc-bg);' +
+            'color:var(--fc-fg);font-family:inherit;font-size:13px;font-weight:500}' +
         '#foreign .fc-d{font-weight:600}' +
         '#foreign .fc-d.up{color:#15803d}#foreign .fc-d.down{color:#b91c1c}' +
-        '@media(prefers-color-scheme:dark){#foreign .fc-d.up{color:#4ade80}#foreign .fc-d.down{color:#f87171}}' +
         '#foreign .fc-spark{color:var(--fc-cob);vertical-align:middle;display:block}' +
         // журнал источника (провенанс)
         '#foreign .fc-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:1px}' +
         '#foreign .fc-badge.ok{background:#dcfce7;color:#166534}' +
         '#foreign .fc-badge.warn{background:#fef3c7;color:#92400e}' +
-        '@media(prefers-color-scheme:dark){#foreign .fc-badge.ok{background:#14532d;color:#bbf7d0}' +
-        '#foreign .fc-badge.warn{background:#78350f;color:#fde68a}}' +
         '#foreign .fc-prov{margin-top:.6em}' +
         '#foreign .fc-prov summary{cursor:pointer;color:var(--fc-cob);font-weight:600;font-size:13px}' +
         '#foreign .fc-prov dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:7px 16px;' +
@@ -168,14 +179,10 @@
         '#foreign .fc-prov dt{color:var(--fc-lbl);font-weight:600}' +
         '#foreign .fc-prov dd{margin:0;color:var(--fc-fg)}' +
         '#foreign .fc-prov a{color:var(--fc-cob)}' +
-        '#foreign .fc-drill{border:1px solid var(--fc-cob);border-radius:12px;padding:14px 16px;margin-bottom:16px;background:var(--fc-tile)}' +
+        '#foreign .fc-drill{border:1px solid var(--fc-cob);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:16px;background:var(--fc-tile)}' +
         '#foreign .fc-drill h4{margin:0 0 .2em;font-size:16px}' +
         '#foreign .fc-drill .close{float:right;cursor:pointer;color:var(--fc-mut);font-size:20px;line-height:1}' +
-        // палитра (с учётом тёмной темы приложения, если она есть)
-        // --fc-mut — только для второстепенных подписей; --fc-lbl потемнее,
-        // для названий полей в журнале источника, чтобы они читались, а не бледнели
-        '#foreign{--fc-bg:#fff;--fc-fg:#0f172a;--fc-mut:#57647a;--fc-lbl:#334155;--fc-line:#e2e8f0;--fc-cob:#2563eb;--fc-tile:#f1f5f9}' +
-        '@media(prefers-color-scheme:dark){#foreign{--fc-bg:#0b1220;--fc-fg:#e5e9f0;--fc-mut:#a9b7ca;--fc-lbl:#cbd5e1;--fc-line:#1e293b;--fc-cob:#3b82f6;--fc-tile:#111a2e}}';
+        '@media(max-width:700px){#foreign #fc-root{padding:var(--space-lg)}#foreign .fc-btn{width:100%}}';
         var el = document.createElement('style');
         el.id = 'fc-style';
         el.textContent = css;
