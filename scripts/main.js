@@ -2346,7 +2346,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var WITS_PROXY_URL = 'wits.php';
     var WITS_COUNTRIES_URL = 'data/wits_countries.json';
     var WITS_REGIONS_URL = 'data/wits_regions.json';
-    var LS_WITS_COUNTRIES_KEY = 'delomant_wits_countries';
+    // Версия не позволяет старому англоязычному справочнику остаться в
+    // localStorage после обновления перевода.
+    var LS_WITS_COUNTRIES_KEY = 'delomant_wits_countries_v2';
 
     // Репортёров шлём пачкой, год — по одному на запрос: WITS даёт 413, если
     // списком идут и репортёры, и годы сразу (см. батчинг в witsLoad).
@@ -2382,14 +2384,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function loadWitsCountries() {
         if (witsCountries.length > 0) { return Promise.resolve(witsCountries); }
-        try {
-            var cached = localStorage.getItem(LS_WITS_COUNTRIES_KEY);
-            if (cached) {
-                witsCountries = JSON.parse(cached);
-                if (witsCountries.length > 0) { return Promise.resolve(witsCountries); }
-            }
-        } catch (e) { /* ignore */ }
-
+        // Сначала запрашиваем актуальный серверный файл. localStorage нужен
+        // только как резерв при временной ошибке сети, иначе старый перевод
+        // мог оставаться в интерфейсе неограниченно долго.
         return fetch(WITS_COUNTRIES_URL)
             .then(function (resp) { if (!resp.ok) { throw new Error(resp.status); } return resp.json(); })
             .then(function (json) {
@@ -2397,7 +2394,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 try { localStorage.setItem(LS_WITS_COUNTRIES_KEY, JSON.stringify(witsCountries)); } catch (e) { /* ignore */ }
                 return witsCountries;
             })
-            .catch(function () { witsCountries = []; return witsCountries; });
+            .catch(function () {
+                try {
+                    var cached = localStorage.getItem(LS_WITS_COUNTRIES_KEY);
+                    witsCountries = cached ? JSON.parse(cached) : [];
+                } catch (e) { witsCountries = []; }
+                return witsCountries;
+            });
     }
 
     function loadWitsRegions() {
