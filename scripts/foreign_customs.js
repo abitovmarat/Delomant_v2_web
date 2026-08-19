@@ -128,10 +128,10 @@
         '#foreign .fc-hsbox{position:relative;display:flex;flex:1;min-width:170px}' +
         '#foreign .fc-hsbox input{width:100%}' +
         '#foreign .fc-hslist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:260px;overflow-y:auto;' +
-            'background:var(--fc-card);border:1px solid var(--fc-line);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18)}' +
-        '#foreign .fc-hsitem{display:flex;gap:9px;align-items:baseline;padding:8px 11px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--fc-line)}' +
+            'background:var(--fc-bg);border:1px solid var(--fc-line);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.28)}' +
+        '#foreign .fc-hsitem{display:flex;gap:9px;align-items:baseline;padding:8px 11px;cursor:pointer;font-size:13px;color:var(--fc-fg);border-bottom:1px solid var(--fc-line)}' +
         '#foreign .fc-hsitem:last-child{border-bottom:none}' +
-        '#foreign .fc-hsitem:hover{background:var(--fc-bg)}' +
+        '#foreign .fc-hsitem:hover{background:var(--fc-tile)}' +
         '#foreign .fc-hsitem b{flex:0 0 auto;color:var(--fc-acc);font-family:ui-monospace,monospace;font-size:12.5px}' +
         '#foreign .fc-btn{padding:9px 14px;border:1px solid var(--fc-cob);border-radius:9px;background:var(--fc-cob);color:#fff;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap}' +
         '#foreign .fc-cnt{color:var(--fc-mut);font-size:13px;white-space:nowrap}' +
