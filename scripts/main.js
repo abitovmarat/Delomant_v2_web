@@ -6048,7 +6048,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '<h3>Сигналы и риски</h3>' +
             '<span class="signals-base">база: ' + marketEsc(res.base.unit) + ' · ' +
             res.base.countries + ' стран · ' + res.base.years.length + ' периодов</span></div>';
-        html += '<p class="signals-note">Все значения посчитаны по загруженным данным, без внешних источников и без моделей.</p>';
+        html += '<p class="signals-note">Все показатели рассчитаны по загруженным данным.</p>';
         html += '<div class="signals-grid">';
         list.forEach(function (s) {
             html += '<div class="signal-card signal-' + s.level + '">' +
@@ -10530,7 +10530,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 (off ? ' disabled' : ' checked') + ' style="margin-top:3px">';
             html += '<span><span style="font-weight:600">' + escEnrich(e.label) + '</span>';
             html += '<br><span style="font-size:12px;color:var(--color-text-secondary)">' + escEnrich(e.description) + '</span>';
-            html += '<br><span style="font-size:11px;color:var(--color-text-muted)">Столбцы: ' + e.adds.map(escEnrich).join(', ') + ' · без нейросети</span>';
+            html += '<br><span style="font-size:11px;color:var(--color-text-muted)">Столбцы: ' + e.adds.map(escEnrich).join(', ') + '</span>';
             if (off) {
                 html += '<br><span class="enrich-why">Недоступно: ' + escEnrich(why) + '</span>';
             }
