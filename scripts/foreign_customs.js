@@ -579,12 +579,16 @@
         document.getElementById('fc-drill').innerHTML = '';
         // Передача в приложение возможна только для контрагентской модели —
         // см. пояснение в toAppRows()
-        // Срез страновой модели в приложение не отдаём: одна точка без динамики
-        // и без контрагентов там бесполезна. Ряд — отдаём: он даёт годы.
+        // Отдаём в приложение любую модель. У странового среза одна точка
+        // во времени, поэтому динамика по годам на нём не построится, зато
+        // работают разрезы по кодам, странам и ценам.
         var use = document.getElementById('fc-use');
-        use.hidden = ctry;
-        use.title = 'Загрузить снимок как активную таблицу приложения ' +
-                    '(разделы «Обработка», «Анализ», «Презентация»)';
+        use.hidden = false;
+        use.title = ctry
+            ? 'Загрузить срез как активную таблицу приложения. Период один, ' +
+              'поэтому динамика по годам будет недоступна'
+            : 'Загрузить снимок как активную таблицу приложения ' +
+              '(разделы «Обработка», «Анализ», «Презентация»)';
         var ser = isSeries();
         // Селектор периода — только у рядов; по умолчанию последний полный
         var sel = document.getElementById('fc-period');
@@ -740,8 +744,69 @@
         return { headers: headers, rows: rows };
     }
 
+    /*
+     * Страновой срез → таблица приложения.
+     *
+     * Здесь строка источника несёт сразу два направления: экспорт и импорт
+     * по паре «товар + партнёр». Разворачиваем их в отдельные строки, иначе
+     * анализы не смогут отличить ввоз от вывоза. Нулевые значения пропускаем:
+     * в источнике ноль означает «поставок не было», и лишние пустые строки
+     * только занижали бы средние.
+     *
+     * Период у среза один на весь снимок, помесячной разбивки в нём нет,
+     * поэтому дата у всех строк одинаковая. Контрагентов источник не
+     * содержит, эта колонка остаётся незаполненной.
+     */
+    function countryToAppRows() {
+        var d = current(), p = d.meta.source;
+        var headers = ['Дата регистрации', 'Год', 'Период', 'Страна отправления',
+                       'Код товара по ТН ВЭД', 'Наименование и характеристики товаров',
+                       'Направление перемещения', 'Вес нетто, кг',
+                       'Статистическая стоимость, USD'];
+
+        var period = String(p.period || '');
+        var year = period.slice(0, 4);
+        var date = /^\d{4}-\d{2}$/.test(period) ? period + '-01' : (year ? year + '-01-01' : '');
+        var label = p.period_label || period;
+
+        var rows = [];
+        d.rows.forEach(function (r) {
+            var code = r[0], name = r[1] || hsName(code), partner = r[2];
+            // Тонны источника приводим к килограммам: приложение считает вес в кг
+            if (r[5] || r[6]) {
+                rows.push([date, year, label, partner, code, name, 'ИМ',
+                           r[5] ? Math.round(r[5] * 1000) : '', r[6] || '']);
+            }
+            if (r[3] || r[4]) {
+                rows.push([date, year, label, partner, code, name, 'ЭК',
+                           r[3] ? Math.round(r[3] * 1000) : '', r[4] || '']);
+            }
+        });
+        return { headers: headers, rows: rows };
+    }
+
+    function sendCountryToApp() {
+        if (!window.DelomantData) { alert('Модуль данных приложения недоступен.'); return; }
+        var d = current(), p = d.meta.source;
+        var label = p.title + ' — ' + p.period_label;
+        if (window.DelomantData.hasData() &&
+            !confirm('Загруженные данные будут заменены на «' + label + '».\n\nПродолжить?')) {
+            return;
+        }
+        var parsed = countryToAppRows();
+        var note = 'Источник: ' + p.agency + ' (' + p.dataset + '), ' + p.period_label +
+                   '; выгрузка ' + p.retrieved +
+                   (p.category === 'unofficial' ? '; данные без статистической валидации' : '');
+        window.DelomantData.apply(label, parsed, 'foreign', note);
+        var link = document.querySelector('.sidebar-nav-item[href="#data"]');
+        if (link) { link.click(); }
+        alert('Загружено строк: ' + fmt(parsed.rows.length) + '.\n\n' +
+              'Один период (' + p.period_label + '), поэтому динамика по годам недоступна. ' +
+              'Контрагентов в источнике нет: доступны анализы по кодам и странам.');
+    }
+
     function sendToApp() {
-        if (isCountry()) { return; }
+        if (isCountry()) { return sendCountryToApp(); }
         if (isSeries()) { return sendSeriesToApp(); }
         if (!window.DelomantData) {
             alert('Модуль данных приложения недоступен.');
