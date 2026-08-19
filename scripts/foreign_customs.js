@@ -56,6 +56,22 @@
                noPartner: true, tab: '🇰🇿 Казахстан: 2019–2026' }
     };
 
+    /*
+     * Контрагентские источники (модель «фирма»: идентификаторы и названия
+     * импортёров) в демонстрационном доступе не показываем. Сервер их и так
+     * не отдаёт этой роли, поэтому без фильтра вкладки просто падали бы с
+     * ошибкой загрузки. Роль приходит в <meta name="app-role">.
+     */
+    function isDemoRole() {
+        var m = document.querySelector('meta[name="app-role"]');
+        return !!m && m.getAttribute('content') === 'expert';
+    }
+    function availableSources() {
+        return Object.keys(SOURCES).filter(function (c) {
+            return !(isDemoRole() && SOURCES[c].kind === 'firm');
+        });
+    }
+
     var CATEGORY = {
         official:   { label: 'официальные данные', cls: 'ok' },
         unofficial: { label: 'без статистической валидации', cls: 'warn' },
@@ -81,7 +97,10 @@
     // страны сбрасывается на «оборот по убыванию» (CIF у firm, импорт USD у country).
     // sortV — индекс колонки-ВЕКТОРА (только в рядах), periodIdx — какой период
     // из вектора показываем; в остальных моделях они не используются.
-    var state = { country: 'CO', sortK: 5, sortV: null, periodIdx: 0, dir: -1, drill: null };
+    // Стартовая вкладка: Колумбия, а в демонстрационном доступе её нет,
+    // поэтому берём первый доступный источник
+    var state = { country: availableSources()[0] || 'CO', sortK: 5, sortV: null,
+                  periodIdx: 0, dir: -1, drill: null };
 
     // Колонка оборота для сортировки по умолчанию: CIF (firm), импорт USD (country).
     function defaultSort() { return src().sortDefault; }
@@ -164,7 +183,7 @@
     }
 
     function shell(root) {
-        var tabs = Object.keys(SOURCES).map(function (c) {
+        var tabs = availableSources().map(function (c) {
             return '<button class="fc-tab" data-c="' + c + '">' + SOURCES[c].tab + '</button>';
         }).join('');
         root.innerHTML =
@@ -837,7 +856,7 @@
         // Ряды (~6 МБ на двоих) при старте не тянем — они грузятся по клику на
         // свою вкладку. Иначе каждое открытие раздела платит за данные, которые
         // нужны не всегда.
-        var codes = Object.keys(SOURCES).filter(function (c) { return SOURCES[c].kind !== 'series'; });
+        var codes = availableSources().filter(function (c) { return SOURCES[c].kind !== 'series'; });
         Promise.all([fetchJson('data/foreign/hs_names_ru.json')].concat(
             codes.map(function (c) { return fetchJson(SOURCES[c].file); })
         )).then(function (res) {
