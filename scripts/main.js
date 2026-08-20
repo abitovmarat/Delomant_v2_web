@@ -440,10 +440,54 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    /*
+     * Сброс загруженных данных: чтобы взяться за другую выгрузку, не
+     * перезагружая страницу. Чистим и состояние, и всё, что от него
+     * зависит — результаты анализа, превью обработки, списки колонок,
+     * кэш тарифов. Иначе на новом файле остались бы куски прежнего.
+     */
+    function resetLoadedData() {
+        appState.rawData = [];
+        appState.headers = [];
+        appState.fileName = '';
+        appState.processedData = [];
+        appState.processedHeaders = [];
+        appState.isProcessed = false;
+        appState.dataSource = 'file';
+        appState.loadedAt = null;
+        appState.sourceNote = '';
+        tariffCache = null;
+
+        fileList.innerHTML = '';
+        if (uploadTitle) { uploadTitle.textContent = 'Перетащите файл сюда'; }
+        if (uploadDesc) { uploadDesc.textContent = 'или нажмите для выбора. Подойдут CSV, XLS, XLSX'; }
+        if (appendRow) { appendRow.style.display = 'none'; }
+        // Без очистки value повторный выбор того же файла не вызовет change
+        if (uploadInput) { uploadInput.value = ''; }
+        if (appendInput) { appendInput.value = ''; }
+        if (analysisResults) { analysisResults.innerHTML = ''; }
+
+        updateProcessingState();
+        renderColumnsList();
+        updateRatioSelects();
+        renderEnrichList();
+        updateCustomMappingSelects();
+        updateVisualizationFields();
+    }
+
     // --- Добавление файла (append) ---
     var appendRow = document.querySelector('.upload-append-row');
     var appendBtn = document.querySelector('.upload-append-btn');
     var appendInput = document.querySelector('.upload-append-input');
+    var resetBtn = document.querySelector('.upload-reset-btn');
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            if (!appState.rawData.length) { return; }
+            if (!confirm('Убрать загруженные данные и результаты анализа? Отменить это нельзя.')) { return; }
+            resetLoadedData();
+        });
+    }
 
     if (appendBtn && appendInput) {
         appendBtn.addEventListener('click', function () { appendInput.click(); });

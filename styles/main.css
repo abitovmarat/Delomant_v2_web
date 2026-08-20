@@ -2092,7 +2092,9 @@ body {
     display: grid;
     grid-template-columns: repeat(4, minmax(150px, 1fr));
     gap: 14px;
-    align-items: end;
+    /* Выравниваем по верху: подсказка под полем удлиняет свою ячейку,
+       и при выравнивании по низу соседние селекты уезжали вверх */
+    align-items: start;
 }
 
 .market-config-grid label {
@@ -2111,6 +2113,14 @@ body {
 .market-metric-hint {
     color: var(--color-text-secondary);
     font-size: 11px;
+    /* Пустая подсказка не должна раздвигать сетку */
+    min-height: 0;
+}
+
+/* Подпись в одну строку — иначе поля в ряду разъедутся по высоте */
+.market-config-grid label > span {
+    min-height: 16px;
+    line-height: 16px;
 }
 
 .market-config-grid select,
@@ -2127,6 +2137,10 @@ body {
 }
 
 .market-config-grid .market-run-btn {
+    /* Ряд выровнен по верху, у кнопки нет подписи — сдвигаем её на
+       высоту подписи с отступом, чтобы стояла на линии полей */
+    align-self: start;
+    margin-top: 21px;
     min-height: 38px;
 }
 
