@@ -12366,51 +12366,69 @@ document.addEventListener('DOMContentLoaded', function () {
             ? (years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1])
             : '—';
 
-        var svgW = 900;
-        var headH = 92;
-        var rowH = 30;
-        var missH = missing.length ? 46 : 0;
-        var svgH = headH + rows.length * rowH + missH;
+        /*
+         * Ширина под данные — левая колонка слайда (примерно 530 px), а не
+         * весь слайд: справа стоит колонка с комментарием. Раньше картинка
+         * рисовалась на 900 px и обрезалась — проценты и часть подписей
+         * просто не попадали в кадр.
+         */
+        var svgW = 520;
+        var lineH = 24;
+        var labelW = 168;
+        var barX = labelW + 8;
+        var barW = 250;
+        var pctX = barX + barW + 8;
 
-        var labelX = 8, barX = 250, barW = 430, pctX = barX + barW + 14;
+        // Заголовок раздела + строка-сводка вместо крупных карточек:
+        // на узкой колонке карточки съедали половину места
+        var headTop = 16;
+        var listTop = 56;
+
+        // Подпись про отсутствующие поля переносим сами: в SVG нет переноса строк
+        var missLines = [];
+        if (missing.length) {
+            var prefix = 'Нет в выгрузке: ';
+            var current = prefix;
+            missing.forEach(function (name, i) {
+                var piece = name + (i < missing.length - 1 ? ', ' : '');
+                if (current.length + piece.length > 74) {
+                    missLines.push(current);
+                    current = piece;
+                } else {
+                    current += piece;
+                }
+            });
+            if (current.trim()) { missLines.push(current); }
+        }
+
+        var svgH = listTop + rows.length * lineH + (missLines.length ? missLines.length * 14 + 10 : 0);
 
         var body = '<svg width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
         body += '<style>text{font-family:DejaVu Sans,Arial,sans-serif}</style>';
 
-        // Шапка: на чём построен отчёт
-        var facts = [
-            { value: formatNumber(data.length), label: 'записей в выгрузке' },
-            { value: periodVal, label: partial ? 'период (' + partial.year + ' неполный)' : 'период данных' },
-            { value: formatNumber(headers.length), label: 'полей в таблице' }
-        ];
-        var factW = Math.floor((svgW - 2 * 16) / 3);
-        facts.forEach(function (f, i) {
-            var fx = i * (factW + 16);
-            body += '<rect x="' + fx + '" y="0" width="' + factW + '" height="76" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>';
-            body += '<rect x="' + fx + '" y="0" width="5" height="76" rx="2.5" fill="#2563EB"/>';
-            var vsize = String(f.value).length > 11 ? 22 : 28;
-            body += '<text x="' + (fx + 20) + '" y="' + 38 + '" font-size="' + vsize + '" font-weight="700" fill="#0F172A">' + svgEscFact(f.value) + '</text>';
-            body += '<text x="' + (fx + 20) + '" y="' + 60 + '" font-size="12" fill="#475569">' + svgEscFact(f.label) + '</text>';
-        });
+        // Что за данные: одна строка, читается слева направо
+        var summary = formatNumber(data.length) + ' записей · период ' + periodVal +
+            (partial ? ' (' + partial.year + ' неполный)' : '') + ' · полей: ' + headers.length;
+        body += '<text x="0" y="' + headTop + '" font-size="13" font-weight="700" fill="#0F172A">' + svgEscFact(summary) + '</text>';
+        body += '<text x="0" y="' + (headTop + 20) + '" font-size="11" fill="#64748B">Заполненность полей — доля строк, где значение есть</text>';
+        body += '<line x1="0" y1="' + (listTop - 14) + '" x2="' + svgW + '" y2="' + (listTop - 14) + '" stroke="#E2E8F0"/>';
 
-        // Заполненность полей
         rows.forEach(function (r, i) {
-            var y = headH + i * rowH;
+            var y = listTop + i * lineH;
             var pct = Math.round(r.fill * 100);
             var color = r.fill >= 0.95 ? '#16A34A' : (r.fill >= 0.6 ? '#F59E0B' : '#DC2626');
-            body += '<text x="' + labelX + '" y="' + (y + 15) + '" font-size="13" fill="#334155">' + svgEscFact(r.label) + '</text>';
-            body += '<rect x="' + barX + '" y="' + (y + 4) + '" width="' + barW + '" height="14" rx="7" fill="#E2E8F0"/>';
+            body += '<text x="0" y="' + (y + 11) + '" font-size="11" fill="#334155">' + svgEscFact(truncFact(r.label, 24)) + '</text>';
+            body += '<rect x="' + barX + '" y="' + (y + 2) + '" width="' + barW + '" height="11" rx="5.5" fill="#EEF1F6"/>';
             if (pct > 0) {
-                body += '<rect x="' + barX + '" y="' + (y + 4) + '" width="' + Math.max(4, barW * r.fill) + '" height="14" rx="7" fill="' + color + '"/>';
+                body += '<rect x="' + barX + '" y="' + (y + 2) + '" width="' + Math.max(4, barW * r.fill) + '" height="11" rx="5.5" fill="' + color + '"/>';
             }
-            body += '<text x="' + pctX + '" y="' + (y + 16) + '" font-size="13" font-weight="600" fill="' + color + '">' + pct + '%</text>';
+            body += '<text x="' + pctX + '" y="' + (y + 12) + '" font-size="11" font-weight="700" fill="' + color + '">' + pct + '%</text>';
         });
 
-        if (missing.length) {
-            var my = headH + rows.length * rowH + 12;
-            body += '<text x="' + labelX + '" y="' + my + '" font-size="12" fill="#94A3B8">Нет в выгрузке: ' +
-                svgEscFact(missing.join(', ')) + '</text>';
-        }
+        missLines.forEach(function (line, i) {
+            var my = listTop + rows.length * lineH + 12 + i * 14;
+            body += '<text x="0" y="' + my + '" font-size="10" fill="#94A3B8">' + svgEscFact(line) + '</text>';
+        });
         body += '</svg>';
 
         // Провенанс: откуда цифры и как считались рубли
@@ -12426,7 +12444,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 '), темпы роста считаются по полным годам.');
         }
         if (missing.length) {
-            notes.push('Разделы, которым нужны отсутствующие поля, в отчёт не включались.');
+            notes.push('Полей, которых нет в выгрузке: ' + missing.length +
+                '. Разделы, которым они нужны, в отчёт не включались.');
         }
 
         return slideWrapper(title, body, {
