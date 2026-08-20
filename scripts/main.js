@@ -6273,7 +6273,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (findColumn(headers, COL_WEIGHT) && findColumn(headers, COL_STAT_USD)) {
             result.push({ key: 'price', label: 'Средневзвешенная цена, USD/кг' });
         }
-        result.push({ key: 'count', label: 'Количество строк' });
+        result.push({ key: 'count', label: 'Число записей (частота)' });
         return result;
     }
 
@@ -6293,6 +6293,29 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!digits) { return raw; }
         var level = Math.max(2, Math.min(parseInt(hsLevel, 10) || 10, 10));
         return digits.length > level ? digits.slice(0, level) : digits;
+    }
+
+    /*
+     * Какие уровни ТН ВЭД имеет смысл предлагать для загруженных данных.
+     * Обрезка кода только укорачивает: если в выгрузке коды по 4 знака,
+     * HS6 и HS10 дадут ту же группировку, что и HS4, — такие варианты
+     * в списке не показываем. Текстовые «коды» WITS («Топливо (27-27)»)
+     * не обрезаются вовсе, для них уровня нет.
+     */
+    function marketHsLevels(data, column) {
+        var maxDigits = 0;
+        data.forEach(function (row) {
+            var raw = String(row[column] == null ? '' : row[column]).trim();
+            if (!raw || /[A-Za-zА-Яа-я]/.test(raw)) { return; }
+            var digits = raw.replace(/\D/g, '');
+            if (digits.length > maxDigits) { maxDigits = digits.length; }
+        });
+        // marketDimensionValue режет максимум по 10 знакам — выше не предлагаем
+        if (maxDigits > 10) { maxDigits = 10; }
+        if (maxDigits < 4) { return []; }
+        var levels = [2, 4, 6, 8].filter(function (l) { return l < maxDigits; });
+        levels.push(maxDigits);
+        return levels;
     }
 
     function marketAccumulatorValue(acc, metric) {
@@ -6422,7 +6445,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (metric === 'weight') { return 'Вес нетто, кг'; }
         if (metric === 'usd') { return 'Стоимость, USD'; }
         if (metric === 'price') { return 'Цена, USD/кг'; }
-        return 'Количество строк';
+        return 'Число записей';
     }
 
     function marketFormatValue(value, metric) {
@@ -6595,10 +6618,12 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<label><span>Сравниваемый период</span><select class="market-current-period"></select></label>';
         html += '<label><span>Разрез</span><select class="market-dimension">' +
             dimensions.map(function (d) { return '<option value="' + marketEsc(d.column) + '" data-type="' + d.type + '">' + marketEsc(d.label) + '</option>'; }).join('') + '</select></label>';
-        html += '<label class="market-hs-field"><span>Уровень ТН ВЭД</span><select class="market-hs-level">' +
-            '<option value="2">HS2</option><option value="4" selected>HS4</option><option value="6">HS6</option><option value="10">HS10</option></select></label>';
+        html += '<label class="market-hs-field"><span>Уровень ТН ВЭД</span>' +
+            '<select class="market-hs-level"></select>' +
+            '<small class="market-hs-hint"></small></label>';
         html += '<label><span>Показатель</span><select class="market-metric">' +
-            metrics.map(function (m) { return '<option value="' + m.key + '">' + marketEsc(m.label) + '</option>'; }).join('') + '</select></label>';
+            metrics.map(function (m) { return '<option value="' + m.key + '">' + marketEsc(m.label) + '</option>'; }).join('') +
+            '</select><small class="market-metric-hint"></small></label>';
         html += '<label><span>Минимальный объём</span><input class="market-threshold" type="number" min="0" step="any" value="0"></label>';
         html += '<label><span>Показывать позиций</span><input class="market-topn" type="number" min="3" max="50" value="10"></label>';
         html += '<button class="btn btn-primary market-run-btn">Сравнить периоды</button></div></div>';
@@ -6610,6 +6635,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var currentEl = analysisResults.querySelector('.market-current-period');
         var dimensionEl = analysisResults.querySelector('.market-dimension');
         var hsField = analysisResults.querySelector('.market-hs-field');
+        var metricEl = analysisResults.querySelector('.market-metric');
+        var metricHintEl = analysisResults.querySelector('.market-metric-hint');
+        var hsLevelEl = analysisResults.querySelector('.market-hs-level');
+        var hsHintEl = analysisResults.querySelector('.market-hs-hint');
 
         function refreshPeriods() {
             var periods = marketCollectPeriods(data, headers, granularityEl.value);
@@ -6620,16 +6649,43 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         function refreshHsField() {
             var opt = dimensionEl.options[dimensionEl.selectedIndex];
-            hsField.hidden = !opt || opt.getAttribute('data-type') !== 'hs';
+            if (!opt || opt.getAttribute('data-type') !== 'hs') {
+                hsField.hidden = true;
+                return;
+            }
+            var levels = marketHsLevels(data, opt.value);
+            // Один вариант выбором не является: коды и так одной длины
+            if (levels.length < 2) {
+                hsLevelEl.innerHTML = '';
+                hsField.hidden = true;
+                return;
+            }
+            var maxLevel = levels[levels.length - 1];
+            hsLevelEl.innerHTML = levels.map(function (l) {
+                var label = 'HS' + l + (l === maxLevel ? ' (полный код)' : '');
+                return '<option value="' + l + '">' + label + '</option>';
+            }).join('');
+            hsLevelEl.value = levels.indexOf(4) >= 0 ? '4' : String(maxLevel);
+            hsHintEl.textContent = 'В данных коды до ' + maxLevel + ' знаков';
+            hsField.hidden = false;
+        }
+
+        // «Частота» считает строки выгрузки, её легко принять за объём
+        function refreshMetricHint() {
+            metricHintEl.textContent = metricEl.value === 'count'
+                ? 'Строки выгрузки, а не объём'
+                : '';
         }
 
         granularityEl.addEventListener('change', refreshPeriods);
+        metricEl.addEventListener('change', refreshMetricHint);
         dimensionEl.addEventListener('change', refreshHsField);
         analysisResults.querySelector('.market-run-btn').addEventListener('click', function () {
             renderMarketChangesResult(data, headers);
         });
         refreshPeriods();
         refreshHsField();
+        refreshMetricHint();
         renderMarketChangesResult(data, headers);
     }
 
@@ -12792,6 +12848,113 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- PDF-экспорт (Фаза 5) ---
     // --- Мастер: собрать отчёт по шаблону компании из данных ---
+    /*
+     * Полнота данных под разделы мастера.
+     *
+     * Раздел собирается только если в выгрузке есть нужные колонки и в них
+     * что-то заполнено. Иначе слайд получался пустым, а пользователь узнавал
+     * об этом уже в готовом отчёте. Каждое требование — группа колонок,
+     * из которой достаточно одной («вес или стоимость»).
+     */
+    function presSectionRequirements() {
+        var money = [COL_STAT_USD, COL_CUSTOMS];
+        var country = ['Страна отправления', 'Страна происхождения'];
+        return [
+            { type: 'volumes', groups: [[COL_WEIGHT].concat(money), [COL_YEAR]] },
+            { type: 'countries', groups: [country, [COL_WEIGHT].concat(money)] },
+            { type: 'price-dynamics', groups: [country, [COL_WEIGHT]].concat([money]) },
+            { type: 'sankey-manufacturer', groups: [[COL_MANUFACTURER], [COL_RECEIVER]] },
+            { type: 'sankey-sender', groups: [[COL_SENDER], [COL_RECEIVER]] },
+            { type: 'quarterly-prices', groups: [[COL_YEAR], [COL_QUARTER], [COL_WEIGHT]].concat([money]) },
+            { type: 'market-changes', groups: [[COL_YEAR]], needsTwoPeriods: true },
+            { type: 'segments', groups: [['Сегмент']] }
+        ];
+    }
+
+    // Доля строк с непустым значением — колонка может быть в шапке, но пустой
+    function presColumnFill(data, column) {
+        if (!column || !data.length) { return 0; }
+        var filled = 0;
+        data.forEach(function (row) {
+            var v = row[column];
+            if (v !== null && v !== undefined && String(v).trim() !== '') { filled++; }
+        });
+        return filled / data.length;
+    }
+
+    function presSectionCoverage(data, headers) {
+        var result = {};
+        presSectionRequirements().forEach(function (req) {
+            var missing = [];
+            var fills = [];
+            req.groups.forEach(function (group) {
+                var found = null;
+                for (var i = 0; i < group.length; i++) {
+                    var col = findColumn(headers, group[i]);
+                    if (col && presColumnFill(data, col) > 0) { found = col; break; }
+                }
+                if (found) {
+                    fills.push(presColumnFill(data, found));
+                } else {
+                    missing.push(group.join(' / '));
+                }
+            });
+            if (!missing.length && req.needsTwoPeriods
+                && marketCollectPeriods(data, headers, 'year').length < 2) {
+                missing.push('два периода для сравнения');
+            }
+            result[req.type] = {
+                ok: missing.length === 0,
+                missing: missing,
+                fill: fills.length ? Math.min.apply(null, fills) : 0
+            };
+        });
+        return result;
+    }
+
+    // Проставляет галочки мастера по тому, что реально есть в выгрузке
+    function presRefreshWizardCoverage() {
+        var data = getActiveData(), headers = getActiveHeaders();
+        var boxes = document.querySelectorAll('.pres-wiz-sections input');
+        var summary = document.querySelector('.pres-wiz-coverage');
+        if (!boxes.length) { return; }
+
+        if (!data || !data.length) {
+            if (summary) { summary.textContent = 'Данные не загружены — собрать отчёт не из чего.'; }
+            return;
+        }
+
+        var cov = presSectionCoverage(data, headers);
+        var available = 0;
+        Array.prototype.forEach.call(boxes, function (box) {
+            var c = cov[box.value];
+            var label = box.parentNode;
+            var note = label.querySelector('.pres-wiz-cov');
+            if (!note) {
+                note = document.createElement('small');
+                note.className = 'pres-wiz-cov';
+                label.appendChild(note);
+            }
+            if (!c) { note.textContent = ''; return; }
+            box.disabled = !c.ok;
+            box.checked = c.ok;
+            label.classList.toggle('pres-wiz-off', !c.ok);
+            if (!c.ok) {
+                note.textContent = 'нет данных: ' + c.missing.join(', ');
+            } else if (c.fill < 0.95) {
+                note.textContent = 'заполнено ' + Math.round(c.fill * 100) + '%';
+            } else {
+                note.textContent = '';
+            }
+            if (c.ok) { available++; }
+        });
+
+        if (summary) {
+            summary.textContent = 'Доступно разделов: ' + available + ' из ' + boxes.length +
+                '. Отмечены те, что данные поддерживают.';
+        }
+    }
+
     function presRunWizard() {
         var data = getActiveData(), headers = getActiveHeaders();
         if (!data || !data.length) { alert('Сначала загрузите данные во вкладке «Данные».'); return; }
@@ -13107,7 +13270,22 @@ document.addEventListener('DOMContentLoaded', function () {
     if (presWizardBtn) {
         presWizardBtn.addEventListener('click', function () {
             document.querySelector('.pres-wizard-overlay').style.display = '';
+            presRefreshWizardCoverage();
         });
+        var wizAutoBtn = document.querySelector('.pres-wiz-auto');
+        if (wizAutoBtn) {
+            wizAutoBtn.addEventListener('click', function () {
+                // Одна кнопка: берём всё, что покрыто данными, и сразу собираем
+                presRefreshWizardCoverage();
+                var titleEl = document.querySelector('.pres-wiz-title');
+                if (!titleEl.value.trim()) { titleEl.value = 'Аналитическая справка'; }
+                Array.prototype.forEach.call(
+                    document.querySelectorAll('.pres-wiz-extras input'),
+                    function (e) { e.checked = true; }
+                );
+                presRunWizard();
+            });
+        }
         document.querySelector('.pres-wiz-cancel').addEventListener('click', function () {
             document.querySelector('.pres-wizard-overlay').style.display = 'none';
         });

@@ -2107,6 +2107,12 @@ body {
     font-weight: 600;
 }
 
+.market-hs-hint,
+.market-metric-hint {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+}
+
 .market-config-grid select,
 .market-config-grid input {
     width: 100%;
@@ -3832,4 +3838,14 @@ body {
     font-size: 13px;
     color: var(--color-text-secondary);
     line-height: 1.5;
+}
+
+.pres-wiz-cov {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    margin-left: 6px;
+}
+
+.pres-wiz-sections label.pres-wiz-off {
+    opacity: 0.55;
 }
