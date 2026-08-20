@@ -473,6 +473,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderEnrichList();
         updateCustomMappingSelects();
         updateVisualizationFields();
+        renderAnalysisCountryFilter();
     }
 
     // --- Добавление файла (append) ---
@@ -548,6 +549,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateRatioSelects();
             updateCustomMappingSelects();
             updateVisualizationFields();
+            renderAnalysisCountryFilter();
         };
 
         if (ext === 'csv') {
@@ -748,6 +750,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderEnrichList();
         updateCustomMappingSelects();
         updateVisualizationFields();
+        renderAnalysisCountryFilter();
     }
 
     function showFileError(message) {
@@ -5432,6 +5435,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 renderPreviewResult(data, log, finalCols);
                 updateVisualizationFields();
+                // После обработки колонки могли поменяться — пересобираем список стран
+                renderAnalysisCountryFilter();
                 setApplyBtnState('done');
             }).catch(function (err) {
                 renderProcessingMessage('Ошибка обработки: ' + err.message);
@@ -5703,7 +5708,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Фильтр по направлению ИМ/ЭК ---
     var analysisDirectionFilter = 'ИМ';
+    var analysisCountryFilter = '';
     var lastAnalysisType = '';
+    var analysisCountryField = document.querySelector('.analysis-country-field');
+    var analysisCountrySelect = document.querySelector('.analysis-country-select');
+
+    if (analysisCountrySelect) {
+        analysisCountrySelect.addEventListener('change', function () {
+            analysisCountryFilter = this.value;
+            if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
+        });
+    }
 
     function setDirectionFilter(dir) {
         analysisDirectionFilter = dir;
@@ -5719,16 +5734,104 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    /*
+     * Колонка страны-контрагента. У таможенных выгрузок это страна
+     * отправления или происхождения, у зеркальной статистики — партнёр
+     * («Страна-экспортёр»/«Страна-импортёр»). Порядок совпадает с тем,
+     * по которому страну ищут сами анализы.
+     */
+    function findAnalysisCountryColumn(headers) {
+        return findColumn(headers, 'Страна отправления') ||
+               findColumn(headers, 'Страна происхождения') ||
+               findColumn(headers, 'Страна назначения') ||
+               findColumn(headers, 'Страна-импортёр') ||
+               findColumn(headers, 'Страна-экспортёр') || '';
+    }
+
     function getFilteredAnalysisData() {
         var data = getActiveData();
         var headers = getActiveHeaders();
-        if (!analysisDirectionFilter) return { data: data, headers: headers };
-        var dirCol = findColumn(headers, COL_DIRECTION);
-        if (!dirCol) return { data: data, headers: headers };
-        var filtered = data.filter(function (row) {
-            return String(row[dirCol] || '').trim().toUpperCase() === analysisDirectionFilter;
+
+        var dirCol = analysisDirectionFilter ? findColumn(headers, COL_DIRECTION) : '';
+        if (dirCol) {
+            data = data.filter(function (row) {
+                return String(row[dirCol] || '').trim().toUpperCase() === analysisDirectionFilter;
+            });
+        }
+
+        // Страновой срез: один фильтр на все анализы разом, включая сигналы,
+        // рекомендации и сводную выгрузку — иначе цифры на экране и в файле
+        // разошлись бы
+        if (analysisCountryFilter) {
+            var countryCol = findAnalysisCountryColumn(headers);
+            if (countryCol) {
+                data = data.filter(function (row) {
+                    return String(row[countryCol] || '').trim() === analysisCountryFilter;
+                });
+            }
+        }
+
+        return { data: data, headers: headers };
+    }
+
+    // Подпись среза для заголовков и имён файлов
+    function analysisScopeLabel() {
+        return analysisCountryFilter || '';
+    }
+
+    /* Плашка над результатами: без неё страновой срез легко принять за
+       общий итог по всей выгрузке. */
+    function updateAnalysisScopeNote(rowCount) {
+        var note = document.querySelector('.analysis-scope-note');
+        if (!note) { return; }
+        if (!analysisCountryFilter) {
+            note.hidden = true;
+            note.textContent = '';
+            return;
+        }
+        note.textContent = 'Срез по стране: ' + analysisCountryFilter +
+            (rowCount != null ? ' · строк в выборке: ' + formatNumber(rowCount) : '');
+        note.hidden = false;
+    }
+
+    /* Список стран для фильтра строим по загруженным данным: показываем
+       только то, что в выгрузке реально есть. */
+    function renderAnalysisCountryFilter() {
+        if (!analysisCountrySelect) { return; }
+        var headers = getActiveHeaders();
+        var data = getActiveData();
+        var countryCol = findAnalysisCountryColumn(headers);
+
+        if (!countryCol || !data.length) {
+            analysisCountryFilter = '';
+            analysisCountryField.hidden = true;
+            analysisCountrySelect.innerHTML = '<option value="">Все страны</option>';
+            return;
+        }
+
+        var seen = {};
+        data.forEach(function (row) {
+            var c = String(row[countryCol] || '').trim();
+            if (c) { seen[c] = true; }
         });
-        return { data: filtered, headers: headers };
+        var names = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'ru'); });
+        if (names.length < 2) {
+            // Одна страна в данных — выбирать не из чего
+            analysisCountryFilter = '';
+            analysisCountryField.hidden = true;
+            analysisCountrySelect.innerHTML = '<option value="">Все страны</option>';
+            return;
+        }
+
+        var keep = analysisCountryFilter && names.indexOf(analysisCountryFilter) !== -1
+            ? analysisCountryFilter : '';
+        analysisCountryFilter = keep;
+        analysisCountrySelect.innerHTML = '<option value="">Все страны</option>' +
+            names.map(function (n) {
+                return '<option value="' + marketEsc(n) + '"' + (n === keep ? ' selected' : '') + '>' +
+                    marketEsc(n) + '</option>';
+            }).join('');
+        analysisCountryField.hidden = false;
     }
 
     /* ================================
@@ -6160,6 +6263,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var fd = getFilteredAnalysisData();
             var data = fd.data;
             var headers = fd.headers;
+            updateAnalysisScopeNote(data.length);
             if (data.length === 0) {
                 analysisResults.innerHTML =
                     '<div class="analysis-empty"><p>Сначала загрузите данные</p></div>';
@@ -11025,6 +11129,7 @@ document.addEventListener('DOMContentLoaded', function () {
             { 'Показатель': 'Полей в таблице', 'Значение': headers.length },
             { 'Показатель': 'Период данных', 'Значение': years.length ? years[0] + '–' + years[years.length - 1] : '—' },
             { 'Показатель': 'Неполный год', 'Значение': partial ? partial.year + ' (' + partial.label + ')' : 'нет' },
+            { 'Показатель': 'Срез', 'Значение': analysisScopeLabel() ? 'страна: ' + analysisScopeLabel() : 'все страны выгрузки' },
             { 'Показатель': 'Источник', 'Значение': dataSourceNote() || ('выгрузка «' + (appState.fileName || 'без имени') + '»') },
             { 'Показатель': 'Загружено в стенд', 'Значение': appState.loadedAt ? appState.loadedAt.toLocaleDateString('ru-RU') : '—' },
             { 'Показатель': 'Выгружено', 'Значение': new Date().toLocaleDateString('ru-RU') },
@@ -11283,7 +11388,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function exportAllAnalyticsXLSX() {
-        var data = getActiveData(), headers = getActiveHeaders();
+        // Берём те же данные, что видит раздел «Анализ»: направление и страна
+        var fd = getFilteredAnalysisData();
+        var data = fd.data, headers = fd.headers;
         if (!data || !data.length) {
             alert('Сначала загрузите данные во вкладке «Данные».');
             return;
@@ -11293,7 +11400,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         var built = buildAllAnalyticsWorkbook(data, headers);
-        XLSX.writeFile(built.wb, baseFileName() + '_сводная_выгрузка.xlsx');
+        var scope = analysisScopeLabel();
+        var suffix = scope ? '_' + scope.replace(/[\\/\?\*\[\]:]/g, '') : '';
+        XLSX.writeFile(built.wb, baseFileName() + '_сводная_выгрузка' + suffix + '.xlsx');
         console.log('[Delomant] Сводная выгрузка: ' + built.sheets.length + ' листов — ' + built.sheets.join(', '));
     }
 

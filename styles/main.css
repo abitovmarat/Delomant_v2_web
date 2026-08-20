@@ -1938,6 +1938,44 @@ body {
    Analysis Results
    ================================ */
 
+.analysis-scope-note {
+    margin-bottom: 14px;
+    padding: 8px 14px;
+    border-left: 3px solid var(--color-primary, #2563EB);
+    background: var(--color-surface);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.analysis-scope-note[hidden] {
+    display: none;
+}
+
+.analysis-country-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 18px;
+}
+
+.analysis-country-field[hidden] {
+    display: none;
+}
+
+.analysis-country-select {
+    min-height: 32px;
+    padding: 4px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 13px;
+    max-width: 240px;
+}
+
 .analysis-direction-filter {
     display: flex;
     align-items: center;
@@ -2943,6 +2981,27 @@ body {
 
 .pres-actions .btn {
     flex: 1;
+}
+
+.pres-export-data-xlsx {
+    width: 100%;
+    justify-content: center;
+    /* Не теряется среди экспортов презентации: своя рамка и акцентный цвет */
+    background: var(--color-surface);
+    color: #15803D;
+    border: 2px solid #16A34A;
+    font-weight: 700;
+}
+
+.pres-export-data-xlsx:hover {
+    background: #F0FDF4;
+    border-color: #15803D;
+}
+
+.pres-export-data-hint {
+    margin: 6px 0 14px;
+    font-size: 11px;
+    line-height: 1.35;
 }
 
 /* Preview */

@@ -611,7 +611,18 @@
                             <button class="btn-filter active" data-dir="ИМ">ИМ (импорт)</button>
                             <button class="btn-filter" data-dir="ЭК">ЭК (экспорт)</button>
                         </div>
+
+                        <!-- Страновой срез: применяется ко всем анализам сразу.
+                             Поле прячется, если страны в выгрузке нет или она одна. -->
+                        <label class="analysis-country-field" hidden>
+                            <span class="analysis-filter-label">Страна:</span>
+                            <select class="analysis-country-select">
+                                <option value="">Все страны</option>
+                            </select>
+                        </label>
                     </div>
+
+                    <div class="analysis-scope-note" hidden></div>
 
                     <div class="analysis-results">
                     </div>
@@ -676,6 +687,11 @@
                             <!-- Report wizard -->
                             <button class="btn btn-primary pres-wizard-btn" style="width:100%;margin-bottom:12px">✨ Собрать отчёт</button>
 
+                            <!-- Выгрузка всех расчётов одной книгой: отдельная заметная
+                                 кнопка, а не пункт в ряду экспортов презентации -->
+                            <button class="btn pres-export-data-xlsx">📊 Все данные в Excel</button>
+                            <p class="pres-hint pres-export-data-hint">Один файл: данные, объёмы, страны, цены, изменения рынка, сигналы</p>
+
                             <!-- Block palette -->
                             <div class="pres-palette">
                                 <h3 class="pres-section-title">Блоки</h3>
@@ -693,7 +709,6 @@
                                 <button class="btn btn-primary pres-export-html" disabled>Скачать HTML</button>
                                 <button class="btn btn-secondary pres-export-pdf" disabled>Скачать PDF</button>
                                 <button class="btn btn-secondary pres-export-pptx" disabled>Скачать PPTX</button>
-                                <button class="btn btn-secondary pres-export-data-xlsx">Все данные в Excel</button>
                                 <button class="btn btn-secondary pres-clear-btn">Очистить</button>
                             </div>
                         </div>
