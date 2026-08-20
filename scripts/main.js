@@ -11744,6 +11744,44 @@ document.addEventListener('DOMContentLoaded', function () {
         return slideWrapper(title, '<p style="color:#94A3B8;font-size:14px;text-align:center;margin-top:80px">\u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445. \u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0438 \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u0439\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435.</p>', {});
     }
 
+    /*
+     * Неполный последний год: у него кварталов меньше, чем у предыдущего.
+     * Сравнение именно с предыдущим годом, а не с четвёркой: у годовых
+     * выгрузок весь год лежит в Q1, и правило «меньше четырёх кварталов»
+     * помечало бы неполным каждый год подряд.
+     */
+    function presDetectPartialYear(data, headers) {
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+        if (!yearCol || !quarterCol) { return null; }
+
+        var byYearQ = {};
+        data.forEach(function (row) {
+            var y = String(row[yearCol] || '').trim();
+            var q = String(row[quarterCol] || '').trim();
+            if (!y || !q) { return; }
+            if (!byYearQ[y]) { byYearQ[y] = {}; }
+            byYearQ[y][q] = true;
+        });
+
+        var years = Object.keys(byYearQ).sort();
+        if (years.length < 2) { return null; }
+        var lastQ = Object.keys(byYearQ[years[years.length - 1]]).sort();
+        var prevQ = Object.keys(byYearQ[years[years.length - 2]]);
+        if (lastQ.length >= prevQ.length || lastQ.length >= 4) { return null; }
+        return {
+            year: years[years.length - 1],
+            quarters: lastQ,
+            label: lastQ.map(function (q) { return 'Q' + q; }).join(', ')
+        };
+    }
+
+    // Совокупный рост за период, % — не путать с CAGR (среднее за год)
+    function presCalcGrowth(first, last) {
+        if (!first || first <= 0) { return null; }
+        return (last / first - 1) * 100;
+    }
+
     function presCalcCAGR(first, last, years) {
         if (!first || first <= 0 || years <= 0) return null;
         return (Math.pow(last / first, 1 / years) - 1) * 100;
@@ -11795,12 +11833,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         var years = Object.keys(byYear).sort();
-        var partialYear = '';
-        if (quarterCol && years.length) {
-            var ly = years[years.length - 1];
-            var lq = Object.keys(byYearQ[ly] || {});
-            if (lq.length > 0 && lq.length < 4) partialYear = ly;
-        }
+        var partial = presDetectPartialYear(data, headers);
+        var partialYear = partial ? partial.year : '';
         var fullYears = partialYear ? years.filter(function (y) { return y !== partialYear; }) : years;
 
         var cagrW = null, cagrU = null;
@@ -11823,7 +11857,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var cards = [];
         var periodVal = years.length ? (years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1]) : '—';
-        cards.push({ value: periodVal, label: 'Период данных', note: partialYear ? partialYear + ' — неполный' : '', accent: '#2563EB' });
+        cards.push({ value: periodVal, label: 'Период данных', note: partialYear ? partialYear + ' — неполный (' + partial.label + ')' : '', accent: '#2563EB' });
         cards.push({ value: formatNumber(data.length), label: 'Деклараций', note: '', accent: '#2563EB' });
         cards.push({ value: formatNumber(round2(totalW / 1000)), label: 'Объём, тонн', note: '', accent: '#0EA5E9' });
         cards.push({ value: formatNumber(round2(totalU / 1000)), label: 'Стоимость, тыс. USD', note: '', accent: '#0EA5E9' });
@@ -12378,15 +12412,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 byYear[y].u += (Number(row[statUsdCol]) || 0);
                 byYear[y].r += hasRub ? getRowRubValue(row, rubCtx) : 0;
             });
-            var ys = m.years;
+            /*
+             * Темпы считаем только по полным годам: обрезанный последний год
+             * давал ложное падение, а слайд «Ключевые факты» в том же отчёте
+             * показывал рост — цифры в одной презентации противоречили друг
+             * другу.
+             */
+            var partial = presDetectPartialYear(data, headers);
+            m.partialYear = partial ? partial.year : '';
+            m.partialLabel = partial ? partial.label : '';
+            var ys = m.partialYear
+                ? m.years.filter(function (y) { return y !== m.partialYear; })
+                : m.years;
+            m.trendFirstYear = ys[0] || '';
+            m.trendLastYear = ys[ys.length - 1] || '';
             if (ys.length >= 2) {
                 var n = ys.length - 1;
                 m.cagrWeight = presCalcCAGR(byYear[ys[0]].w, byYear[ys[n]].w, n);
                 m.cagrUsd = presCalcCAGR(byYear[ys[0]].u, byYear[ys[n]].u, n);
                 m.cagrRub = hasRub ? presCalcCAGR(byYear[ys[0]].r, byYear[ys[n]].r, n) : null;
+                // Совокупный рост за весь период — то, что читается как «выросли на N%»
+                m.growthWeight = presCalcGrowth(byYear[ys[0]].w, byYear[ys[n]].w);
+                m.growthUsd = presCalcGrowth(byYear[ys[0]].u, byYear[ys[n]].u);
             }
-            var last = byYear[m.lastYear] || {};
-            var first = byYear[m.firstYear] || {};
+            var last = byYear[m.trendLastYear || m.lastYear] || {};
+            var first = byYear[m.trendFirstYear || m.firstYear] || {};
             m.latestWeight = round2((last.w || 0) / 1000);
             m.latestUsd = round2((last.u || 0) / 1000);
             m.latestRub = round2((last.r || 0) / 1000);
@@ -12605,17 +12655,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (type === 'volumes' && m.cagrWeight != null) {
             var t = presTrendPhrase(m.cagrWeight);
-            if (t.dir === 'up' && m.cagrUsd != null) {
-                return subj + ' демонстрирует ' + t.adj + ': за ' + period +
-                    ' поставки выросли на ' + presRuNum(Math.round(m.cagrWeight)) +
-                    '% в натуральном и на ' + presRuNum(Math.round(m.cagrUsd)) +
-                    '% в долларовом выражении';
+            // Период темпов — только полные годы, они могут не совпадать с охватом данных
+            var trendPeriod = (m.trendFirstYear && m.trendLastYear)
+                ? m.trendFirstYear + '–' + m.trendLastYear : period;
+            if (t.dir === 'up' && m.growthWeight != null) {
+                var growthPart = ' поставки прибавили ' + presRuNum(Math.round(m.growthWeight)) +
+                    '% в натуральном выражении';
+                if (m.growthUsd != null) {
+                    growthPart += ' и ' + presRuNum(Math.round(m.growthUsd)) + '% в долларовом';
+                }
+                return subj + ' демонстрирует ' + t.adj + ': за ' + trendPeriod + growthPart +
+                    ' (в среднем ' + presRuNum(Math.round(m.cagrWeight)) + '% в год)';
             }
             if (t.dir === 'down') {
-                return subj + ': за ' + period + ' наблюдается ' + t.adj +
-                    ' физических объёмов (CAGR ' + presRuNum(Math.round(m.cagrWeight)) + '%)';
+                var declinePart = m.growthWeight != null
+                    ? ' физические объёмы сократились на ' + presRuNum(Math.abs(Math.round(m.growthWeight))) + '%'
+                    : ' сокращение физических объёмов';
+                return subj + ': за ' + trendPeriod + declinePart +
+                    ' (в среднем ' + presRuNum(Math.round(m.cagrWeight)) + '% в год)';
             }
-            return subj + ' за ' + period + ' сохраняет ' + t.adj;
+            return subj + ' за ' + trendPeriod + ' сохраняет ' + t.adj;
         }
 
         if (type === 'countries' && m.leader) {
@@ -12687,7 +12746,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 lines.push(l2 + '.');
             }
-            // 3. Рублёвая динамика → валютный фактор
+            // 3. Неполный год: иначе читатель сравнивает несравнимое
+            if (m.partialYear) {
+                lines.push('Данные за ' + m.partialYear + ' неполные (' + m.partialLabel +
+                    ') — в расчёт темпов роста этот год не входит.');
+            }
+            // 4. Рублёвая динамика → валютный фактор
             if (m.cagrRub != null && m.cagrUsd != null) {
                 var l3;
                 if (m.cagrRub > m.cagrUsd + 2) {
@@ -12796,7 +12860,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var cm = computeSlideMetrics('countries', data, headers, slide);
         var product = (slide && slide.opts && slide.opts.product ? slide.opts.product : '').trim();
         var of = product ? ' ' + product : '';
-        var period = (vm.firstYear && vm.lastYear) ? vm.firstYear + '–' + vm.lastYear : '';
+        var periodFirst = vm.trendFirstYear || vm.firstYear;
+        var periodLast = vm.trendLastYear || vm.lastYear;
+        var period = (periodFirst && periodLast) ? periodFirst + '–' + periodLast : '';
         var t = presTrendPhrase(vm.cagrWeight);
         var lines = [];
 
@@ -12807,6 +12873,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     ': объём поставок ' + (t.dir === 'down' ? 'снизился' : (t.dir === 'up' ? 'вырос' : 'изменился')) +
                     ' с ' + presRuNum(vm.firstWeight / wu.div, wu.d) + ' до ' + presRuNum(vm.lastWeight / wu.div, wu.d) + ' ' + wu.unit +
                     ' (CAGR ' + presRuNum(Math.round(vm.cagrWeight)) + '%).');
+            }
+            if (vm.partialYear) {
+                lines.push('Данные за ' + vm.partialYear + ' неполные (' + vm.partialLabel +
+                    ') — темпы роста рассчитаны по полным годам.');
             }
             if (cm.leader) {
                 var concPhrase = cm.leaderShare >= 70 ? 'высокая зависимость от одного поставщика'
