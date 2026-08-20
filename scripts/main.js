@@ -12939,8 +12939,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (type === 'volumes') {
             var t = presTrendPhrase(m.cagrWeight);
-            // 1. Натуральный объём: «вырос с X до Y тыс. тонн (CAGR N%)»
-            if (m.firstWeight != null && m.lastWeight != null) {
+            /*
+             * 1. Натуральный объём: «вырос с X до Y тыс. тонн (CAGR N%)».
+             * Если полный год всего один (второй обрезан), сравнивать не с
+             * чем: фраза «вырос с 12 до 12» бессмысленна, поэтому вместо
+             * динамики говорим прямо, что её не посчитать.
+             */
+            if (m.trendFirstYear && m.trendFirstYear === m.trendLastYear) {
+                lines.push('Полных лет в данных меньше двух — динамику за период рассчитать нельзя, приведён ' +
+                    m.trendFirstYear + ' год.');
+            } else if (m.firstWeight != null && m.lastWeight != null) {
                 var wu = presWeightUnit(Math.max(Math.abs(m.firstWeight), Math.abs(m.lastWeight)));
                 var verb = t.dir === 'down' ? 'снизился' : (t.dir === 'up' ? 'вырос' : 'изменился');
                 var l1 = 'Натуральный объём импорта ' + verb +
