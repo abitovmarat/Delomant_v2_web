@@ -2101,6 +2101,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    /* Подсказка выводится из потока и не меняет высоту ячейки, поэтому
+       место под неё резервируем здесь — одинаково для всех полей ряда */
+    position: relative;
+    padding-bottom: 15px;
 }
 
 .market-config-grid label > span {
@@ -2111,10 +2115,13 @@ body {
 
 .market-hs-hint,
 .market-metric-hint {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: -13px;
     color: var(--color-text-secondary);
     font-size: 11px;
-    /* Пустая подсказка не должна раздвигать сетку */
-    min-height: 0;
+    line-height: 13px;
 }
 
 /* Подпись в одну строку — иначе поля в ряду разъедутся по высоте */
@@ -2137,8 +2144,8 @@ body {
 }
 
 .market-config-grid .market-run-btn {
-    /* Ряд выровнен по верху, у кнопки нет подписи — сдвигаем её на
-       высоту подписи с отступом, чтобы стояла на линии полей */
+    /* У кнопки нет подписи — сдвигаем её на высоту подписи с отступом,
+       чтобы стояла на одной линии с полями ряда */
     align-self: start;
     margin-top: 21px;
     min-height: 38px;
