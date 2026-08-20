@@ -10961,6 +10961,342 @@ document.addEventListener('DOMContentLoaded', function () {
         return PRES_HIDDEN_TYPES.indexOf(type) !== -1;
     }
 
+
+    /* ================================
+       Сводная выгрузка: все анализы в одной книге Excel
+       ================================
+       Каждый анализ умеет отдавать свой XLSX, но собирать отчёт руками из
+       десятка отдельных файлов неудобно. Здесь тот же набор считается разом
+       и раскладывается по листам одной книги: данные, полнота, объёмы,
+       страны, цены, изменения рынка, сигналы, рекомендации, топ участников.
+       Листы, для которых в выгрузке нет колонок, просто не создаются.
+    */
+    function xlsxNum(v) {
+        var n = typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+
+    function xlsxAddSheet(wb, name, rows, headers) {
+        if (!rows || !rows.length) { return false; }
+        var ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        ws['!cols'] = headers.map(function (h) {
+            return { wch: Math.max(String(h).length + 2, 14) };
+        });
+        // Excel не принимает имена длиннее 31 знака и служебные символы
+        var safe = String(name).replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, safe);
+        return true;
+    }
+
+    function buildAllAnalyticsWorkbook(data, headers) {
+        var wb = XLSX.utils.book_new();
+        var sheets = [];
+
+        var weightCol = findColumn(headers, COL_WEIGHT);
+        var usdCol = findColumn(headers, COL_STAT_USD);
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+        var hsCol = findColumn(headers, COL_HS_CODE);
+        var countryCol = findColumn(headers, 'Страна отправления') ||
+                         findColumn(headers, 'Страна происхождения');
+        var rubCtx = buildRubCtx(headers);
+        var hasRub = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
+
+        function add(name, rows, hdrs) {
+            if (xlsxAddSheet(wb, name, rows, hdrs)) { sheets.push(name); }
+        }
+
+        // --- Исходная таблица ---
+        add('Данные', data, headers);
+
+        // --- Полнота и источники ---
+        var partial = presDetectPartialYear(data, headers);
+        var years = [];
+        if (yearCol) {
+            var ySet = {};
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                if (y) { ySet[y] = true; }
+            });
+            years = Object.keys(ySet).sort();
+        }
+        var infoRows = [
+            { 'Показатель': 'Записей в выгрузке', 'Значение': data.length },
+            { 'Показатель': 'Полей в таблице', 'Значение': headers.length },
+            { 'Показатель': 'Период данных', 'Значение': years.length ? years[0] + '–' + years[years.length - 1] : '—' },
+            { 'Показатель': 'Неполный год', 'Значение': partial ? partial.year + ' (' + partial.label + ')' : 'нет' },
+            { 'Показатель': 'Источник', 'Значение': dataSourceNote() || ('выгрузка «' + (appState.fileName || 'без имени') + '»') },
+            { 'Показатель': 'Загружено в стенд', 'Значение': appState.loadedAt ? appState.loadedAt.toLocaleDateString('ru-RU') : '—' },
+            { 'Показатель': 'Выгружено', 'Значение': new Date().toLocaleDateString('ru-RU') },
+            { 'Показатель': 'Пересчёт в рубли', 'Значение': presRubMethodNote(headers) }
+        ];
+        add('Полнота и источники', infoRows, ['Показатель', 'Значение']);
+
+        var fillRows = headers.map(function (h) {
+            return { 'Поле': h, 'Заполнено, %': round2(presColumnFill(data, h) * 100) };
+        });
+        add('Заполненность полей', fillRows, ['Поле', 'Заполнено, %']);
+
+        // --- Объёмы по годам ---
+        if (yearCol && (weightCol || usdCol)) {
+            var byYear = {};
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                if (!y) { return; }
+                if (!byYear[y]) { byYear[y] = { w: 0, u: 0, r: 0 }; }
+                byYear[y].w += weightCol ? xlsxNum(row[weightCol]) : 0;
+                byYear[y].u += usdCol ? xlsxNum(row[usdCol]) : 0;
+                byYear[y].r += hasRub ? getRowRubValue(row, rubCtx) : 0;
+            });
+            var yKeys = Object.keys(byYear).sort();
+            var yearRows = yKeys.map(function (y, i) {
+                var d = byYear[y];
+                var prev = i > 0 ? byYear[yKeys[i - 1]] : null;
+                var row = { 'Год': y };
+                if (weightCol) { row['Объём, тонн'] = round2(d.w / 1000); }
+                if (usdCol) { row['Стоимость, тыс. USD'] = round2(d.u / 1000); }
+                if (hasRub) { row['Стоимость, тыс. нац. вал.'] = round2(d.r / 1000); }
+                if (weightCol && usdCol) { row['Цена, USD/кг'] = d.w > 0 ? round2(d.u / d.w) : ''; }
+                if (weightCol) {
+                    row['Рост объёма г/г, %'] = prev && prev.w > 0 ? round2((d.w / prev.w - 1) * 100) : '';
+                }
+                return row;
+            });
+            var yearHeaders = ['Год'];
+            if (weightCol) { yearHeaders.push('Объём, тонн'); }
+            if (usdCol) { yearHeaders.push('Стоимость, тыс. USD'); }
+            if (hasRub) { yearHeaders.push('Стоимость, тыс. нац. вал.'); }
+            if (weightCol && usdCol) { yearHeaders.push('Цена, USD/кг'); }
+            if (weightCol) { yearHeaders.push('Рост объёма г/г, %'); }
+
+            // CAGR считаем по полным годам: обрезанный год занижает темп
+            var fullY = partial ? yKeys.filter(function (y) { return y !== partial.year; }) : yKeys;
+            if (fullY.length >= 2) {
+                var n = fullY.length - 1;
+                var f = byYear[fullY[0]], l = byYear[fullY[fullY.length - 1]];
+                var cagrRow = { 'Год': 'CAGR ' + fullY[0] + '–' + fullY[fullY.length - 1] };
+                if (weightCol) { cagrRow['Объём, тонн'] = f.w > 0 ? round2((Math.pow(l.w / f.w, 1 / n) - 1) * 100) + '%' : ''; }
+                if (usdCol) { cagrRow['Стоимость, тыс. USD'] = f.u > 0 ? round2((Math.pow(l.u / f.u, 1 / n) - 1) * 100) + '%' : ''; }
+                yearRows.push(cagrRow);
+            }
+            add('Объёмы по годам', yearRows, yearHeaders);
+        }
+
+        // --- Объёмы по кварталам ---
+        if (yearCol && quarterCol && !presIsAnnualOnly(data, headers)) {
+            var byQ = {};
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                var q = String(row[quarterCol] || '').trim();
+                if (!y || !q) { return; }
+                var k = y + '|' + q;
+                if (!byQ[k]) { byQ[k] = { w: 0, u: 0, r: 0 }; }
+                byQ[k].w += weightCol ? xlsxNum(row[weightCol]) : 0;
+                byQ[k].u += usdCol ? xlsxNum(row[usdCol]) : 0;
+                byQ[k].r += hasRub ? getRowRubValue(row, rubCtx) : 0;
+            });
+            var qRows = Object.keys(byQ).sort().map(function (k) {
+                var parts = k.split('|');
+                var d = byQ[k];
+                var row = { 'Год': parts[0], 'Квартал': 'Q' + parts[1] };
+                if (weightCol) { row['Объём, тонн'] = round2(d.w / 1000); }
+                if (usdCol) { row['Стоимость, тыс. USD'] = round2(d.u / 1000); }
+                if (hasRub) { row['Цена, нац. вал./кг'] = d.w > 0 ? round2(d.r / d.w) : ''; }
+                if (weightCol && usdCol) { row['Цена, USD/кг'] = d.w > 0 ? round2(d.u / d.w) : ''; }
+                return row;
+            });
+            var qHeaders = ['Год', 'Квартал'];
+            if (weightCol) { qHeaders.push('Объём, тонн'); }
+            if (usdCol) { qHeaders.push('Стоимость, тыс. USD'); }
+            if (hasRub) { qHeaders.push('Цена, нац. вал./кг'); }
+            if (weightCol && usdCol) { qHeaders.push('Цена, USD/кг'); }
+            add('Объёмы по кварталам', qRows, qHeaders);
+        }
+
+        // --- Страны и цены по странам ---
+        if (countryCol && (weightCol || usdCol)) {
+            var byC = {}, byCY = {}, totalW = 0;
+            data.forEach(function (row) {
+                var c = String(row[countryCol] || '').trim();
+                if (!c) { return; }
+                var w = weightCol ? xlsxNum(row[weightCol]) : 0;
+                var u = usdCol ? xlsxNum(row[usdCol]) : 0;
+                if (!byC[c]) { byC[c] = { w: 0, u: 0 }; }
+                byC[c].w += w; byC[c].u += u; totalW += w;
+                var y = yearCol ? String(row[yearCol] || '').trim() : '';
+                if (y) {
+                    var k = c + '|' + y;
+                    if (!byCY[k]) { byCY[k] = { w: 0, u: 0 }; }
+                    byCY[k].w += w; byCY[k].u += u;
+                }
+            });
+            var cKeys = Object.keys(byC).sort(function (a, b) { return byC[b].w - byC[a].w; });
+            var cRows = cKeys.map(function (c) {
+                var d = byC[c];
+                var row = { 'Страна': c };
+                if (weightCol) {
+                    row['Объём, тонн'] = round2(d.w / 1000);
+                    row['Доля объёма, %'] = totalW > 0 ? round2(d.w / totalW * 100) : '';
+                }
+                if (usdCol) { row['Стоимость, тыс. USD'] = round2(d.u / 1000); }
+                if (weightCol && usdCol) { row['Цена, USD/кг'] = d.w > 0 ? round2(d.u / d.w) : ''; }
+                return row;
+            });
+            var cHeaders = ['Страна'];
+            if (weightCol) { cHeaders.push('Объём, тонн', 'Доля объёма, %'); }
+            if (usdCol) { cHeaders.push('Стоимость, тыс. USD'); }
+            if (weightCol && usdCol) { cHeaders.push('Цена, USD/кг'); }
+            add('Страны', cRows, cHeaders);
+
+            if (years.length && weightCol && usdCol) {
+                var priceRows = cKeys.map(function (c) {
+                    var row = { 'Страна': c };
+                    years.forEach(function (y) {
+                        var d = byCY[c + '|' + y];
+                        row[y] = d && d.w > 0 ? round2(d.u / d.w) : '';
+                    });
+                    return row;
+                });
+                add('Цены по странам, USD за кг', priceRows, ['Страна'].concat(years));
+            }
+        }
+
+        // --- Изменения рынка: два последних периода ---
+        var periods = marketCollectPeriods(data, headers, 'year');
+        var dims = marketDimensionOptions(headers);
+        if (periods.length >= 2 && dims.length) {
+            var hsDim = dims.filter(function (d) { return d.type === 'hs'; })[0];
+            var dim = hsDim || dims[0];
+            var mc = computeMarketChanges(data, headers, {
+                granularity: 'year',
+                basePeriod: periods[periods.length - 2],
+                currentPeriod: periods[periods.length - 1],
+                dimension: dim.column,
+                metric: weightCol ? 'weight' : 'usd',
+                hsLevel: 4,
+                threshold: 0
+            });
+            if (mc && !mc.error && mc.all && mc.all.length) {
+                var statusText = {
+                    growth: 'рост', decline: 'падение', 'new': 'новая позиция',
+                    disappeared: 'исчезла', stable: 'без изменений'
+                };
+                var baseCol = 'База (' + mc.basePeriod + ')';
+                var currCol = 'Текущее (' + mc.currentPeriod + ')';
+                var mcRows = mc.all.slice().sort(function (a, b) { return b.delta - a.delta; })
+                    .map(function (it) {
+                        var row = {
+                            'Позиция': it.key,
+                            'Статус': statusText[it.status] || it.status,
+                            'Изменение': round2(it.delta),
+                            'Изменение, %': it.pct == null ? '' : round2(it.pct)
+                        };
+                        row[baseCol] = round2(it.base);
+                        row[currCol] = round2(it.current);
+                        return row;
+                    });
+                add('Изменения рынка', mcRows, ['Позиция', 'Статус', baseCol, currCol,
+                    'Изменение', 'Изменение, %']);
+            }
+        }
+
+        // --- Сигналы и рекомендации ---
+        var signalsRes = computeMarketSignals(data, headers);
+        if (signalsRes && !signalsRes.error) {
+            var sigRows = (signalsRes.signals || []).map(function (sg) {
+                return {
+                    'Сигнал': sg.title,
+                    'Уровень': sg.level,
+                    'Значение': sg.value,
+                    'Что это значит': sg.text,
+                    'Зачем смотреть': sg.why || ''
+                };
+            });
+            add('Сигналы и риски', sigRows, ['Сигнал', 'Уровень', 'Значение', 'Что это значит', 'Зачем смотреть']);
+
+            var recRows = computeRecommendations(signalsRes.metrics).map(function (r) {
+                return { 'Уровень': r.level, 'Действие': r.action, 'Основание': r.because };
+            });
+            add('Рекомендации', recRows, ['Уровень', 'Действие', 'Основание']);
+        }
+
+        // --- Топ участников ---
+        var roles = [
+            { col: findColumn(headers, COL_RECEIVER), role: 'Получатель' },
+            { col: findColumn(headers, COL_SENDER), role: 'Отправитель' },
+            { col: findColumn(headers, COL_MANUFACTURER), role: 'Изготовитель' }
+        ].filter(function (r) { return r.col; });
+        if (roles.length && (weightCol || usdCol)) {
+            var partyRows = [];
+            roles.forEach(function (r) {
+                var agg = {};
+                data.forEach(function (row) {
+                    var name = String(row[r.col] || '').trim();
+                    if (!name) { return; }
+                    if (!agg[name]) { agg[name] = { w: 0, u: 0 }; }
+                    agg[name].w += weightCol ? xlsxNum(row[weightCol]) : 0;
+                    agg[name].u += usdCol ? xlsxNum(row[usdCol]) : 0;
+                });
+                Object.keys(agg)
+                    .sort(function (a, b) { return agg[b].w - agg[a].w; })
+                    .slice(0, 50)
+                    .forEach(function (name) {
+                        partyRows.push({
+                            'Роль': r.role,
+                            'Компания': name,
+                            'Объём, тонн': round2(agg[name].w / 1000),
+                            'Стоимость, тыс. USD': round2(agg[name].u / 1000)
+                        });
+                    });
+            });
+            add('Топ участников', partyRows, ['Роль', 'Компания', 'Объём, тонн', 'Стоимость, тыс. USD']);
+        }
+
+        // --- Сегменты получателей ---
+        var segCol = findColumn(headers, 'Сегмент');
+        if (segCol && (weightCol || usdCol)) {
+            var bySeg = {}, segTotal = 0;
+            data.forEach(function (row) {
+                var seg = String(row[segCol] || '').trim();
+                if (!seg) { return; }
+                var w = weightCol ? xlsxNum(row[weightCol]) : 0;
+                if (!bySeg[seg]) { bySeg[seg] = { w: 0, u: 0 }; }
+                bySeg[seg].w += w;
+                bySeg[seg].u += usdCol ? xlsxNum(row[usdCol]) : 0;
+                segTotal += w;
+            });
+            var segRows = Object.keys(bySeg)
+                .sort(function (a, b) { return bySeg[b].w - bySeg[a].w; })
+                .map(function (seg) {
+                    return {
+                        'Сегмент': seg,
+                        'Объём, тонн': round2(bySeg[seg].w / 1000),
+                        'Доля, %': segTotal > 0 ? round2(bySeg[seg].w / segTotal * 100) : '',
+                        'Стоимость, тыс. USD': round2(bySeg[seg].u / 1000)
+                    };
+                });
+            add('Каналы сбыта', segRows, ['Сегмент', 'Объём, тонн', 'Доля, %', 'Стоимость, тыс. USD']);
+        }
+
+        appendSourceSheet(wb);
+        return { wb: wb, sheets: sheets };
+    }
+
+    function exportAllAnalyticsXLSX() {
+        var data = getActiveData(), headers = getActiveHeaders();
+        if (!data || !data.length) {
+            alert('Сначала загрузите данные во вкладке «Данные».');
+            return;
+        }
+        if (typeof XLSX === 'undefined') {
+            alert('Библиотека XLSX не загружена.');
+            return;
+        }
+        var built = buildAllAnalyticsWorkbook(data, headers);
+        XLSX.writeFile(built.wb, baseFileName() + '_сводная_выгрузка.xlsx');
+        console.log('[Delomant] Сводная выгрузка: ' + built.sheets.length + ' листов — ' + built.sheets.join(', '));
+    }
+
     // --- Рендер палитры ---
     function renderPresPalette() {
         var html = '';
@@ -13645,6 +13981,11 @@ document.addEventListener('DOMContentLoaded', function () {
             document.querySelector('.pres-wizard-overlay').style.display = 'none';
         });
         document.querySelector('.pres-wiz-build').addEventListener('click', presRunWizard);
+    }
+
+    var presDataXlsxBtn = document.querySelector('.pres-export-data-xlsx');
+    if (presDataXlsxBtn) {
+        presDataXlsxBtn.addEventListener('click', exportAllAnalyticsXLSX);
     }
 
     // Export PPTX

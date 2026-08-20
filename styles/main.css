@@ -3276,7 +3276,11 @@ body {
     position: absolute;
     right: 56px;
     bottom: 44px;
-    font-size: 56px;
+    /* Слово стоит справа от списка. При длинном оглавлении список доходит
+       до самого низа, поэтому размер подобран так, чтобы полосы не
+       пересекались по горизонтали: список 56%, слово укладывается в остаток */
+    max-width: 36%;
+    font-size: 44px;
     font-weight: 800;
     letter-spacing: -0.02em;
     color: #23262F;
@@ -3304,7 +3308,7 @@ body {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-width: 62%;
+    max-width: 56%;
 }
 
 .pres-toc-list li {
