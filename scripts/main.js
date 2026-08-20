@@ -4835,9 +4835,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function findClosestRate(iso) {
         if (!rateCache) { return null; }
         if (rateCache[iso]) { return rateCache[iso]; }
-        // Если дата — выходной, берём предыдущий рабочий день (до 5 дней назад)
+        /*
+         * Если дата — выходной, берём предыдущий рабочий день. Глубина 14
+         * дней, а не 5: на новогодних каникулах ЦБ не публикует курс до
+         * второй недели января, и строки за 3–9 января оставались без
+         * рублёвой стоимости. Курс всё это время действует последний.
+         */
         var d = new Date(iso);
-        for (var i = 1; i <= 5; i++) {
+        for (var i = 1; i <= 14; i++) {
             d.setDate(d.getDate() - 1);
             var prev = d.toISOString().split('T')[0];
             if (rateCache[prev]) { return rateCache[prev]; }
