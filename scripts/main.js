@@ -6832,8 +6832,8 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<h3 class="analysis-section-title">По кварталам</h3>';
             html += '<div class="analysis-note">Разбивка по кварталам недоступна: ' +
                 'загружены годовые данные (по одному значению на год). ' +
-                'Чтобы увидеть кварталы Q1–Q4, загрузите данные с частотой ' +
-                'При месячной частоте приложение сложит месяцы в кварталы.</div>';
+                'Чтобы увидеть кварталы Q1–Q4, загрузите данные с месячной частотой: ' +
+                'приложение сложит месяцы в кварталы.</div>';
             html += '</div>';
         } else if (quarterKeys.length > 0) {
             html += '<div class="analysis-section">';
@@ -11781,6 +11781,23 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
+    /*
+     * У годовых выгрузок весь год лежит в Q1: линии «Q1–Q4» вырождаются
+     * в одну точку слева. Такие данные показываем по годам.
+     */
+    function presIsAnnualOnly(data, headers) {
+        var yearCol = findColumn(headers, COL_YEAR);
+        var quarterCol = findColumn(headers, COL_QUARTER);
+        if (!yearCol || !quarterCol) { return false; }
+        var qSet = {};
+        data.forEach(function (row) {
+            var q = String(row[quarterCol] || '').trim();
+            if (q) { qSet[q] = true; }
+        });
+        var qs = Object.keys(qSet);
+        return qs.length === 1 && qs[0] === '1';
+    }
+
     // Совокупный рост за период, % — не путать с CAGR (среднее за год)
     function presCalcGrowth(first, last) {
         if (!first || first <= 0) { return null; }
@@ -12436,11 +12453,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var years = Object.keys(yearsSet).sort();
         var quarters = ['1', '2', '3', '4'];
+        var annualOnly = presIsAnnualOnly(data, headers);
 
         // Choose metric: prefer rub, then usd
         var metrics = [];
         if (hasRub) metrics.push({ key: 'rub', title: '\u0440\u0443\u0431./\u043a\u0433' });
         if (statUsdCol) metrics.push({ key: 'usd', title: 'USD/\u043a\u0433' });
+
+        if (annualOnly) {
+            var annualBody = '';
+            metrics.forEach(function (m) {
+                annualBody += presAnnualPriceBarsSVG(m, years, byYQ);
+            });
+            if (!annualBody) { return presNoData(slide.title); }
+            return slideWrapper(slide.title || 'Динамика цен по годам', annualBody, {
+                commentary: slide.opts && slide.opts.commentary
+            });
+        }
 
         var body = '';
         metrics.forEach(function (m) {
@@ -12512,6 +12541,58 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         return slideWrapper(slide.title || '\u041f\u043e\u043a\u0432\u0430\u0440\u0442\u0430\u043b\u044c\u043d\u0430\u044f \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0430 \u0446\u0435\u043d', body, { commentary: slide.opts && slide.opts.commentary });
+    }
+
+    /*
+     * Средневзвешенная цена по годам столбиками — замена поквартальных
+     * линий там, где кварталов в данных нет. Столбики честнее линии:
+     * точек мало и они дискретные.
+     */
+    function presAnnualPriceBarsSVG(m, years, byYQ) {
+        var vals = {};
+        var maxV = 0;
+        years.forEach(function (y) {
+            var d = byYQ[y + '|1'];
+            if (!d || !(d.weight > 0)) { return; }
+            var v = round2(m.key === 'usd' ? d.usd / d.weight : d.rub / d.weight);
+            vals[y] = v;
+            if (v > maxV) { maxV = v; }
+        });
+        if (!maxV) { return ''; }
+        var top = maxV * 1.25;
+
+        var cW = 420, cH = 200, pad = { top: 16, right: 16, bottom: 24, left: 50 };
+        var innerW = cW - pad.left - pad.right;
+        var innerH = cH - pad.top - pad.bottom;
+
+        var out = '<div style="display:inline-block;vertical-align:top;margin-right:12px">';
+        out += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">' + m.title + '</div>';
+        out += '<svg width="' + cW + '" height="' + cH + '">';
+        out += '<style>text{font-family:DejaVu Sans,sans-serif}</style>';
+
+        for (var t = 0; t <= 3; t++) {
+            var gv = round2(top * t / 3);
+            var gy = pad.top + innerH - (innerH * t / 3);
+            out += '<line x1="' + pad.left + '" y1="' + gy + '" x2="' + (pad.left + innerW) + '" y2="' + gy + '" stroke="#E2E8F0"/>';
+            out += '<text x="' + (pad.left - 4) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="7" fill="#64748B">' + formatNumber(gv) + '</text>';
+        }
+
+        var slot = innerW / years.length;
+        var barW = Math.min(46, slot * 0.6);
+        years.forEach(function (y, yi) {
+            var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+            var cx = pad.left + slot * yi + slot / 2;
+            out += '<text x="' + cx + '" y="' + (cH - 6) + '" text-anchor="middle" font-size="8" fill="#64748B">' + y + '</text>';
+            var v = vals[y];
+            if (v == null) { return; }
+            var bh = (v / top) * innerH;
+            var by = pad.top + innerH - bh;
+            out += '<rect x="' + (cx - barW / 2) + '" y="' + by + '" width="' + barW + '" height="' + bh + '" rx="2" fill="' + color + '"/>';
+            out += '<text x="' + cx + '" y="' + (by - 4) + '" text-anchor="middle" font-size="8" font-weight="600" fill="' + color + '">' + formatNumber(v) + '</text>';
+        });
+
+        out += '</svg></div>';
+        return out;
     }
 
     // --- Автоматические тексты для слайдов ---
@@ -12743,6 +12824,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 m.usdMax = round2(Math.max.apply(null, usdPrices));
                 m.usdAvg = round2(usdPrices.reduce(function (s, v) { return s + v; }, 0) / usdPrices.length);
             }
+            m.annualPrices = presIsAnnualOnly(data, headers);
             if (rubPrices.length > 0) {
                 m.rubMin = round2(Math.min.apply(null, rubPrices));
                 m.rubMax = round2(Math.max.apply(null, rubPrices));
@@ -12837,7 +12919,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (type === 'quarterly-prices' && m.usdMin != null) {
-            return 'Поквартальная цена импорта' + of + ' колебалась в диапазоне ' + presRuNum(m.usdMin, 1) + '–' + presRuNum(m.usdMax, 1) + ' USD/кг';
+            var priceScope = m.annualPrices ? 'Среднегодовая цена импорта' : 'Поквартальная цена импорта';
+            return priceScope + of + ' колебалась в диапазоне ' + presRuNum(m.usdMin, 1) + '–' + presRuNum(m.usdMax, 1) + ' USD/кг';
         }
 
         if (type === 'market-changes' && m.marketBasePeriod) {
@@ -12955,6 +13038,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (type === 'quarterly-prices') {
+            if (m.annualPrices) {
+                lines.push('Данные годовые, разбивки по кварталам в них нет — показана средневзвешенная цена за год.');
+            }
             if (m.usdMin != null) {
                 lines.push('Цена в долларах колебалась от ' + presRuNum(m.usdMin, 1) + ' до ' + presRuNum(m.usdMax, 1) + ' USD/кг (в среднем ' + presRuNum(m.usdAvg, 1) + ').');
             }
