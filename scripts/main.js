@@ -6051,7 +6051,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (recs.length) {
             var rOrder = { risk: 0, watch: 1, ok: 2 };
             recs.sort(function (a, b) { return rOrder[a.level] - rOrder[b.level]; });
-            html += '<div class="recs-head"><h3>Что делать</h3>' +
+            html += '<div class="recs-head"><h3>Рекомендации</h3>' +
                 '<span class="signals-base">выведено правилами из показателей выше</span></div>';
             html += '<div class="recs-list">';
             recs.forEach(function (r) {
@@ -8058,6 +8058,57 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Анализ: Поквартальная динамика цен ---
     var YEAR_COLORS = ['#2563EB', '#8B5CF6', '#F59E0B', '#16A34A', '#DC2626', '#EC4899', '#0891B2'];
 
+    // Годовые данные: средневзвешенная цена за год столбиками, годы по оси X.
+    // Линия здесь читается плохо — точек мало и они дискретные.
+    function renderAnnualPriceBars(m, years, avgPrices) {
+        var vals = [];
+        years.forEach(function (y) {
+            var a = avgPrices[y] && avgPrices[y][m.key];
+            if (a != null) { vals.push(a); }
+        });
+        if (!vals.length) { return ''; }
+
+        var vMax = Math.max.apply(null, vals) * 1.2;
+        if (!(vMax > 0)) { vMax = 1; }
+
+        var chartW = 550;
+        var chartH = 320;
+        var pad = { top: 30, right: 20, bottom: 50, left: 60 };
+        var innerW = chartW - pad.left - pad.right;
+        var innerH = chartH - pad.top - pad.bottom;
+
+        var out = '<div class="analysis-section">';
+        out += '<h3 class="analysis-section-title">' + m.title + '</h3>';
+        out += '<svg class="analysis-chart analysis-chart-quarterly" width="' + chartW + '" height="' + chartH + '" viewBox="0 0 ' + chartW + ' ' + chartH + '">';
+        out += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
+
+        var yTicks = 5;
+        for (var t = 0; t <= yTicks; t++) {
+            var yVal = round2(vMax * t / yTicks);
+            var yPos = pad.top + innerH - (innerH * t / yTicks);
+            out += '<line x1="' + pad.left + '" y1="' + yPos + '" x2="' + (pad.left + innerW) + '" y2="' + yPos + '" stroke="' + CHART_COLORS.grid + '" stroke-width="1"/>';
+            out += '<text x="' + (pad.left - 8) + '" y="' + (yPos + 4) + '" text-anchor="end" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(yVal) + '</text>';
+        }
+
+        var slot = innerW / years.length;
+        var barW = Math.min(70, slot * 0.6);
+        years.forEach(function (y, yi) {
+            var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+            var cx = pad.left + slot * yi + slot / 2;
+            out += '<text x="' + cx + '" y="' + (chartH - pad.bottom + 25) + '" text-anchor="middle" font-size="11" fill="' + CHART_COLORS.textMuted + '">' + y + '</text>';
+
+            var val = avgPrices[y] && avgPrices[y][m.key];
+            if (val == null) { return; }
+            var barH = (val / vMax) * innerH;
+            var barY = pad.top + innerH - barH;
+            out += '<rect x="' + (cx - barW / 2) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + color + '"/>';
+            out += '<text x="' + cx + '" y="' + (barY - 8) + '" text-anchor="middle" font-size="11" font-weight="600" fill="' + color + '">' + formatNumber(val) + '</text>';
+        });
+
+        out += '</svg></div>';
+        return out;
+    }
+
     function renderQuarterlyPricesAnalysis(data, headers) {
         var weightCol = findColumn(headers, COL_WEIGHT);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
@@ -8083,6 +8134,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var byYearQuarter = {};
         var byYear = {};
         var yearsSet = {};
+        var quartersSet = {};
 
         data.forEach(function (row) {
             var year = String(row[yearCol] || '').trim();
@@ -8094,6 +8146,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var rub = rubCol ? getRowRubValue(row, rubCtx) : 0;
 
             yearsSet[year] = true;
+            quartersSet[q] = true;
 
             if (!byYearQuarter[year]) { byYearQuarter[year] = {}; }
             if (!byYearQuarter[year][q]) { byYearQuarter[year][q] = { statUsd: 0, rub: 0, weight: 0 }; }
@@ -8109,6 +8162,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var years = Object.keys(yearsSet).sort();
         var quarters = ['1', '2', '3', '4'];
+
+        // Годовые данные кварталов не имеют: приложение кладёт весь год в Q1.
+        // Тогда линии «Q1–Q4» вырождаются в одну точку слева, поэтому в этом
+        // случае показываем столбики средневзвешенной цены по годам.
+        var qNums = Object.keys(quartersSet);
+        var annualOnly = qNums.length === 1 && qNums[0] === '1';
 
         // Вычисляем средневзвешенные цены
         // priceData[year][q] = { usd: ..., rub: ... }
@@ -8136,12 +8195,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Определяем метрики
         var metrics = [];
-        if (rubCol) { metrics.push({ key: 'rub', title: 'Поквартальная динамика цен, нац. вал./кг', unit: 'нац. вал./кг' }); }
-        if (statUsdCol) { metrics.push({ key: 'usd', title: 'Поквартальная динамика цен, долл. США/кг', unit: 'USD/кг' }); }
+        var titlePrefix = annualOnly ? 'Динамика цен по годам' : 'Поквартальная динамика цен';
+        if (rubCol) { metrics.push({ key: 'rub', title: titlePrefix + ', нац. вал./кг', unit: 'нац. вал./кг' }); }
+        if (statUsdCol) { metrics.push({ key: 'usd', title: titlePrefix + ', долл. США/кг', unit: 'USD/кг' }); }
 
         var html = '';
+        if (annualOnly) {
+            html += '<div class="analysis-note">Загружены годовые данные — разбивки по кварталам в них нет. ' +
+                'Показана средневзвешенная цена за каждый год. ' +
+                'Чтобы увидеть кварталы Q1\u2013Q4, загрузите данные с месячной частотой: ' +
+                'приложение сложит месяцы в кварталы.</div>';
+        }
 
         metrics.forEach(function (m) {
+            if (annualOnly) {
+                html += renderAnnualPriceBars(m, years, avgPrices);
+                return;
+            }
             // Собираем все значения для масштаба
             var allVals = [];
             years.forEach(function (y) {
@@ -8238,13 +8308,15 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '</div>';
         });
 
-        // Легенда
-        html += '<div class="chart-legend" style="margin-top:8px">';
-        years.forEach(function (y, yi) {
-            var color = YEAR_COLORS[yi % YEAR_COLORS.length];
-            html += '<span class="chart-legend-item"><span class="chart-legend-color" style="background:' + color + ';height:3px;width:20px"></span>' + y + '</span>';
-        });
-        html += '</div>';
+        // Легенда: у годовых столбиков годы подписаны прямо по оси X
+        if (!annualOnly) {
+            html += '<div class="chart-legend" style="margin-top:8px">';
+            years.forEach(function (y, yi) {
+                var color = YEAR_COLORS[yi % YEAR_COLORS.length];
+                html += '<span class="chart-legend-item"><span class="chart-legend-color" style="background:' + color + ';height:3px;width:20px"></span>' + y + '</span>';
+            });
+            html += '</div>';
+        }
 
         // Кнопки экспорта
         html += '<div class="processing-export" style="margin-top:20px">';
@@ -8270,24 +8342,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Данные для экспорта
         var exportRows = [];
-        years.forEach(function (y) {
-            quarters.forEach(function (q) {
-                var pd = priceData[y][q];
-                var row = { 'Год': y, 'Квартал': 'Q' + q };
-                if (statUsdCol) { row['USD/кг'] = pd && pd.usd != null ? pd.usd : ''; }
-                if (rubCol) { row['Нац. вал./кг'] = pd && pd.rub != null ? pd.rub : ''; }
+        if (annualOnly) {
+            years.forEach(function (y) {
+                var a = avgPrices[y];
+                var row = { 'Год': y };
+                if (statUsdCol) { row['USD/кг'] = a && a.usd != null ? a.usd : ''; }
+                if (rubCol) { row['Нац. вал./кг'] = a && a.rub != null ? a.rub : ''; }
                 exportRows.push(row);
             });
-            // Средневзвешенная
-            var avg = avgPrices[y];
-            var avgRow = { 'Год': y, 'Квартал': 'Средневзвешенная' };
-            if (statUsdCol) { avgRow['USD/кг'] = avg && avg.usd != null ? avg.usd : ''; }
-            if (rubCol) { avgRow['Нац. вал./кг'] = avg && avg.rub != null ? avg.rub : ''; }
-            exportRows.push(avgRow);
-            exportRows.push({ 'Год': '', 'Квартал': '' });
-        });
+        } else {
+            years.forEach(function (y) {
+                quarters.forEach(function (q) {
+                    var pd = priceData[y][q];
+                    var row = { 'Год': y, 'Квартал': 'Q' + q };
+                    if (statUsdCol) { row['USD/кг'] = pd && pd.usd != null ? pd.usd : ''; }
+                    if (rubCol) { row['Нац. вал./кг'] = pd && pd.rub != null ? pd.rub : ''; }
+                    exportRows.push(row);
+                });
+                // Средневзвешенная
+                var avg = avgPrices[y];
+                var avgRow = { 'Год': y, 'Квартал': 'Средневзвешенная' };
+                if (statUsdCol) { avgRow['USD/кг'] = avg && avg.usd != null ? avg.usd : ''; }
+                if (rubCol) { avgRow['Нац. вал./кг'] = avg && avg.rub != null ? avg.rub : ''; }
+                exportRows.push(avgRow);
+                exportRows.push({ 'Год': '', 'Квартал': '' });
+            });
+        }
 
-        var exportHeaders = ['Год', 'Квартал'];
+        var exportHeaders = annualOnly ? ['Год'] : ['Год', 'Квартал'];
         if (statUsdCol) { exportHeaders.push('USD/кг'); }
         if (rubCol) { exportHeaders.push('Нац. вал./кг'); }
 
