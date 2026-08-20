@@ -396,7 +396,7 @@ header('Content-Type: text/html; charset=UTF-8');
             <div class="error">Неверный логин или пароль. Попробуйте ещё раз.</div>
             <label for="login">Логин</label>
             <input type="text" id="login" name="login" autofocus
-                   autocomplete="username" placeholder="Выданный логин пользователя"
+                   autocomplete="username" placeholder="Логин пользователя"
                    value="<?= htmlspecialchars((string)($_POST['login'] ?? ''), ENT_QUOTES) ?>">
             <label for="password">Пароль</label>
             <input type="password" id="password" name="password"
