@@ -6501,6 +6501,13 @@ document.addEventListener('DOMContentLoaded', function () {
         return levels;
     }
 
+    /* Самый подробный уровень кодов, доступный в данных: им пользуются
+       слайды и сводная выгрузка, где уровень никто не выбирает руками. */
+    function marketMaxHsLevel(data, column) {
+        var levels = marketHsLevels(data, column);
+        return levels.length ? levels[levels.length - 1] : 10;
+    }
+
     function marketAccumulatorValue(acc, metric) {
         if (metric === 'weight') { return acc.weight; }
         if (metric === 'usd') { return acc.usd; }
@@ -6848,7 +6855,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 var label = 'HS' + l + (l === maxLevel ? ' (полный код)' : '');
                 return '<option value="' + l + '">' + label + '</option>';
             }).join('');
-            hsLevelEl.value = levels.indexOf(4) >= 0 ? '4' : String(maxLevel);
+            // По умолчанию берём самый подробный уровень, который есть в данных:
+            // укрупнить срез до HS4 или HS2 можно вручную, а вот детализации,
+            // которой нет в выборе, взяться неоткуда
+            hsLevelEl.value = String(maxLevel);
             hsHintEl.textContent = 'В данных коды до ' + maxLevel + ' знаков';
             hsField.hidden = false;
         }
@@ -11310,7 +11320,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentPeriod: periods[periods.length - 1],
                 dimension: dim.column,
                 metric: weightCol ? 'weight' : 'usd',
-                hsLevel: 4,
+                hsLevel: marketMaxHsLevel(data, dim.column),
                 threshold: 0
             });
             if (mc && !mc.error && mc.all && mc.all.length) {
@@ -12063,7 +12073,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var result = computeMarketChanges(data, headers, {
             granularity: 'year',
             dimension: dimension,
-            hsLevel: 4,
+            hsLevel: marketMaxHsLevel(data, dimension),
             metric: metric,
             threshold: 0
         });
@@ -13329,10 +13339,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (marketDims.length) {
                 var marketHs = marketDims.filter(function (d) { return d.type === 'hs'; })[0];
                 var marketMetric = weightCol ? 'weight' : (statUsdCol ? 'usd' : 'count');
+                var marketDim = marketHs ? marketHs.column : marketDims[0].column;
                 var marketResult = computeMarketChanges(data, headers, {
                     granularity: 'year',
-                    dimension: marketHs ? marketHs.column : marketDims[0].column,
-                    hsLevel: 4,
+                    dimension: marketDim,
+                    hsLevel: marketMaxHsLevel(data, marketDim),
                     metric: marketMetric,
                     threshold: 0
                 });
