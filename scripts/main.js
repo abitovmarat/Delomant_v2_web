@@ -10905,10 +10905,23 @@ document.addEventListener('DOMContentLoaded', function () {
     var presClearBtn = document.querySelector('.pres-clear-btn');
     var presSettingsOverlay = document.querySelector('.pres-settings-overlay');
 
+    /*
+     * Временно убраны из доступа: диаграммы Санки «Отправитель → Получатель»
+     * и «Изготовитель → Получатель». Определения блоков и рендереры на месте,
+     * поэтому ранее собранные отчёты открываются и печатаются как раньше —
+     * закрыт только вход: палитра и мастер сборки. Вернём позже.
+     */
+    var PRES_HIDDEN_TYPES = ['sankey-sender', 'sankey-manufacturer'];
+
+    function isPresBlockHidden(type) {
+        return PRES_HIDDEN_TYPES.indexOf(type) !== -1;
+    }
+
     // --- Рендер палитры ---
     function renderPresPalette() {
         var html = '';
         PRES_BLOCKS.forEach(function (b) {
+            if (isPresBlockHidden(b.type)) { return; }
             html += '<div class="pres-palette-item" data-type="' + b.type + '" title="' + b.label + '">';
             html += '<span>' + b.icon + '</span> ' + b.label;
             html += '</div>';

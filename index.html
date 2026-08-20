@@ -534,6 +534,9 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
+                        <!-- Временно убраны из доступа, вернём позже: «Структура импорта»
+                             и «Структура по изготовителям» (диаграммы Санки). Код анализов
+                             и рендереры на месте — закрыт только вход из интерфейса.
                         <div class="action-card" data-analysis="importStructure" title="Колонки: Наименование отправителя · Наименование получателя · Вес нетто, кг · Год">
                             <span class="action-card-icon">🏭</span>
                             <div class="action-card-body">
@@ -550,6 +553,7 @@
                             </div>
                             <button class="btn btn-secondary">Запустить</button>
                         </div>
+                        -->
                         <div class="action-card" data-analysis="quarterlyPrices" title="Колонки: Статистическая стоимость, USD · Таможенная стоимость · Вес нетто, кг · Год · КВАРТАЛ">
                             <span class="action-card-icon">📈</span>
                             <div class="action-card-body">
@@ -782,8 +786,10 @@
                                         <label><input type="checkbox" value="volumes" checked> Объёмы и стоимость</label>
                                         <label><input type="checkbox" value="countries" checked> Структура по странам</label>
                                         <label><input type="checkbox" value="price-dynamics" checked> Динамика цен</label>
+                                        <!-- Санки временно убраны из доступа, вернём позже
                                         <label><input type="checkbox" value="sankey-manufacturer" checked> Изготовители → Получатели</label>
                                         <label><input type="checkbox" value="sankey-sender"> Отправители → Получатели</label>
+                                        -->
                                         <label><input type="checkbox" value="quarterly-prices" checked> Поквартальные цены</label>
                                         <label><input type="checkbox" value="market-changes" checked> Изменения рынка</label>
                                         <label><input type="checkbox" value="segments" checked> Каналы сбыта (сегменты)</label>
@@ -867,8 +873,10 @@
                                 <li><strong>Объёмы и стоимость:</strong> сводные таблицы по годам/кварталам, CAGR, 3 графика с YoY-ростом</li>
                                 <li><strong>Объёмы по странам:</strong> таблица с долями, горизонтальная диаграмма топ-10</li>
                                 <li><strong>Динамика цен по странам:</strong> средневзвешенная цена USD/кг, линейный график топ-10 стран</li>
+                                <!-- Скрыто вместе с самими разделами, вернём позже
                                 <li><strong>Структура импорта:</strong> диаграмма Санки Отправитель → Получатель (тонны)</li>
                                 <li><strong>Структура по изготовителям:</strong> диаграмма Санки Изготовитель → Получатель (тонны)</li>
+                                -->
                                 <li><strong>Поквартальная динамика цен:</strong> нац. вал./кг и USD/кг по кварталам, линии по годам</li>
                                 <li><strong>Изменения рынка:</strong> сравнение двух периодов по товарам, странам или компаниям с лидерами роста и падения, новыми и ушедшими позициями</li>
                                 <li><strong>Сигналы и риски:</strong> концентрация рынка по индексу Херфиндаля-Хиршмана, зависимость от главного поставщика, обновление состава участников, волатильность и разброс цен</li>
