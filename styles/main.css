@@ -2039,6 +2039,13 @@ body {
     flex-wrap: wrap;
 }
 
+/* У графиков есть viewBox, поэтому при нехватке ширины они масштабируются
+   целиком, а не обрезаются краем окна */
+.analysis-chart {
+    max-width: 100%;
+    height: auto;
+}
+
 .analysis-chart-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -3802,6 +3809,40 @@ body {
 .comtrade-region-some {
     border-color: var(--color-primary);
     background-color: var(--color-primary-light);
+}
+
+.comtrade-partner-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.comtrade-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-primary-light, #EFF6FF);
+    color: var(--color-text);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.comtrade-chip-x {
+    border: 0;
+    background: none;
+    padding: 0 0 0 2px;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.comtrade-chip-x:hover {
+    color: var(--color-danger, #DC2626);
 }
 
 .comtrade-hint {
