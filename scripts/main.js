@@ -128,7 +128,9 @@ document.addEventListener('DOMContentLoaded', function () {
         isProcessed: false,
         // 'file' — выгрузка пользователя, 'comtrade' — статистика ООН.
         // От источника зависит, какие анализы вообще выполнимы.
-        dataSource: 'file'
+        dataSource: 'file',
+        // Когда данные попали в стенд — идёт в слайд о полноте и источниках
+        loadedAt: null
     };
 
     /*
@@ -687,6 +689,7 @@ document.addEventListener('DOMContentLoaded', function () {
         appState.processedData = [];
         appState.isProcessed = false;
         appState.dataSource = source || 'file';
+        appState.loadedAt = new Date();
         appState.sourceNote = '';   // задаётся после вызова, если источник его несёт
 
         console.log('[Delomant] Данные загружены:', parsed.rows.length, 'строк,', parsed.headers.length, 'столбцов');
@@ -10864,6 +10867,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { type: 'sankey-manufacturer', label: 'Санки: Изг\u2192Пол', icon: '\uD83C\uDFED', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: true, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'quarterly-prices', label: 'Кварт. цены', icon: '\uD83D\uDCC8', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'market-changes', label: 'Изменения рынка', icon: '⚡', category: 'analysis', hasHsFilter: true, hasTopN: true, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
+        { type: 'data-quality', label: 'Полнота данных', icon: '\uD83D\uDD0D', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'segments', label: 'Каналы сбыта', icon: '\uD83C\uDFEC', category: 'analysis', hasHsFilter: true, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: false, hasCommentary: true },
         { type: 'summary', label: 'Итоги', icon: '\u2705', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
         { type: 'recommendations', label: 'Рекомендации', icon: '\uD83D\uDCCB', category: 'special', hasHsFilter: false, hasTopN: false, hasYear: false, hasSubtitle: false, hasBullets: true },
@@ -11566,6 +11570,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (type === 'market-changes') return renderPresMarketChanges(data, headers, slide);
         if (type === 'facts') return renderPresFacts(data, headers, slide);
         if (type === 'segments') return renderPresSegments(data, headers, slide);
+        if (type === 'data-quality') return renderPresDataQuality(data, headers, slide);
         return slideWrapper('\u041e\u0448\u0438\u0431\u043a\u0430', '<p>\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u0442\u0438\u043f \u0431\u043b\u043e\u043a\u0430</p>', {});
     }
 
@@ -11892,6 +11897,132 @@ document.addEventListener('DOMContentLoaded', function () {
         return slideWrapper(title, body, {});
     }
 
+
+    /*
+     * Полнота и источники данных.
+     *
+     * Отчёт уходит наружу, и по нему принимают решения: читатель должен
+     * видеть, на каком объёме данных построены выводы, какие поля заполнены
+     * не полностью и откуда взялись рубли. Заполненность считаем той же
+     * функцией, что и мастер сборки, — цифры в отчёте и в мастере совпадают.
+     */
+    function presRubMethodNote(headers) {
+        var ctx = buildRubCtx(headers);
+        if (ctx.customsCol) { return 'Рублёвые суммы — таможенная стоимость из выгрузки.'; }
+        if (ctx.invoiceRubCol) { return 'Рублёвые суммы — фактурная стоимость в рублях из выгрузки.'; }
+        if (ctx.statUsdCol && ctx.dateReleaseCol) {
+            return 'Рублёвые суммы пересчитаны из долларов по курсу ЦБ на дату выпуска.';
+        }
+        return 'Рублёвые суммы не рассчитывались: нет рублёвой колонки и даты для пересчёта.';
+    }
+
+    function renderPresDataQuality(data, headers, slide) {
+        var title = slide.title || 'Полнота и источники данных';
+        if (!data || !data.length) { return presNoData(title); }
+
+        var fields = [
+            { label: 'Код ТН ВЭД', name: COL_HS_CODE },
+            { label: 'Страна отправления', name: 'Страна отправления' },
+            { label: 'Страна происхождения', name: 'Страна происхождения' },
+            { label: 'Вес нетто', name: COL_WEIGHT },
+            { label: 'Стоимость, USD', name: COL_STAT_USD },
+            { label: 'Таможенная стоимость', name: COL_CUSTOMS },
+            { label: 'Получатель', name: COL_RECEIVER },
+            { label: 'Отправитель', name: COL_SENDER },
+            { label: 'Изготовитель', name: COL_MANUFACTURER },
+            { label: 'Сегмент получателя', name: 'Сегмент' }
+        ];
+
+        var rows = [];
+        var missing = [];
+        fields.forEach(function (f) {
+            var col = findColumn(headers, f.name);
+            if (col) { rows.push({ label: f.label, fill: presColumnFill(data, col) }); }
+            else { missing.push(f.label); }
+        });
+
+        var yearCol = findColumn(headers, COL_YEAR);
+        var years = [];
+        if (yearCol) {
+            var ySet = {};
+            data.forEach(function (row) {
+                var y = String(row[yearCol] || '').trim();
+                if (y) { ySet[y] = true; }
+            });
+            years = Object.keys(ySet).sort();
+        }
+        var partial = presDetectPartialYear(data, headers);
+        var periodVal = years.length
+            ? (years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1])
+            : '—';
+
+        var svgW = 900;
+        var headH = 92;
+        var rowH = 30;
+        var missH = missing.length ? 46 : 0;
+        var svgH = headH + rows.length * rowH + missH;
+
+        var labelX = 8, barX = 250, barW = 430, pctX = barX + barW + 14;
+
+        var body = '<svg width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
+        body += '<style>text{font-family:DejaVu Sans,Arial,sans-serif}</style>';
+
+        // Шапка: на чём построен отчёт
+        var facts = [
+            { value: formatNumber(data.length), label: 'записей в выгрузке' },
+            { value: periodVal, label: partial ? 'период (' + partial.year + ' неполный)' : 'период данных' },
+            { value: formatNumber(headers.length), label: 'полей в таблице' }
+        ];
+        var factW = Math.floor((svgW - 2 * 16) / 3);
+        facts.forEach(function (f, i) {
+            var fx = i * (factW + 16);
+            body += '<rect x="' + fx + '" y="0" width="' + factW + '" height="76" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>';
+            body += '<rect x="' + fx + '" y="0" width="5" height="76" rx="2.5" fill="#2563EB"/>';
+            var vsize = String(f.value).length > 11 ? 22 : 28;
+            body += '<text x="' + (fx + 20) + '" y="' + 38 + '" font-size="' + vsize + '" font-weight="700" fill="#0F172A">' + svgEscFact(f.value) + '</text>';
+            body += '<text x="' + (fx + 20) + '" y="' + 60 + '" font-size="12" fill="#475569">' + svgEscFact(f.label) + '</text>';
+        });
+
+        // Заполненность полей
+        rows.forEach(function (r, i) {
+            var y = headH + i * rowH;
+            var pct = Math.round(r.fill * 100);
+            var color = r.fill >= 0.95 ? '#16A34A' : (r.fill >= 0.6 ? '#F59E0B' : '#DC2626');
+            body += '<text x="' + labelX + '" y="' + (y + 15) + '" font-size="13" fill="#334155">' + svgEscFact(r.label) + '</text>';
+            body += '<rect x="' + barX + '" y="' + (y + 4) + '" width="' + barW + '" height="14" rx="7" fill="#E2E8F0"/>';
+            if (pct > 0) {
+                body += '<rect x="' + barX + '" y="' + (y + 4) + '" width="' + Math.max(4, barW * r.fill) + '" height="14" rx="7" fill="' + color + '"/>';
+            }
+            body += '<text x="' + pctX + '" y="' + (y + 16) + '" font-size="13" font-weight="600" fill="' + color + '">' + pct + '%</text>';
+        });
+
+        if (missing.length) {
+            var my = headH + rows.length * rowH + 12;
+            body += '<text x="' + labelX + '" y="' + my + '" font-size="12" fill="#94A3B8">Нет в выгрузке: ' +
+                svgEscFact(missing.join(', ')) + '</text>';
+        }
+        body += '</svg>';
+
+        // Провенанс: откуда цифры и как считались рубли
+        var notes = [];
+        var srcNote = dataSourceNote();
+        notes.push(srcNote || ('Источник: выгрузка «' + (appState.fileName || 'без имени') + '».'));
+        if (appState.loadedAt) {
+            notes.push('Данные загружены в стенд ' + appState.loadedAt.toLocaleDateString('ru-RU') + '.');
+        }
+        notes.push(presRubMethodNote(headers));
+        if (partial) {
+            notes.push('Год ' + partial.year + ' представлен частично (' + partial.label +
+                '), темпы роста считаются по полным годам.');
+        }
+        if (missing.length) {
+            notes.push('Разделы, которым нужны отсутствующие поля, в отчёт не включались.');
+        }
+
+        return slideWrapper(title, body, {
+            commentary: (slide.opts && slide.opts.commentary) || notes.join('\n')
+        });
+    }
 
     // --- Объёмы и стоимость ---
     function renderPresVolumes(data, headers, slide) {
@@ -13085,6 +13216,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
+        if (extras.indexOf('data-quality') !== -1) {
+            slides.push(mk('data-quality'));
+        }
         if (extras.indexOf('summary') !== -1) {
             var sum = mk('summary');
             var rl = generateReportText('resume', data, headers, { opts: { product: single } });
@@ -13130,7 +13264,7 @@ document.addEventListener('DOMContentLoaded', function () {
         progressFill.style.width = '0%';
         progressDetail.textContent = '0 / ' + total;
 
-        var PDF_ANALYTICS = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments'];
+        var PDF_ANALYTICS = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments', 'data-quality'];
         // PDF page dimensions in points at 10px/mm: 297mm × 210mm
         var PDF_W = 2970, PDF_H = 2100;
 
@@ -13697,7 +13831,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var isSimple = SIMPLE_TYPES.indexOf(slideData.type) !== -1;
 
-            var ANALYTICS_TYPES = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments'];
+            var ANALYTICS_TYPES = ['facts', 'volumes', 'countries', 'price-dynamics', 'sankey-sender', 'sankey-manufacturer', 'quarterly-prices', 'market-changes', 'segments', 'data-quality'];
 
             if (isSimple) {
                 if (slideData.type === 'title') addTitleSlide(slideData);
