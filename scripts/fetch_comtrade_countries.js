@@ -50,10 +50,24 @@ const RU_NAMES = {
   ZA: 'ЮАР', ZM: 'Замбия', ZW: 'Зимбабве',
 };
 
-// Записи без действующего ISO-кода: служебные территории и агрегаты UN
-// Comtrade. Intl.DisplayNames их перевести не может, поэтому фиксируем
-// понятные русские подписи по стабильному PartnerCode.
+// Подписи по стабильному PartnerCode. Здесь два случая.
+//
+// Первый: служебные территории и агрегаты UN Comtrade без действующего
+// ISO-кода — Intl.DisplayNames их перевести не может.
+//
+// Второй: у одной страны в справочнике два кода с одним ISO (США 840/842,
+// Франция 250/251, Швейцария 756/757, Норвегия 578/579). Перевод по ISO
+// давал две одинаковые строки в списке, и было не понять, какую брать.
+// Отчётным у Comtrade идёт второй код каждой пары — он и получает простое
+// имя, парный помечен явно. Отдельная история — код 80: в источнике ему
+// проставлен ISO BQ (Бонэйр), хотя это Британская антарктическая
+// территория; по ISO он превращался во вторую строку «Бонэйр».
 const RU_CODE_NAMES = {
+  80: 'Британская антарктическая территория',
+  250: 'Франция, метрополия (без заморских территорий)',
+  578: 'Норвегия, без Шпицбергена и Ян-Майена',
+  756: 'Швейцария, альтернативный код 756',
+  840: 'США, альтернативный код 840',
   472: 'Африканский регион, прочие',
   899: 'Территории, не указанные отдельно',
   837: 'Бункерное топливо',
@@ -83,8 +97,9 @@ const RU_CODE_NAMES = {
 const REGION_NAMES_RU = new Intl.DisplayNames(['ru'], { type: 'region' });
 
 function russianName(row, iso) {
-  if (RU_NAMES[iso]) return RU_NAMES[iso];
+  // Код точнее ISO: у пар вроде США 840/842 ISO один на двоих
   if (RU_CODE_NAMES[row.PartnerCode]) return RU_CODE_NAMES[row.PartnerCode];
+  if (RU_NAMES[iso]) return RU_NAMES[iso];
 
   if (iso) {
     try {
@@ -148,6 +163,18 @@ async function main() {
 
   const outPath = path.join(__dirname, '..', 'data', 'comtrade_countries.json');
   fs.writeFileSync(outPath, JSON.stringify(countries));
+
+  // Одинаковые названия в списке не ловятся глазом при выборе страны,
+  // поэтому сообщаем о них сразу при сборке справочника.
+  const seen = new Map();
+  countries.forEach((c) => {
+    seen.set(c.name, (seen.get(c.name) || []).concat(c.code));
+  });
+  const dupes = [...seen.entries()].filter(([, codes]) => codes.length > 1);
+  if (dupes.length > 0) {
+    console.log('  ВНИМАНИЕ, повторяющиеся названия:');
+    dupes.forEach(([name, codes]) => console.log(`    ${name}: ${codes.join(', ')}`));
+  }
 
   console.log(`  ${countries.length} countries kept, ${translated} with Russian names`);
   console.log(`\nSaved to ${outPath}`);
