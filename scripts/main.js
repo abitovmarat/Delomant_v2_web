@@ -918,6 +918,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradePartnerSelect = document.querySelector('.comtrade-partner');
     var comtradePartnerChips = document.querySelector('.comtrade-partner-chips');
     var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
+    var comtradePartnerSearch = document.querySelector('.comtrade-partner-search');
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
     var comtradeStatus = document.querySelector('.comtrade-status');
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
@@ -1019,23 +1020,39 @@ document.addEventListener('DOMContentLoaded', function () {
      * В разметке заранее лежат только Россия и мир, чтобы форма была осмысленной
      * до загрузки справочника; остальные страны досыпаем сюда.
      */
-    function fillComtradePartners() {
+    function fillComtradePartners(query) {
         if (!comtradePartnerSelect || comtradeCountries.length === 0) { return; }
 
+        var q = String(query || '').trim().toLowerCase();
         var current = comtradePartnerSelect.value;
-        var html = '<option value="' + COMTRADE_WORLD_CODE + '">Всем миром</option>';
+        var matches = comtradeCountries.filter(function (c) {
+            return q === '' || String(c.name).toLowerCase().indexOf(q) !== -1;
+        });
 
-        comtradeCountries.forEach(function (c) {
+        // При активном поиске первым идёт нейтральный пункт: иначе первая
+        // найденная страна выглядела бы уже выбранной, хотя её не добавляли.
+        var html = q === ''
+            ? '<option value="' + COMTRADE_WORLD_CODE + '">Всем миром</option>'
+            : '<option value="">' + (matches.length
+                ? 'Найдено: ' + matches.length + ' — выберите страну'
+                : 'Ничего не найдено') + '</option>';
+
+        matches.forEach(function (c) {
             html += '<option value="' + c.code + '">' + c.name + '</option>';
         });
 
         comtradePartnerSelect.innerHTML = html;
-        comtradePartnerSelect.value = /^\d{1,4}$/.test(String(current).trim())
-            ? String(current).trim()
-            : String(COMTRADE_RF_CODE);
-        // Выбранного кода могло не оказаться в обновлённом справочнике.
-        if (comtradePartnerSelect.value === '') {
-            comtradePartnerSelect.value = String(COMTRADE_RF_CODE);
+
+        if (q !== '') {
+            comtradePartnerSelect.value = '';
+        } else {
+            comtradePartnerSelect.value = /^\d{1,4}$/.test(String(current).trim())
+                ? String(current).trim()
+                : String(COMTRADE_RF_CODE);
+            // Выбранного кода могло не оказаться в обновлённом справочнике.
+            if (comtradePartnerSelect.value === '') {
+                comtradePartnerSelect.value = String(COMTRADE_RF_CODE);
+            }
         }
         // Имена стран пришли только сейчас — перерисовываем состав
         renderComtradePartnerChips();
@@ -1644,8 +1661,20 @@ document.addEventListener('DOMContentLoaded', function () {
         // Список работает как «добавить»: выбранное уходит в состав ниже
         comtradePartnerSelect.addEventListener('change', function () {
             addComtradePartner(this.value);
+            // После добавления поиск больше не нужен: возвращаем полный список,
+            // чтобы следующего партнёра можно было выбрать сразу.
+            if (comtradePartnerSearch && comtradePartnerSearch.value !== '') {
+                comtradePartnerSearch.value = '';
+                fillComtradePartners('');
+            }
         });
         renderComtradePartnerChips();
+    }
+
+    if (comtradePartnerSearch) {
+        comtradePartnerSearch.addEventListener('input', function () {
+            fillComtradePartners(this.value);
+        });
     }
 
     if (comtradeCountrySearch) {

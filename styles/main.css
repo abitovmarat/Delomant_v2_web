@@ -3723,6 +3723,12 @@ body {
     margin-bottom: 8px;
 }
 
+/* Поиск партнёра стоит прямо над списком — прижимаем их друг к другу */
+.comtrade-partner-search {
+    width: 100%;
+    margin-bottom: 6px;
+}
+
 /* Заголовок поля со страной-партнёром + кнопка сброса */
 .comtrade-field-head {
     display: flex;
