@@ -359,7 +359,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var COL_CBR_RATE = 'Курс ЦБ РФ';
     var COL_INVOICE_RUB_CBR = 'Таможенная стоимость (нац. вал., ЦБ)';
 
-    var LS_CBR_KEY = 'delomant_cbr_rates';
+    // Версия в ключе: файл курсов теперь начинается с 2015 года, а в старом
+    // кэше лежали только 2020+. Без смены ключа у вернувшегося пользователя
+    // цены в нац. валюте до 2020 года молча выходили нулевыми.
+    var LS_CBR_KEY = 'delomant_cbr_rates_2015';
     var rateCache = null; // Загружается один раз из JSON-файла или localStorage
 
     function round2(n) { return Math.round(n * 100) / 100; }
@@ -5100,6 +5103,8 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
         var saved = localStorage.getItem(LS_CBR_KEY);
         if (saved) { rateCache = JSON.parse(saved); }
+        // Кэш прошлой версии больше не читается, а место занимает под мегабайт
+        localStorage.removeItem('delomant_cbr_rates');
     } catch (e) { /* ignore */ }
 
     function loadRateCache() {
@@ -7324,7 +7329,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<h3 class="analysis-section-title">По кварталам</h3>';
             html += '<div class="analysis-note">Разбивка по кварталам недоступна: ' +
                 'загружены годовые данные (по одному значению на год). ' +
-                'Чтобы увидеть кварталы Q1–Q4, загрузите данные с месячной частотой: ' +
+                'Чтобы увидеть кварталы с первого по четвёртый, загрузите данные с месячной частотой: ' +
                 'приложение сложит месяцы в кварталы.</div>';
             html += '</div>';
         } else if (quarterKeys.length > 0) {
@@ -8804,17 +8809,20 @@ document.addEventListener('DOMContentLoaded', function () {
             quarters.forEach(function (q) {
                 var d = byYearQuarter[y] && byYearQuarter[y][q];
                 if (d && d.weight > 0) {
+                    // Нулевая стоимость значит, что её просто нет (например, не
+                    // нашлось курса ЦБ на дату). Столбик «0» на графике цен
+                    // читается как «товар отдавали даром», такой год пропускаем.
                     priceData[y][q] = {
-                        usd: statUsdCol ? round2(d.statUsd / d.weight) : null,
-                        rub: rubCol ? round2(d.rub / d.weight) : null
+                        usd: statUsdCol && d.statUsd > 0 ? round2(d.statUsd / d.weight) : null,
+                        rub: rubCol && d.rub > 0 ? round2(d.rub / d.weight) : null
                     };
                 }
             });
             var yd = byYear[y];
             if (yd && yd.weight > 0) {
                 avgPrices[y] = {
-                    usd: statUsdCol ? round2(yd.statUsd / yd.weight) : null,
-                    rub: rubCol ? round2(yd.rub / yd.weight) : null
+                    usd: statUsdCol && yd.statUsd > 0 ? round2(yd.statUsd / yd.weight) : null,
+                    rub: rubCol && yd.rub > 0 ? round2(yd.rub / yd.weight) : null
                 };
             }
         });
@@ -8827,7 +8835,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var html = '';
         if (annualOnly) {
-            html += '<div class="analysis-note">Загружены годовые данные — разбивки по кварталам в них нет. ' +
+            html += '<div class="analysis-note">Загружены годовые данные, разбивки по кварталам в них нет. ' +
                 'Показана средневзвешенная цена за каждый год. ' +
                 'Чтобы увидеть кварталы Q1\u2013Q4, загрузите данные с месячной частотой: ' +
                 'приложение сложит месяцы в кварталы.</div>';
@@ -13988,7 +13996,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (type === 'quarterly-prices') {
             if (m.annualPrices) {
-                lines.push('Данные годовые, разбивки по кварталам в них нет — показана средневзвешенная цена за год.');
+                lines.push('Данные годовые, разбивки по кварталам в них нет, поэтому показана средневзвешенная цена за год.');
             }
             if (m.usdMin != null) {
                 lines.push('Цена в долларах колебалась от ' + presRuNum(m.usdMin, 1) + ' до ' + presRuNum(m.usdMax, 1) + ' USD/кг (в среднем ' + presRuNum(m.usdAvg, 1) + ').');
