@@ -913,7 +913,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeCard = document.querySelector('.comtrade-card');
     var comtradeForm = document.querySelector('.comtrade-form');
     var comtradeToggle = document.querySelector('.comtrade-toggle');
-    var comtradeCountriesBox = document.querySelector('.comtrade-countries');
+    var comtradeCountryResults = document.querySelector('.comtrade-country-results');
     var comtradeRegionsBox = document.querySelector('.comtrade-regions');
     var comtradePartnerResults = document.querySelector('.comtrade-partner-results');
     var comtradePartnerChips = document.querySelector('.comtrade-partner-chips');
@@ -1195,22 +1195,60 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    /*
+     * Страны-партнёры выбираются тем же поиском, что и партнёр.
+     *
+     * Раньше здесь лежала сетка из двух с лишним сотен чекбоксов — она
+     * занимала пол-экрана, а выбранное всё равно приходилось искать глазами.
+     * Теперь: поиск, выпадающий список совпадений, состав чипами ниже.
+     */
+    var COMTRADE_COUNTRY_RESULTS_LIMIT = 50;
+
     function renderComtradeCountries(filter) {
-        if (!comtradeCountriesBox) { return; }
+        if (!comtradeCountryResults) { return; }
 
         var needle = (filter || '').trim().toLowerCase();
-        var html = '';
-
-        comtradeCountries.forEach(function (country) {
-            if (needle && country.name.toLowerCase().indexOf(needle) === -1) { return; }
-            html += '<label class="comtrade-country">' +
-                '<input type="checkbox" value="' + country.code + '"' +
-                (comtradeSelected[country.code] ? ' checked' : '') + '>' +
-                '<span>' + country.name + '</span>' +
-                '</label>';
+        var matches = comtradeCountries.filter(function (c) {
+            return needle === '' || c.name.toLowerCase().indexOf(needle) !== -1;
         });
 
-        comtradeCountriesBox.innerHTML = html || '<p class="comtrade-empty">Ничего не найдено</p>';
+        var html = '';
+        if (comtradeCountries.length === 0) {
+            html = '<div class="hs-empty">Загрузка справочника стран…</div>';
+        } else if (matches.length === 0) {
+            html = '<div class="hs-empty">Ничего не найдено</div>';
+        } else {
+            matches.slice(0, COMTRADE_COUNTRY_RESULTS_LIMIT).forEach(function (c) {
+                var picked = !!comtradeSelected[c.code];
+                html += '<button type="button" class="hs-item comtrade-partner-item comtrade-country-item' +
+                    (picked ? ' is-picked' : '') + '" data-code="' + marketEsc(c.code) + '">' +
+                    '<b>' + marketEsc(c.name) + '</b>' +
+                    '<span>' + (picked ? 'уже выбрана' : '') + '</span>' +
+                    '</button>';
+            });
+            if (matches.length > COMTRADE_COUNTRY_RESULTS_LIMIT) {
+                html += '<div class="hs-empty">…ещё ' +
+                    (matches.length - COMTRADE_COUNTRY_RESULTS_LIMIT) +
+                    '. Уточните название.</div>';
+            }
+        }
+
+        comtradeCountryResults.innerHTML = html;
+    }
+
+    function openComtradeCountryResults(open) {
+        if (!comtradeCountryResults) { return; }
+        comtradeCountryResults.hidden = !open;
+        if (comtradeCountrySearch) {
+            comtradeCountrySearch.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+    }
+
+    /** Перерисовать список, если он сейчас открыт (например, после региона). */
+    function refreshComtradeCountriesIfOpen() {
+        if (comtradeCountryResults && !comtradeCountryResults.hidden) {
+            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+        }
     }
 
     function updateComtradeSelectedHint() {
@@ -1671,7 +1709,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Регионы ссылаются на коды стран, поэтому ждём оба справочника
                 Promise.all([loadComtradeCountries(), loadComtradeRegions()])
                     .then(function () {
-                        renderComtradeCountries('');
+                        refreshComtradeCountriesIfOpen();
                         renderComtradeRegions();
                         // Список открыт только если пользователь уже щёлкнул по
                         // поиску — тогда обновляем его пришедшим справочником
@@ -1715,9 +1753,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     renderComtradePartnerChips();
 
-    if (comtradeCountrySearch) {
+    if (comtradeCountrySearch && comtradeCountryResults) {
+        comtradeCountrySearch.addEventListener('focus', function () {
+            renderComtradeCountries(this.value);
+            openComtradeCountryResults(true);
+        });
         comtradeCountrySearch.addEventListener('input', function () {
             renderComtradeCountries(this.value);
+            openComtradeCountryResults(true);
+        });
+        comtradeCountrySearch.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { openComtradeCountryResults(false); }
+        });
+
+        comtradeCountryResults.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.comtrade-country-item') : null;
+            if (!btn || btn.classList.contains('is-picked')) { return; }
+
+            comtradeSelected[btn.getAttribute('data-code')] = true;
+            // Регион мог стать полным — подсветка кнопок пересчитывается
+            renderComtradeRegions();
+            updateComtradeSelectedHint();
+            // Список держим открытым: отметить подряд пять стран — обычное дело
+            renderComtradeCountries(comtradeCountrySearch.value);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target !== comtradeCountrySearch && !comtradeCountryResults.contains(e.target)) {
+                openComtradeCountryResults(false);
+            }
         });
     }
 
@@ -1727,18 +1791,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!btn) { return; }
 
             delete comtradeSelected[btn.getAttribute('data-code')];
-            // Галочка в списке и заливка региона должны погаснуть вместе с чипом
-            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
-            renderComtradeRegions();
-            updateComtradeSelectedHint();
-        });
-    }
-
-    if (comtradeCountriesBox) {
-        comtradeCountriesBox.addEventListener('change', function (e) {
-            if (e.target.type !== 'checkbox') { return; }
-            comtradeSelected[e.target.value] = e.target.checked;
-            // Регион мог стать полным или перестать им быть
+            // Пометка в списке и заливка региона гаснут вместе с чипом
+            refreshComtradeCountriesIfOpen();
             renderComtradeRegions();
             updateComtradeSelectedHint();
         });
@@ -1751,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             toggleComtradeRegion(btn.getAttribute('data-region'));
             // Список стран мог быть отфильтрован поиском — сохраняем фильтр
-            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+            refreshComtradeCountriesIfOpen();
             renderComtradeRegions();
             updateComtradeSelectedHint();
         });
@@ -1761,7 +1815,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (comtradeResetBtn) {
         comtradeResetBtn.addEventListener('click', function () {
             comtradeSelected = {};
-            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+            refreshComtradeCountriesIfOpen();
             renderComtradeRegions();
             updateComtradeSelectedHint();
         });

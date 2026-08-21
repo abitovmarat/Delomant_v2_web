@@ -202,8 +202,11 @@
                                         <button type="button" class="comtrade-reset-btn">Сбросить</button>
                                     </div>
                                     <div class="comtrade-regions" role="group" aria-label="Регионы и блоки"></div>
-                                    <input type="text" class="comtrade-country-search" placeholder="Поиск страны">
-                                    <div class="comtrade-countries" role="group" aria-label="Страны-партнёры"></div>
+                                    <!-- Обёртка нужна, чтобы список падал точно под поле -->
+                                    <div class="partner-search-box">
+                                        <input type="text" class="comtrade-country-search" id="comtrade-country-search" placeholder="Поиск страны, напр. «Бразилия»" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="comtrade-country-results">
+                                        <div class="comtrade-country-results hs-search-results" id="comtrade-country-results" role="listbox" hidden></div>
+                                    </div>
                                     <span class="comtrade-hint comtrade-selected-hint">Не выбрано ни одной страны</span>
                                     <div class="comtrade-selected-chips"></div>
                                 </div>
