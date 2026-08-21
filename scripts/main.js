@@ -616,6 +616,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateCustomMappingSelects();
             updateVisualizationFields();
             renderAnalysisCountryFilter();
+            syncAnalysisDirectionFilter();
         };
 
         if (ext === 'csv') {
@@ -817,6 +818,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateCustomMappingSelects();
         updateVisualizationFields();
         renderAnalysisCountryFilter();
+        syncAnalysisDirectionFilter();
     }
 
     function showFileError(message) {
@@ -6053,6 +6055,30 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    /*
+     * Направление в фильтре по умолчанию «ИМ». Если загрузили экспорт (или
+     * выгрузку, где импорта нет вовсе), фильтр отсекал все строки, и раздел
+     * анализа писал «Сначала загрузите данные», хотя данные были на месте.
+     * Поэтому после каждой загрузки проверяем, есть ли выбранное направление
+     * в данных, и если нет — переключаемся на то, которое там есть.
+     */
+    function syncAnalysisDirectionFilter() {
+        var headers = getActiveHeaders();
+        var data = getActiveData();
+        var dirCol = findColumn(headers, COL_DIRECTION);
+        if (!dirCol || !data.length) { return; }
+
+        var seen = {};
+        data.forEach(function (row) {
+            var d = String(row[dirCol] || '').trim().toUpperCase();
+            if (d) { seen[d] = true; }
+        });
+        if (seen[analysisDirectionFilter]) { return; }
+
+        var dirs = Object.keys(seen);
+        if (dirs.length > 0) { setDirectionFilter(dirs[0]); }
+    }
+
     function setDirectionFilter(dir) {
         analysisDirectionFilter = dir;
         document.querySelectorAll('.analysis-direction-filter .btn-filter').forEach(function (b) {
@@ -6598,8 +6624,17 @@ document.addEventListener('DOMContentLoaded', function () {
             var headers = fd.headers;
             updateAnalysisScopeNote(data.length);
             if (data.length === 0) {
-                analysisResults.innerHTML =
-                    '<div class="analysis-empty"><p>Сначала загрузите данные</p></div>';
+                // Данные могут быть загружены, но полностью отсечены фильтрами.
+                // Сказать в этом случае «сначала загрузите данные» значит
+                // отправить искать несуществующую проблему.
+                var loaded = getActiveData().length;
+                analysisResults.innerHTML = '<div class="analysis-empty"><p>' +
+                    (loaded === 0
+                        ? 'Сначала загрузите данные'
+                        : 'Данные загружены (строк: ' + formatNumber(loaded) +
+                          '), но под текущий фильтр не попала ни одна строка. ' +
+                          'Проверьте направление и страновой срез над результатами.') +
+                    '</p></div>';
                 return;
             }
 
@@ -8837,7 +8872,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (annualOnly) {
             html += '<div class="analysis-note">Загружены годовые данные, разбивки по кварталам в них нет. ' +
                 'Показана средневзвешенная цена за каждый год. ' +
-                'Чтобы увидеть кварталы Q1\u2013Q4, загрузите данные с месячной частотой: ' +
+                'Чтобы увидеть кварталы с первого по четвёртый, загрузите данные с месячной частотой: ' +
                 'приложение сложит месяцы в кварталы.</div>';
         }
 
