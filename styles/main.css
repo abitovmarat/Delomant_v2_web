@@ -3833,11 +3833,18 @@ body {
     background-color: var(--color-primary-light);
 }
 
-.comtrade-partner-chips {
+.comtrade-partner-chips,
+.comtrade-selected-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
+}
+
+/* Выбранных стран бывает несколько десятков — не даём списку съесть форму */
+.comtrade-selected-chips {
+    max-height: 96px;
+    overflow-y: auto;
 }
 
 .comtrade-chip {

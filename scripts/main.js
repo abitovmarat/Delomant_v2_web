@@ -920,6 +920,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
     var comtradePartnerSearch = document.querySelector('.comtrade-partner-search');
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
+    var comtradeSelectedChips = document.querySelector('.comtrade-selected-chips');
     var comtradeStatus = document.querySelector('.comtrade-status');
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
     var comtradeOriginalBtn = document.querySelector('.comtrade-original-btn');
@@ -1213,18 +1214,24 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateComtradeSelectedHint() {
-        if (!comtradeSelectedHint) { return; }
+        var picked = comtradeCountries.filter(function (c) {
+            return comtradeSelected[c.code];
+        });
 
-        var names = comtradeCountries
-            .filter(function (c) { return comtradeSelected[c.code]; })
-            .map(function (c) { return c.name; });
-
-        if (names.length === 0) {
-            comtradeSelectedHint.textContent = 'Не выбрано ни одной страны';
-            return;
+        if (comtradeSelectedHint) {
+            comtradeSelectedHint.textContent = picked.length === 0
+                ? 'Не выбрано ни одной страны'
+                : 'Выбрано ' + picked.length + ' — уберите лишнее крестиком';
         }
-        comtradeSelectedHint.textContent = 'Выбрано ' + names.length + ': ' +
-            (names.length > 6 ? names.slice(0, 6).join(', ') + '…' : names.join(', '));
+
+        // Состав показываем целиком: при двух десятках стран строка с обрезкой
+        // «…» не давала понять, кто в выборке, а крестик убирает страну сразу.
+        if (!comtradeSelectedChips) { return; }
+        comtradeSelectedChips.innerHTML = picked.map(function (c) {
+            return '<span class="comtrade-chip">' + marketEsc(c.name) +
+                '<button type="button" class="comtrade-chip-x" data-code="' +
+                marketEsc(c.code) + '" title="Убрать">×</button></span>';
+        }).join('');
     }
 
     function setComtradeStatus(text, kind) {
@@ -1711,6 +1718,19 @@ document.addEventListener('DOMContentLoaded', function () {
     if (comtradeCountrySearch) {
         comtradeCountrySearch.addEventListener('input', function () {
             renderComtradeCountries(this.value);
+        });
+    }
+
+    if (comtradeSelectedChips) {
+        comtradeSelectedChips.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.comtrade-chip-x') : null;
+            if (!btn) { return; }
+
+            delete comtradeSelected[btn.getAttribute('data-code')];
+            // Галочка в списке и заливка региона должны погаснуть вместе с чипом
+            renderComtradeCountries(comtradeCountrySearch ? comtradeCountrySearch.value : '');
+            renderComtradeRegions();
+            updateComtradeSelectedHint();
         });
     }
 
