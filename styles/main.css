@@ -3723,10 +3723,26 @@ body {
     margin-bottom: 8px;
 }
 
-/* Поиск партнёра стоит прямо над списком — прижимаем их друг к другу */
+/* Поиск партнёра: поле + выпадающий список совпадений поверх формы */
+.partner-search-box {
+    position: relative;
+    display: block;
+}
 .comtrade-partner-search {
     width: 100%;
-    margin-bottom: 6px;
+}
+/* Название страны — обычный текст, а не код: моноширинный тут ни к чему */
+.comtrade-partner-item b {
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+}
+.comtrade-partner-item.is-picked {
+    cursor: default;
+    opacity: 0.55;
+}
+.comtrade-partner-item.is-picked:hover {
+    background: none;
 }
 
 /* Заголовок поля со страной-партнёром + кнопка сброса */

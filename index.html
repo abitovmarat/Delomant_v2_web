@@ -149,15 +149,16 @@
                                 </label>
                                 <div class="comtrade-field">
                                     <label class="comtrade-label" for="comtrade-partner-search">Торговля с</label>
-                                    <input type="text" class="comtrade-partner-search" id="comtrade-partner-search" placeholder="Поиск страны" autocomplete="off">
-                                    <select class="comtrade-partner" id="comtrade-partner-select" aria-label="Добавить партнёра">
-                                        <option value="643" selected>Россией</option>
-                                        <option value="0">Всем миром</option>
-                                    </select>
+                                    <!-- Обёртка нужна, чтобы список падал точно под поле,
+                                         а не под весь блок с ярлыком, чипами и подсказкой -->
+                                    <div class="partner-search-box">
+                                        <input type="text" class="comtrade-partner-search" id="comtrade-partner-search" placeholder="Поиск страны, напр. «Россия»" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="comtrade-partner-results">
+                                        <div class="comtrade-partner-results hs-search-results" id="comtrade-partner-results" role="listbox" hidden></div>
+                                    </div>
                                     <!-- Состав партнёров: выбранное из списка добавляется сюда.
                                          Блок вне <label>, иначе клик по крестику открывал бы список -->
                                     <div class="comtrade-partner-chips"></div>
-                                    <span class="comtrade-hint">Наберите название — список ниже сузится, выбранное добавится в состав. Можно добавить до пяти стран — партнёр попадёт в данные отдельной колонкой. «Всем миром» значит всю торговлю выбранных стран, без второй стороны.</span>
+                                    <span class="comtrade-hint">Наберите название или откройте список — выбранная страна добавится в состав выше. Можно добавить до пяти стран — партнёр попадёт в данные отдельной колонкой. «Всем миром» значит всю торговлю выбранных стран, без второй стороны.</span>
                                 </div>
                                 <label class="comtrade-field">
                                     <span class="comtrade-label">Частота</span>

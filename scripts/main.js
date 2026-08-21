@@ -915,7 +915,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradeToggle = document.querySelector('.comtrade-toggle');
     var comtradeCountriesBox = document.querySelector('.comtrade-countries');
     var comtradeRegionsBox = document.querySelector('.comtrade-regions');
-    var comtradePartnerSelect = document.querySelector('.comtrade-partner');
+    var comtradePartnerResults = document.querySelector('.comtrade-partner-results');
     var comtradePartnerChips = document.querySelector('.comtrade-partner-chips');
     var comtradeCountrySearch = document.querySelector('.comtrade-country-search');
     var comtradePartnerSearch = document.querySelector('.comtrade-partner-search');
@@ -1015,47 +1015,64 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /*
-     * Селект партнёра: «Всем миром» + все страны справочника.
+     * Поиск партнёра: выпадающий список поверх формы.
      *
-     * В разметке заранее лежат только Россия и мир, чтобы форма была осмысленной
-     * до загрузки справочника; остальные страны досыпаем сюда.
+     * Раньше здесь стоял <select> со всем справочником — набранное в поиске
+     * пряталось внутри закрытого списка, и выбор выглядел как два разных
+     * поля. Теперь поле одно: пишем название, видим совпадения, кликаем.
      */
+    var COMTRADE_PARTNER_RESULTS_LIMIT = 50;
+
     function fillComtradePartners(query) {
-        if (!comtradePartnerSelect || comtradeCountries.length === 0) { return; }
+        if (!comtradePartnerResults) { return; }
 
         var q = String(query || '').trim().toLowerCase();
-        var current = comtradePartnerSelect.value;
         var matches = comtradeCountries.filter(function (c) {
             return q === '' || String(c.name).toLowerCase().indexOf(q) !== -1;
         });
 
-        // При активном поиске первым идёт нейтральный пункт: иначе первая
-        // найденная страна выглядела бы уже выбранной, хотя её не добавляли.
-        var html = q === ''
-            ? '<option value="' + COMTRADE_WORLD_CODE + '">Всем миром</option>'
-            : '<option value="">' + (matches.length
-                ? 'Найдено: ' + matches.length + ' — выберите страну'
-                : 'Ничего не найдено') + '</option>';
+        var html = '';
+        // «Всем миром» — отдельный режим, держим его первым и всегда под рукой
+        if (q === '' || 'всем миром'.indexOf(q) !== -1 || 'мир'.indexOf(q) === 0) {
+            html += comtradePartnerItem(String(COMTRADE_WORLD_CODE), 'Всем миром', 'весь мир, без второй стороны');
+        }
 
-        matches.forEach(function (c) {
-            html += '<option value="' + c.code + '">' + c.name + '</option>';
-        });
-
-        comtradePartnerSelect.innerHTML = html;
-
-        if (q !== '') {
-            comtradePartnerSelect.value = '';
+        if (comtradeCountries.length === 0) {
+            html += '<div class="hs-empty">Загрузка справочника стран…</div>';
+        } else if (matches.length === 0 && html === '') {
+            html += '<div class="hs-empty">Ничего не найдено</div>';
         } else {
-            comtradePartnerSelect.value = /^\d{1,4}$/.test(String(current).trim())
-                ? String(current).trim()
-                : String(COMTRADE_RF_CODE);
-            // Выбранного кода могло не оказаться в обновлённом справочнике.
-            if (comtradePartnerSelect.value === '') {
-                comtradePartnerSelect.value = String(COMTRADE_RF_CODE);
+            matches.slice(0, COMTRADE_PARTNER_RESULTS_LIMIT).forEach(function (c) {
+                html += comtradePartnerItem(String(c.code), c.name, '');
+            });
+            if (matches.length > COMTRADE_PARTNER_RESULTS_LIMIT) {
+                html += '<div class="hs-empty">…ещё ' +
+                    (matches.length - COMTRADE_PARTNER_RESULTS_LIMIT) +
+                    '. Уточните название.</div>';
             }
         }
-        // Имена стран пришли только сейчас — перерисовываем состав
-        renderComtradePartnerChips();
+
+        comtradePartnerResults.innerHTML = html;
+        showComtradePartnerResults(true);
+    }
+
+    /** Одна строка списка; уже добавленный партнёр помечен и не кликается. */
+    function comtradePartnerItem(code, name, note) {
+        var picked = comtradePartners.indexOf(code) !== -1;
+        return '<button type="button" class="hs-item comtrade-partner-item' +
+            (picked ? ' is-picked' : '') + '" data-code="' + marketEsc(code) + '"' +
+            (picked ? ' aria-disabled="true"' : '') + '>' +
+            '<b>' + marketEsc(name) + '</b>' +
+            '<span>' + (picked ? 'уже добавлена' : marketEsc(note)) + '</span>' +
+            '</button>';
+    }
+
+    function showComtradePartnerResults(open) {
+        if (!comtradePartnerResults) { return; }
+        comtradePartnerResults.hidden = !open;
+        if (comtradePartnerSearch) {
+            comtradePartnerSearch.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
     }
 
     /** Читаемое имя партнёра для ярлыка и подписи источника. */
@@ -1649,7 +1666,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     .then(function () {
                         renderComtradeCountries('');
                         renderComtradeRegions();
-                        fillComtradePartners();
+                        // Список открыт только если пользователь уже щёлкнул по
+                        // поиску — тогда обновляем его пришедшим справочником
+                        if (comtradePartnerResults && !comtradePartnerResults.hidden) {
+                            fillComtradePartners(comtradePartnerSearch ? comtradePartnerSearch.value : '');
+                        }
                         renderComtradePartnerChips();
                         updateComtradeSelectedHint();
                     });
@@ -1657,25 +1678,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (comtradePartnerSelect) {
-        // Список работает как «добавить»: выбранное уходит в состав ниже
-        comtradePartnerSelect.addEventListener('change', function () {
-            addComtradePartner(this.value);
-            // После добавления поиск больше не нужен: возвращаем полный список,
-            // чтобы следующего партнёра можно было выбрать сразу.
-            if (comtradePartnerSearch && comtradePartnerSearch.value !== '') {
-                comtradePartnerSearch.value = '';
-                fillComtradePartners('');
-            }
+    if (comtradePartnerSearch && comtradePartnerResults) {
+        // Справочник может ещё грузиться — список перерисуется, когда придёт
+        comtradePartnerSearch.addEventListener('focus', function () {
+            fillComtradePartners(this.value);
         });
-        renderComtradePartnerChips();
-    }
-
-    if (comtradePartnerSearch) {
         comtradePartnerSearch.addEventListener('input', function () {
             fillComtradePartners(this.value);
         });
+        comtradePartnerSearch.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { showComtradePartnerResults(false); }
+        });
+
+        comtradePartnerResults.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('.comtrade-partner-item') : null;
+            if (!btn || btn.classList.contains('is-picked')) { return; }
+
+            addComtradePartner(btn.getAttribute('data-code'));
+            // Поиск отработал — очищаем поле и прячем список, состав виден в чипах
+            comtradePartnerSearch.value = '';
+            showComtradePartnerResults(false);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target !== comtradePartnerSearch && !comtradePartnerResults.contains(e.target)) {
+                showComtradePartnerResults(false);
+            }
+        });
     }
+    renderComtradePartnerChips();
 
     if (comtradeCountrySearch) {
         comtradeCountrySearch.addEventListener('input', function () {
