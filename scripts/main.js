@@ -8652,11 +8652,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var rightGap = rightNodes.length > 1 ? nodePad : 0;
         var rightUsable = availH - rightGap * (rightNodes.length - 1);
 
+        // Минимальная высота узла: при большом числе стран пропорциональная
+        // высота мелких партнёров уходит в доли пикселя и тонет в общей
+        // мешанине линий. Ниже этого предела узел не сжимается — вместо
+        // этого растёт общая высота графика (см. свиток ниже).
+        var minNodeH = 14;
+
         // Позиции левых узлов
         var leftPositions = {};
         var yOff = topPad;
         leftNodes.forEach(function (s, i) {
-            var h = Math.max(4, (senderTotals[s] / leftTotal) * leftUsable);
+            var h = Math.max(minNodeH, (senderTotals[s] / leftTotal) * leftUsable);
             leftPositions[s] = { y: yOff, h: h, color: SANKEY_COLORS[i % SANKEY_COLORS.length] };
             yOff += h + leftGap;
         });
@@ -8665,7 +8671,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var rightPositions = {};
         yOff = topPad;
         rightNodes.forEach(function (r, i) {
-            var h = Math.max(4, (receiverTotals[r] / rightTotal) * rightUsable);
+            var h = Math.max(minNodeH, (receiverTotals[r] / rightTotal) * rightUsable);
             rightPositions[r] = { y: yOff, h: h, color: SANKEY_COLORS[i % SANKEY_COLORS.length] };
             yOff += h + rightGap;
         });
@@ -8689,13 +8695,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         var leftLabelY = stackLabels(leftPositions, leftNodes);
         var rightLabelY = stackLabels(rightPositions, rightNodes);
-        var maxLabelBottom = Math.max(
-            leftNodes.length ? leftLabelY[leftNodes[leftNodes.length - 1]] + 16 : 0,
-            rightNodes.length ? rightLabelY[rightNodes[rightNodes.length - 1]] + 16 : 0
+        var lastLeft = leftNodes.length ? leftPositions[leftNodes[leftNodes.length - 1]] : null;
+        var lastRight = rightNodes.length ? rightPositions[rightNodes[rightNodes.length - 1]] : null;
+        var maxBottom = Math.max(
+            leftNodes.length ? Math.max(leftLabelY[leftNodes[leftNodes.length - 1]] + 16, lastLeft.y + lastLeft.h) : 0,
+            rightNodes.length ? Math.max(rightLabelY[rightNodes[rightNodes.length - 1]] + 16, lastRight.y + lastRight.h) : 0
         );
-        svgH = Math.max(svgH, maxLabelBottom + topPad);
+        svgH = Math.max(svgH, maxBottom + topPad);
+
+        // Много узлов — высокий график. Вместо того чтобы сжимать его под
+        // высоту экрана (и терять читаемость мелких партнёров), рисуем в
+        // полный рост и заворачиваем в блок с вертикальной прокруткой.
+        var scrollMaxH = 640;
+        var needsScroll = svgH > scrollMaxH;
 
         html += '<div class="analysis-section">';
+        if (needsScroll) {
+            html += '<div class="sankey-scroll" style="max-height:' + scrollMaxH + 'px;overflow-y:auto;overflow-x:hidden;border:1px solid ' + CHART_COLORS.textMuted + '22;border-radius:8px">';
+        }
         html += '<svg class="analysis-chart sankey-chart" width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
         html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
 
@@ -8782,6 +8799,10 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<text x="' + (rightX + nodeW / 2) + '" y="14" text-anchor="middle" font-size="12" font-weight="700" fill="' + CHART_COLORS.primary + '">' + targetLabel + '</text>';
 
         html += '</svg>';
+        if (needsScroll) {
+            html += '</div>';
+            html += '<p class="pres-hint" style="margin:6px 0 0">Партнёров много — график выше видимой области, прокрутите его колесом мыши.</p>';
+        }
         html += '<button class="btn btn-secondary analysis-export-chart-png" style="margin-top:8px;font-size:12px">Скачать график PNG</button>';
         html += '</div>';
 
