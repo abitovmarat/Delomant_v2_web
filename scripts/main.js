@@ -8719,23 +8719,41 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         // Рисуем левые узлы (прямоугольники + подписи)
+        // Соседние узлы могут быть намного тоньше расстояния, нужного двум
+        // строкам текста (имя + тонны) — тогда подписи наезжают друг на
+        // друга. Раздвигаем такие подписи и рисуем выноску к узлу.
+        var minLabelGap = 28;
+        var lastLeftLabelY = -Infinity;
         leftNodes.forEach(function (s) {
             var p = leftPositions[s];
             var tons = round2(senderTotals[s] / 1000);
             html += '<rect x="' + leftX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
             // Подпись слева
-            var labelY = p.y + p.h / 2;
+            var centerY = p.y + p.h / 2;
+            var labelY = Math.max(centerY, lastLeftLabelY + minLabelGap);
+            lastLeftLabelY = labelY + 12;
+            if (labelY - centerY > 1) {
+                html += '<line x1="' + leftX + '" y1="' + centerY + '" x2="' + (leftX - labelPadL) + '" y2="' + (labelY - 4) +
+                    '" stroke="' + CHART_COLORS.textMuted + '" stroke-width="1"/>';
+            }
             html += '<text x="' + (leftX - labelPadL) + '" y="' + (labelY - 2) + '" text-anchor="end" font-size="11" font-weight="600" fill="' + CHART_COLORS.text + '">' + s + '</text>';
             html += '<text x="' + (leftX - labelPadL) + '" y="' + (labelY + 12) + '" text-anchor="end" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(tons) + '</text>';
         });
 
         // Рисуем правые узлы
+        var lastRightLabelY = -Infinity;
         rightNodes.forEach(function (r) {
             var p = rightPositions[r];
             var tons = round2(receiverTotals[r] / 1000);
             html += '<rect x="' + rightX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
             // Подпись справа
-            var labelY = p.y + p.h / 2;
+            var centerY = p.y + p.h / 2;
+            var labelY = Math.max(centerY, lastRightLabelY + minLabelGap);
+            lastRightLabelY = labelY + 12;
+            if (labelY - centerY > 1) {
+                html += '<line x1="' + (rightX + nodeW) + '" y1="' + centerY + '" x2="' + (rightX + nodeW + labelPadR) + '" y2="' + (labelY - 4) +
+                    '" stroke="' + CHART_COLORS.textMuted + '" stroke-width="1"/>';
+            }
             html += '<text x="' + (rightX + nodeW + labelPadR) + '" y="' + (labelY - 2) + '" font-size="11" font-weight="600" fill="' + CHART_COLORS.text + '">' + r + '</text>';
             html += '<text x="' + (rightX + nodeW + labelPadR) + '" y="' + (labelY + 12) + '" font-size="10" fill="' + CHART_COLORS.textMuted + '">' + formatNumber(tons) + '</text>';
         });
