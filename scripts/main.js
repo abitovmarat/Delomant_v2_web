@@ -11961,7 +11961,12 @@ document.addEventListener('DOMContentLoaded', function () {
         // --- Исходная таблица ---
         add('Данные', data, headers);
 
-        // --- Полнота и источники ---
+        /*
+         * Листы «Полнота и источники» и «Заполненность полей» отсюда убраны:
+         * это служебная диагностика, а книга нужна для работы с цифрами.
+         * Провенанс остаётся на листе «Источник» (см. appendSourceSheet) и на
+         * одноимённом слайде презентации.
+         */
         var partial = presDetectPartialYear(data, headers);
         var years = [];
         if (yearCol) {
@@ -11972,23 +11977,6 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             years = Object.keys(ySet).sort();
         }
-        var infoRows = [
-            { 'Показатель': 'Записей в выгрузке', 'Значение': data.length },
-            { 'Показатель': 'Полей в таблице', 'Значение': headers.length },
-            { 'Показатель': 'Период данных', 'Значение': years.length ? years[0] + '–' + years[years.length - 1] : '—' },
-            { 'Показатель': 'Неполный год', 'Значение': partial ? partial.year + ' (' + partial.label + ')' : 'нет' },
-            { 'Показатель': 'Срез', 'Значение': analysisScopeLabel() || 'вся выгрузка' },
-            { 'Показатель': 'Источник', 'Значение': dataSourceNote() || ('выгрузка «' + (appState.fileName || 'без имени') + '»') },
-            { 'Показатель': 'Загружено в стенд', 'Значение': appState.loadedAt ? appState.loadedAt.toLocaleDateString('ru-RU') : '—' },
-            { 'Показатель': 'Выгружено', 'Значение': new Date().toLocaleDateString('ru-RU') },
-            { 'Показатель': 'Пересчёт в рубли', 'Значение': presRubMethodNote(headers) }
-        ];
-        add('Полнота и источники', infoRows, ['Показатель', 'Значение']);
-
-        var fillRows = headers.map(function (h) {
-            return { 'Поле': h, 'Заполнено, %': round2(presColumnFill(data, h) * 100) };
-        });
-        add('Заполненность полей', fillRows, ['Поле', 'Заполнено, %']);
 
         // --- Объёмы по годам ---
         if (yearCol && (weightCol || usdCol)) {
@@ -12111,6 +12099,119 @@ document.addEventListener('DOMContentLoaded', function () {
                     return row;
                 });
                 add('Цены по странам, USD за кг', priceRows, ['Страна'].concat(years));
+            }
+        }
+
+        /* ------------------------------------------------------------------
+         * Разрезы для самостоятельного анализа.
+         *
+         * На экране срез выбирается фильтрами (страна, товар), а в книге до
+         * сих пор лежали только готовые итоги. Чтобы в Excel можно было
+         * собрать свою сводную, кладём:
+         *   «Разрезы» — длинная таблица «измерения + меры», одна строка на
+         *               сочетание; из неё строится любая сводная;
+         *   остальные — готовые кросс-таблицы под быстрый просмотр.
+         * ------------------------------------------------------------------ */
+        var partnerCol = findColumn(headers, COL_PARTNER);
+        var monthCol = findColumn(headers, COL_MONTH);
+        var segColX = findColumn(headers, 'Сегмент');
+        var regionCol = findColumn(headers, 'Регион мира');
+
+        /* Сводит данные по набору колонок-измерений. keyCols — [[колонка, подпись]] */
+        function crossTab(keyCols) {
+            var agg = {};
+            var order = [];
+            data.forEach(function (row) {
+                var parts = keyCols.map(function (kc) { return String(row[kc[0]] || '').trim(); });
+                if (parts.some(function (p) { return !p; })) { return; }
+                var k = parts.join(KEY_SEPARATOR);
+                if (!agg[k]) { agg[k] = { parts: parts, w: 0, u: 0, r: 0 }; order.push(k); }
+                agg[k].w += weightCol ? xlsxNum(row[weightCol]) : 0;
+                agg[k].u += usdCol ? xlsxNum(row[usdCol]) : 0;
+                agg[k].r += hasRub ? getRowRubValue(row, rubCtx) : 0;
+            });
+            var labels = keyCols.map(function (kc) { return kc[1]; });
+            var hdrs = labels.slice();
+            if (weightCol) { hdrs.push('Объём, тонн'); }
+            if (usdCol) { hdrs.push('Стоимость, тыс. USD'); }
+            if (hasRub) { hdrs.push('Стоимость, тыс. нац. вал.'); }
+            if (weightCol && usdCol) { hdrs.push('Цена, USD/кг'); }
+
+            var rows = order
+                .sort(function (a, b) { return agg[b].w - agg[a].w; })
+                .map(function (k) {
+                    var d = agg[k];
+                    var row = {};
+                    labels.forEach(function (lbl, i) { row[lbl] = d.parts[i]; });
+                    if (weightCol) { row['Объём, тонн'] = round2(d.w / 1000); }
+                    if (usdCol) { row['Стоимость, тыс. USD'] = round2(d.u / 1000); }
+                    if (hasRub) { row['Стоимость, тыс. нац. вал.'] = round2(d.r / 1000); }
+                    if (weightCol && usdCol) { row['Цена, USD/кг'] = d.w > 0 ? round2(d.u / d.w) : ''; }
+                    return row;
+                });
+            return { rows: rows, headers: hdrs };
+        }
+
+        if (weightCol || usdCol) {
+            // Длинная таблица со всеми измерениями, что есть в выгрузке
+            var dimCols = [];
+            if (yearCol) { dimCols.push([yearCol, 'Год']); }
+            if (quarterCol && !presIsAnnualOnly(data, headers)) { dimCols.push([quarterCol, 'Квартал']); }
+            if (monthCol) { dimCols.push([monthCol, 'Месяц']); }
+            if (countryCol) { dimCols.push([countryCol, 'Страна']); }
+            if (partnerCol) { dimCols.push([partnerCol, 'Партнёр']); }
+            if (regionCol) { dimCols.push([regionCol, 'Регион мира']); }
+            if (hsCol) { dimCols.push([hsCol, 'Код ТН ВЭД']); }
+            if (segColX) { dimCols.push([segColX, 'Сегмент']); }
+
+            if (dimCols.length) {
+                var cube = crossTab(dimCols);
+                // Название товара рядом с кодом: иначе сводная по «Разрезам»
+                // читается как таблица цифр без предмета
+                if (hsCol) {
+                    cube.rows.forEach(function (row) {
+                        row['Товар'] = hsNameFor(row['Код ТН ВЭД']) || '';
+                    });
+                    var at = cube.headers.indexOf('Код ТН ВЭД');
+                    cube.headers.splice(at + 1, 0, 'Товар');
+                }
+                add('Разрезы', cube.rows, cube.headers);
+            }
+
+            // Товары: итог по каждому коду с названием и долей
+            if (hsCol) {
+                var hsTab = crossTab([[hsCol, 'Код ТН ВЭД']]);
+                var hsTotal = hsTab.rows.reduce(function (s, r) { return s + (r['Объём, тонн'] || 0); }, 0);
+                hsTab.rows.forEach(function (row) {
+                    row['Товар'] = hsNameFor(row['Код ТН ВЭД']) || '';
+                    row['Доля объёма, %'] = hsTotal > 0 ? round2((row['Объём, тонн'] || 0) / hsTotal * 100) : '';
+                });
+                hsTab.headers.splice(1, 0, 'Товар');
+                if (weightCol) { hsTab.headers.push('Доля объёма, %'); }
+                add('Товары', hsTab.rows, hsTab.headers);
+
+                if (yearCol) {
+                    var hy = crossTab([[hsCol, 'Код ТН ВЭД'], [yearCol, 'Год']]);
+                    hy.rows.forEach(function (row) { row['Товар'] = hsNameFor(row['Код ТН ВЭД']) || ''; });
+                    hy.headers.splice(1, 0, 'Товар');
+                    add('Товары по годам', hy.rows, hy.headers);
+                }
+                if (countryCol) {
+                    var ch = crossTab([[countryCol, 'Страна'], [hsCol, 'Код ТН ВЭД']]);
+                    ch.rows.forEach(function (row) { row['Товар'] = hsNameFor(row['Код ТН ВЭД']) || ''; });
+                    ch.headers.splice(2, 0, 'Товар');
+                    add('Страны и товары', ch.rows, ch.headers);
+                }
+            }
+
+            if (countryCol && yearCol) {
+                var cy = crossTab([[countryCol, 'Страна'], [yearCol, 'Год']]);
+                add('Страны по годам', cy.rows, cy.headers);
+            }
+
+            if (partnerCol) {
+                var pt = crossTab([[partnerCol, 'Партнёр']]);
+                add('Партнёры', pt.rows, pt.headers);
             }
         }
 
