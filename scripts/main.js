@@ -929,6 +929,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var comtradePartnerSearch = document.querySelector('.comtrade-partner-search');
     var comtradeSelectedHint = document.querySelector('.comtrade-selected-hint');
     var comtradeSelectedChips = document.querySelector('.comtrade-selected-chips');
+    var comtradeFlowSummary = document.querySelector('.comtrade-flow-summary');
+    var comtradeDirectionSelect = document.querySelector('.comtrade-direction');
     var comtradeStatus = document.querySelector('.comtrade-status');
     var comtradeLoadBtn = document.querySelector('.comtrade-load-btn');
     var comtradeOriginalBtn = document.querySelector('.comtrade-original-btn');
@@ -1126,6 +1128,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
         );
+
+        updateComtradeFlowSummary();
     }
 
     function addComtradePartner(code) {
@@ -1272,12 +1276,67 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Состав показываем целиком: при двух десятках стран строка с обрезкой
         // «…» не давала понять, кто в выборке, а крестик убирает страну сразу.
-        if (!comtradeSelectedChips) { return; }
-        comtradeSelectedChips.innerHTML = picked.map(function (c) {
-            return '<span class="comtrade-chip">' + marketEsc(c.name) +
-                '<button type="button" class="comtrade-chip-x" data-code="' +
-                marketEsc(c.code) + '" title="Убрать">×</button></span>';
-        }).join('');
+        if (comtradeSelectedChips) {
+            comtradeSelectedChips.innerHTML = picked.map(function (c) {
+                return '<span class="comtrade-chip">' + marketEsc(c.name) +
+                    '<button type="button" class="comtrade-chip-x" data-code="' +
+                    marketEsc(c.code) + '" title="Убрать">×</button></span>';
+            }).join('');
+        }
+
+        updateComtradeFlowSummary();
+    }
+
+    /*
+     * Направление в форме считается с точки зрения партнёра («Торговля с»),
+     * а не выбранных стран — см. комментарий в collectComtradeParams(): при
+     * конкретном партнёре запрос идёт зеркально, через собственную
+     * отчётность выбранных стран. Без явного перевода на человеческий язык
+     * это легко перепутать: «Импорт» + партнёр «Евросоюз» означает не «эти
+     * страны ввозят из ЕС», а «ЕС ввозит от этих стран» — то есть их
+     * собственный экспорт. Эта строка проговаривает физическое направление
+     * товара словами, без терминов «импорт/экспорт», которые здесь
+     * привязаны не к тому подлежащему, что кажется на первый взгляд.
+     */
+    function comtradeReportersSummaryLabel() {
+        var names = comtradeCountries
+            .filter(function (c) { return comtradeSelected[c.code]; })
+            .map(function (c) { return c.name; });
+        if (!names.length) { return ''; }
+        if (names.length <= 3) { return names.join(', '); }
+        return names.slice(0, 3).join(', ') + ' и ещё ' + (names.length - 3);
+    }
+
+    function updateComtradeFlowSummary() {
+        if (!comtradeFlowSummary) { return; }
+        var reportersLabel = comtradeReportersSummaryLabel();
+        if (!reportersLabel) {
+            comtradeFlowSummary.innerHTML = '';
+            return;
+        }
+        var direction = comtradeDirectionSelect ? comtradeDirectionSelect.value : 'import';
+        var isWorld = comtradePartners.length === 1 && comtradePartners[0] === String(COMTRADE_WORLD_CODE);
+        var partnerLabel = isWorld ? 'весь мир' : comtradePartnersLabel();
+
+        var from, to, note;
+        if (isWorld) {
+            if (direction === 'import') {
+                from = partnerLabel; to = reportersLabel;
+                note = 'собственная статистика ' + reportersLabel + ' об импорте';
+            } else {
+                from = reportersLabel; to = partnerLabel;
+                note = 'собственная статистика ' + reportersLabel + ' об экспорте';
+            }
+        } else if (direction === 'import') {
+            from = reportersLabel; to = partnerLabel;
+            note = 'берём у ' + reportersLabel + ' их данные об экспорте';
+        } else {
+            from = partnerLabel; to = reportersLabel;
+            note = 'берём у ' + reportersLabel + ' их данные об импорте';
+        }
+
+        comtradeFlowSummary.innerHTML = 'Товар едет: <b>' + marketEsc(from) + '</b> → <b>' +
+            marketEsc(to) + '</b> · ' + marketEsc(note);
     }
 
     function setComtradeStatus(text, kind) {
@@ -1760,6 +1819,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     renderComtradePartnerChips();
+
+    if (comtradeDirectionSelect) {
+        comtradeDirectionSelect.addEventListener('change', updateComtradeFlowSummary);
+    }
 
     if (comtradeCountrySearch && comtradeCountryResults) {
         comtradeCountrySearch.addEventListener('focus', function () {

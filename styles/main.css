@@ -3921,6 +3921,26 @@ body {
     padding: 8px;
 }
 
+.comtrade-flow-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin: -4px 0 4px;
+    font-size: 13px;
+    color: var(--color-text);
+    background-color: var(--color-primary-light);
+    border-radius: 6px;
+}
+
+.comtrade-flow-summary:empty {
+    display: none;
+}
+
+.comtrade-flow-summary b {
+    color: var(--color-primary);
+}
+
 .comtrade-actions {
     display: flex;
     align-items: center;
