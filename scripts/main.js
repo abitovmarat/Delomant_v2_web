@@ -540,6 +540,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateCustomMappingSelects();
         updateVisualizationFields();
         renderAnalysisCountryFilter();
+        renderAnalysisProductFilter();
     }
 
     // --- Добавление файла (append) ---
@@ -616,6 +617,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateCustomMappingSelects();
             updateVisualizationFields();
             renderAnalysisCountryFilter();
+        renderAnalysisProductFilter();
             syncAnalysisDirectionFilter();
         };
 
@@ -818,6 +820,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateCustomMappingSelects();
         updateVisualizationFields();
         renderAnalysisCountryFilter();
+        renderAnalysisProductFilter();
         syncAnalysisDirectionFilter();
     }
 
@@ -5772,6 +5775,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateVisualizationFields();
                 // После обработки колонки могли поменяться — пересобираем список стран
                 renderAnalysisCountryFilter();
+        renderAnalysisProductFilter();
                 setApplyBtnState('done');
             }).catch(function (err) {
                 renderProcessingMessage('Ошибка обработки: ' + err.message);
@@ -6044,13 +6048,23 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Фильтр по направлению ИМ/ЭК ---
     var analysisDirectionFilter = 'ИМ';
     var analysisCountryFilter = '';
+    var analysisProductFilter = '';
     var lastAnalysisType = '';
     var analysisCountryField = document.querySelector('.analysis-country-field');
     var analysisCountrySelect = document.querySelector('.analysis-country-select');
+    var analysisProductField = document.querySelector('.analysis-product-field');
+    var analysisProductSelect = document.querySelector('.analysis-product-select');
 
     if (analysisCountrySelect) {
         analysisCountrySelect.addEventListener('change', function () {
             analysisCountryFilter = this.value;
+            if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
+        });
+    }
+
+    if (analysisProductSelect) {
+        analysisProductSelect.addEventListener('change', function () {
+            analysisProductFilter = this.value;
             if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
         });
     }
@@ -6130,25 +6144,41 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        // Товарный срез: код ТН ВЭД, если в выгрузке несколько продуктов
+        if (analysisProductFilter) {
+            var hsCol = findColumn(headers, COL_HS_CODE);
+            if (hsCol) {
+                data = data.filter(function (row) {
+                    return String(row[hsCol] || '').trim() === analysisProductFilter;
+                });
+            }
+        }
+
         return { data: data, headers: headers };
     }
 
     // Подпись среза для заголовков и имён файлов
     function analysisScopeLabel() {
-        return analysisCountryFilter || '';
+        var parts = [];
+        if (analysisCountryFilter) { parts.push(analysisCountryFilter); }
+        if (analysisProductFilter) { parts.push(analysisProductFilter); }
+        return parts.join(' · ');
     }
 
-    /* Плашка над результатами: без неё страновой срез легко принять за
-       общий итог по всей выгрузке. */
+    /* Плашка над результатами: без неё страновой и товарный срезы легко
+       принять за общий итог по всей выгрузке. */
     function updateAnalysisScopeNote(rowCount) {
         var note = document.querySelector('.analysis-scope-note');
         if (!note) { return; }
-        if (!analysisCountryFilter) {
+        if (!analysisCountryFilter && !analysisProductFilter) {
             note.hidden = true;
             note.textContent = '';
             return;
         }
-        note.textContent = 'Срез по стране: ' + analysisCountryFilter +
+        var parts = [];
+        if (analysisCountryFilter) { parts.push('страна: ' + analysisCountryFilter); }
+        if (analysisProductFilter) { parts.push('товар: ' + analysisProductFilter); }
+        note.textContent = 'Срез — ' + parts.join(', ') +
             (rowCount != null ? ' · строк в выборке: ' + formatNumber(rowCount) : '');
         note.hidden = false;
     }
@@ -6191,6 +6221,53 @@ document.addEventListener('DOMContentLoaded', function () {
                     marketEsc(n) + '</option>';
             }).join('');
         analysisCountryField.hidden = false;
+    }
+
+    /* Список товаров (кодов ТН ВЭД) для фильтра. Подпись — код плюс
+       наименование товара из первой встреченной строки с этим кодом,
+       чтобы не заставлять угадывать продукт по голым цифрам. */
+    function renderAnalysisProductFilter() {
+        if (!analysisProductSelect) { return; }
+        var headers = getActiveHeaders();
+        var data = getActiveData();
+        var hsCol = findColumn(headers, COL_HS_CODE);
+        var nameCol = findColumn(headers, COL_PRODUCT_NAME);
+
+        if (!hsCol || !data.length) {
+            analysisProductFilter = '';
+            analysisProductField.hidden = true;
+            analysisProductSelect.innerHTML = '<option value="">Все товары</option>';
+            return;
+        }
+
+        var names = {};
+        var seen = {};
+        data.forEach(function (row) {
+            var code = String(row[hsCol] || '').trim();
+            if (!code) { return; }
+            seen[code] = true;
+            if (nameCol && !names[code]) {
+                var n = String(row[nameCol] || '').trim();
+                if (n) { names[code] = n; }
+            }
+        });
+        var codes = Object.keys(seen).sort();
+        if (codes.length < 2) {
+            analysisProductFilter = '';
+            analysisProductField.hidden = true;
+            analysisProductSelect.innerHTML = '<option value="">Все товары</option>';
+            return;
+        }
+
+        var keep = analysisProductFilter && seen[analysisProductFilter] ? analysisProductFilter : '';
+        analysisProductFilter = keep;
+        analysisProductSelect.innerHTML = '<option value="">Все товары</option>' +
+            codes.map(function (code) {
+                var label = code + (names[code] ? ' — ' + (names[code].length > 40 ? names[code].substring(0, 38) + '...' : names[code]) : '');
+                return '<option value="' + marketEsc(code) + '"' + (code === keep ? ' selected' : '') + '>' +
+                    marketEsc(label) + '</option>';
+            }).join('');
+        analysisProductField.hidden = false;
     }
 
     /* ================================
@@ -10030,27 +10107,44 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         /* Draw source nodes */
+        var minLabelGap = 28;
+        var lastSrcLabelY = -Infinity;
         sources.forEach(function (s, i) {
             var color = SANKEY_COLORS[i % SANKEY_COLORS.length];
             svg += '<rect x="' + srcX + '" y="' + s.y + '" width="' + nodeW + '" height="' + s.h +
                 '" fill="' + color + '" rx="2"/>';
             var label = s.name.length > 22 ? s.name.substring(0, 20) + '...' : s.name;
+            var labelY = Math.max(s.y + s.h / 2, lastSrcLabelY + minLabelGap);
+            lastSrcLabelY = labelY;
+            if (labelY - (s.y + s.h / 2) > 1) {
+                svg += '<line x1="' + (srcX + nodeW) + '" y1="' + (s.y + s.h / 2) + '" x2="' +
+                    (srcX + nodeW + labelOffset) + '" y2="' + labelY + '" class="sankey-leader"/>';
+            }
             svg += '<text class="sankey-node-label" x="' + (srcX + nodeW + labelOffset) + '" y="' +
-                (s.y + s.h / 2) + '" dominant-baseline="middle">' + label + '</text>';
+                labelY + '" dominant-baseline="middle">' + label + '</text>';
             svg += '<text class="sankey-node-value" x="' + (srcX + nodeW + labelOffset) + '" y="' +
-                (s.y + s.h / 2 + 14) + '" dominant-baseline="middle">' + formatNumber(s.total.toFixed(0)) + '</text>';
+                (labelY + 14) + '" dominant-baseline="middle">' + formatNumber(s.total.toFixed(0)) + '</text>';
+            lastSrcLabelY = labelY + 14;
         });
 
         /* Draw target nodes */
+        var lastTgtLabelY = -Infinity;
         targets.forEach(function (t, i) {
             var color = SANKEY_COLORS[i % SANKEY_COLORS.length];
             svg += '<rect x="' + tgtX + '" y="' + t.y + '" width="' + nodeW + '" height="' + t.h +
                 '" fill="' + color + '" rx="2"/>';
             var label = t.name.length > 22 ? t.name.substring(0, 20) + '...' : t.name;
+            var labelY = Math.max(t.y + t.h / 2, lastTgtLabelY + minLabelGap);
+            lastTgtLabelY = labelY;
+            if (labelY - (t.y + t.h / 2) > 1) {
+                svg += '<line x1="' + tgtX + '" y1="' + (t.y + t.h / 2) + '" x2="' +
+                    (tgtX - labelOffset) + '" y2="' + labelY + '" class="sankey-leader"/>';
+            }
             svg += '<text class="sankey-node-label" x="' + (tgtX - labelOffset) + '" y="' +
-                (t.y + t.h / 2) + '" dominant-baseline="middle" text-anchor="end">' + label + '</text>';
+                labelY + '" dominant-baseline="middle" text-anchor="end">' + label + '</text>';
             svg += '<text class="sankey-node-value" x="' + (tgtX - labelOffset) + '" y="' +
-                (t.y + t.h / 2 + 14) + '" dominant-baseline="middle" text-anchor="end">' + formatNumber(t.total.toFixed(0)) + '</text>';
+                (labelY + 14) + '" dominant-baseline="middle" text-anchor="end">' + formatNumber(t.total.toFixed(0)) + '</text>';
+            lastTgtLabelY = labelY + 14;
         });
 
         svg += '</svg>';
@@ -11591,7 +11685,7 @@ document.addEventListener('DOMContentLoaded', function () {
             { 'Показатель': 'Полей в таблице', 'Значение': headers.length },
             { 'Показатель': 'Период данных', 'Значение': years.length ? years[0] + '–' + years[years.length - 1] : '—' },
             { 'Показатель': 'Неполный год', 'Значение': partial ? partial.year + ' (' + partial.label + ')' : 'нет' },
-            { 'Показатель': 'Срез', 'Значение': analysisScopeLabel() ? 'страна: ' + analysisScopeLabel() : 'все страны выгрузки' },
+            { 'Показатель': 'Срез', 'Значение': analysisScopeLabel() || 'вся выгрузка' },
             { 'Показатель': 'Источник', 'Значение': dataSourceNote() || ('выгрузка «' + (appState.fileName || 'без имени') + '»') },
             { 'Показатель': 'Загружено в стенд', 'Значение': appState.loadedAt ? appState.loadedAt.toLocaleDateString('ru-RU') : '—' },
             { 'Показатель': 'Выгружено', 'Значение': new Date().toLocaleDateString('ru-RU') },

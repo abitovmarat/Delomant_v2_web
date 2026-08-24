@@ -1953,18 +1953,21 @@ body {
     display: none;
 }
 
-.analysis-country-field {
+.analysis-country-field,
+.analysis-product-field {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-left: 18px;
 }
 
-.analysis-country-field[hidden] {
+.analysis-country-field[hidden],
+.analysis-product-field[hidden] {
     display: none;
 }
 
-.analysis-country-select {
+.analysis-country-select,
+.analysis-product-select {
     min-height: 32px;
     padding: 4px 10px;
     border: 1px solid var(--color-border);
@@ -2649,6 +2652,11 @@ body {
     font-size: 10px;
     fill: #64748B;
     font-family: 'DejaVu Sans', sans-serif;
+}
+
+.sankey-svg .sankey-leader {
+    stroke: #94A3B8;
+    stroke-width: 1;
 }
 
 /* Weighted Prices */
