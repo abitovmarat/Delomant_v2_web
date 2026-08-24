@@ -635,22 +635,28 @@
                         </div>
 
                         <!-- Страновой срез: применяется ко всем анализам сразу.
-                             Поле прячется, если страны в выгрузке нет или она одна. -->
-                        <label class="analysis-country-field" hidden>
+                             Поле прячется, если страны в выгрузке нет или она одна.
+                             Выбор множественный — чтобы сравнить несколько стран. -->
+                        <div class="analysis-country-field analysis-multi" hidden>
                             <span class="analysis-filter-label">Страна:</span>
-                            <select class="analysis-country-select">
-                                <option value="">Все страны</option>
-                            </select>
-                        </label>
+                            <div class="analysis-multi-box">
+                                <button type="button" class="analysis-multi-toggle analysis-country-toggle"
+                                        aria-expanded="false" aria-haspopup="true">Все страны</button>
+                                <div class="analysis-multi-panel analysis-country-panel" hidden></div>
+                            </div>
+                        </div>
 
                         <!-- Товарный срез: когда в одной выгрузке несколько кодов ТН ВЭД
-                             (несколько продуктов), позволяет смотреть каждый отдельно. -->
-                        <label class="analysis-product-field" hidden>
+                             (несколько продуктов), позволяет смотреть их по отдельности
+                             или сравнивать несколько разом. -->
+                        <div class="analysis-product-field analysis-multi" hidden>
                             <span class="analysis-filter-label">Товар:</span>
-                            <select class="analysis-product-select">
-                                <option value="">Все товары</option>
-                            </select>
-                        </label>
+                            <div class="analysis-multi-box">
+                                <button type="button" class="analysis-multi-toggle analysis-product-toggle"
+                                        aria-expanded="false" aria-haspopup="true">Все товары</button>
+                                <div class="analysis-multi-panel analysis-product-panel" hidden></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="analysis-scope-note" hidden></div>

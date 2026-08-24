@@ -6139,27 +6139,139 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Фильтр по направлению ИМ/ЭК ---
     var analysisDirectionFilter = 'ИМ';
-    var analysisCountryFilter = '';
-    var analysisProductFilter = '';
+    /*
+     * Страновой и товарный срезы — списки, а не одиночные значения: обычная
+     * задача это сравнить несколько стран между собой, а не смотреть их по
+     * одной. Пустой список означает «взять всё», иначе строка проходит, если
+     * её значение есть в списке.
+     */
+    var analysisCountryFilter = [];
+    var analysisProductFilter = [];
     var lastAnalysisType = '';
     var analysisCountryField = document.querySelector('.analysis-country-field');
-    var analysisCountrySelect = document.querySelector('.analysis-country-select');
     var analysisProductField = document.querySelector('.analysis-product-field');
-    var analysisProductSelect = document.querySelector('.analysis-product-select');
 
-    if (analysisCountrySelect) {
-        analysisCountrySelect.addEventListener('change', function () {
-            analysisCountryFilter = this.value;
-            if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
+    /*
+     * Выпадающий список с галочками. Нативный <select multiple> здесь не
+     * годится: он показывает все строки сразу, отъедает высоту панели и с
+     * ctrl-кликом легко потерять уже выбранное.
+     *
+     * options — [{value, label}], selected — массив значений (общий с
+     * фильтром, меняем на месте), onChange — перезапуск анализа.
+     */
+    function makeAnalysisMultiSelect(opts) {
+        var toggle = document.querySelector(opts.toggleSelector);
+        var panel = document.querySelector(opts.panelSelector);
+        if (!toggle || !panel) { return null; }
+
+        var options = [];
+        var selected = opts.selected;
+
+        function labelFor(value) {
+            for (var i = 0; i < options.length; i++) {
+                if (options[i].value === value) { return options[i].label; }
+            }
+            return value;
+        }
+
+        function syncToggle() {
+            if (selected.length === 0) {
+                toggle.textContent = opts.allLabel;
+                toggle.classList.remove('is-active');
+            } else if (selected.length === 1) {
+                toggle.textContent = labelFor(selected[0]);
+                toggle.classList.add('is-active');
+            } else {
+                toggle.textContent = 'Выбрано: ' + selected.length;
+                toggle.classList.add('is-active');
+            }
+            toggle.title = selected.length ? selected.map(labelFor).join(', ') : opts.allLabel;
+        }
+
+        function renderPanel() {
+            var html = '<div class="analysis-multi-actions">' +
+                '<button type="button" class="analysis-multi-clear">Сбросить</button>' +
+                '<span class="analysis-multi-count"></span></div>' +
+                '<div class="analysis-multi-list">';
+            options.forEach(function (o) {
+                var on = selected.indexOf(o.value) !== -1;
+                html += '<label class="analysis-multi-item' + (on ? ' is-on' : '') + '">' +
+                    '<input type="checkbox" value="' + marketEsc(o.value) + '"' + (on ? ' checked' : '') + '>' +
+                    '<span>' + marketEsc(o.label) + '</span></label>';
+            });
+            html += '</div>';
+            panel.innerHTML = html;
+
+            panel.querySelector('.analysis-multi-count').textContent =
+                selected.length ? selected.length + ' из ' + options.length : 'ничего не выбрано — берём всё';
+
+            panel.querySelector('.analysis-multi-clear').addEventListener('click', function () {
+                selected.length = 0;
+                renderPanel();
+                syncToggle();
+                opts.onChange();
+            });
+
+            Array.prototype.forEach.call(panel.querySelectorAll('input[type=checkbox]'), function (cb) {
+                cb.addEventListener('change', function () {
+                    var v = this.value;
+                    var at = selected.indexOf(v);
+                    if (this.checked && at === -1) { selected.push(v); }
+                    else if (!this.checked && at !== -1) { selected.splice(at, 1); }
+                    this.closest('.analysis-multi-item').classList.toggle('is-on', this.checked);
+                    panel.querySelector('.analysis-multi-count').textContent =
+                        selected.length ? selected.length + ' из ' + options.length : 'ничего не выбрано — берём всё';
+                    syncToggle();
+                    opts.onChange();
+                });
+            });
+        }
+
+        function open(show) {
+            panel.hidden = !show;
+            toggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+            if (show) { renderPanel(); }
+        }
+
+        toggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            open(panel.hidden);
         });
+        panel.addEventListener('click', function (e) { e.stopPropagation(); });
+        document.addEventListener('click', function () { open(false); });
+
+        return {
+            /* Список значений сменился (загрузили другой файл) — чиним выбор:
+               оставляем только то, что есть в новых данных. */
+            setOptions: function (list) {
+                options = list;
+                var known = {};
+                list.forEach(function (o) { known[o.value] = true; });
+                for (var i = selected.length - 1; i >= 0; i--) {
+                    if (!known[selected[i]]) { selected.splice(i, 1); }
+                }
+                syncToggle();
+                if (!panel.hidden) { renderPanel(); }
+            },
+            labelFor: labelFor
+        };
     }
 
-    if (analysisProductSelect) {
-        analysisProductSelect.addEventListener('change', function () {
-            analysisProductFilter = this.value;
-            if (lastAnalysisType) { runAnalysis(lastAnalysisType); }
-        });
-    }
+    var analysisCountryMulti = makeAnalysisMultiSelect({
+        toggleSelector: '.analysis-country-toggle',
+        panelSelector: '.analysis-country-panel',
+        allLabel: 'Все страны',
+        selected: analysisCountryFilter,
+        onChange: function () { if (lastAnalysisType) { runAnalysis(lastAnalysisType); } }
+    });
+
+    var analysisProductMulti = makeAnalysisMultiSelect({
+        toggleSelector: '.analysis-product-toggle',
+        panelSelector: '.analysis-product-panel',
+        allLabel: 'Все товары',
+        selected: analysisProductFilter,
+        onChange: function () { if (lastAnalysisType) { runAnalysis(lastAnalysisType); } }
+    });
 
     /*
      * Направление в фильтре по умолчанию «ИМ». Если загрузили экспорт (или
@@ -6227,21 +6339,21 @@ document.addEventListener('DOMContentLoaded', function () {
         // Страновой срез: один фильтр на все анализы разом, включая сигналы,
         // рекомендации и сводную выгрузку — иначе цифры на экране и в файле
         // разошлись бы
-        if (analysisCountryFilter) {
+        if (analysisCountryFilter.length) {
             var countryCol = findAnalysisCountryColumn(headers);
             if (countryCol) {
                 data = data.filter(function (row) {
-                    return String(row[countryCol] || '').trim() === analysisCountryFilter;
+                    return analysisCountryFilter.indexOf(String(row[countryCol] || '').trim()) !== -1;
                 });
             }
         }
 
         // Товарный срез: код ТН ВЭД, если в выгрузке несколько продуктов
-        if (analysisProductFilter) {
+        if (analysisProductFilter.length) {
             var hsCol = findColumn(headers, COL_HS_CODE);
             if (hsCol) {
                 data = data.filter(function (row) {
-                    return String(row[hsCol] || '').trim() === analysisProductFilter;
+                    return analysisProductFilter.indexOf(String(row[hsCol] || '').trim()) !== -1;
                 });
             }
         }
@@ -6249,11 +6361,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return { data: data, headers: headers };
     }
 
+    /* Короткая подпись списка: до двух значений перечисляем, дальше считаем —
+       иначе в имени файла и заголовке оказалась бы простыня из 20 стран. */
+    function analysisListLabel(values, whatMany) {
+        if (!values.length) { return ''; }
+        if (values.length <= 2) { return values.join(', '); }
+        return values.length + ' ' + whatMany;
+    }
+
     // Подпись среза для заголовков и имён файлов
     function analysisScopeLabel() {
         var parts = [];
-        if (analysisCountryFilter) { parts.push(analysisCountryFilter); }
-        if (analysisProductFilter) { parts.push(analysisProductFilter); }
+        var c = analysisListLabel(analysisCountryFilter, 'стран');
+        var p = analysisListLabel(analysisProductFilter, 'товаров');
+        if (c) { parts.push(c); }
+        if (p) { parts.push(p); }
         return parts.join(' · ');
     }
 
@@ -6262,15 +6384,23 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateAnalysisScopeNote(rowCount) {
         var note = document.querySelector('.analysis-scope-note');
         if (!note) { return; }
-        if (!analysisCountryFilter && !analysisProductFilter) {
+        if (!analysisCountryFilter.length && !analysisProductFilter.length) {
             note.hidden = true;
             note.textContent = '';
             return;
         }
         var parts = [];
-        if (analysisCountryFilter) { parts.push('страна: ' + analysisCountryFilter); }
-        if (analysisProductFilter) { parts.push('товар: ' + analysisProductFilter); }
-        note.textContent = 'Срез — ' + parts.join(', ') +
+        if (analysisCountryFilter.length) {
+            parts.push((analysisCountryFilter.length > 1 ? 'страны: ' : 'страна: ') +
+                analysisCountryFilter.join(', '));
+        }
+        if (analysisProductFilter.length) {
+            var names = analysisProductMulti
+                ? analysisProductFilter.map(analysisProductMulti.labelFor)
+                : analysisProductFilter;
+            parts.push((analysisProductFilter.length > 1 ? 'товары: ' : 'товар: ') + names.join('; '));
+        }
+        note.textContent = 'Срез — ' + parts.join(' · ') +
             (rowCount != null ? ' · строк в выборке: ' + formatNumber(rowCount) : '');
         note.hidden = false;
     }
@@ -6278,17 +6408,18 @@ document.addEventListener('DOMContentLoaded', function () {
     /* Список стран для фильтра строим по загруженным данным: показываем
        только то, что в выгрузке реально есть. */
     function renderAnalysisCountryFilter() {
-        if (!analysisCountrySelect) { return; }
+        if (!analysisCountryMulti) { return; }
         var headers = getActiveHeaders();
         var data = getActiveData();
         var countryCol = findAnalysisCountryColumn(headers);
 
-        if (!countryCol || !data.length) {
-            analysisCountryFilter = '';
+        function hide() {
+            analysisCountryFilter.length = 0;
             analysisCountryField.hidden = true;
-            analysisCountrySelect.innerHTML = '<option value="">Все страны</option>';
-            return;
+            analysisCountryMulti.setOptions([]);
         }
+
+        if (!countryCol || !data.length) { hide(); return; }
 
         var seen = {};
         data.forEach(function (row) {
@@ -6296,22 +6427,12 @@ document.addEventListener('DOMContentLoaded', function () {
             if (c) { seen[c] = true; }
         });
         var names = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'ru'); });
-        if (names.length < 2) {
-            // Одна страна в данных — выбирать не из чего
-            analysisCountryFilter = '';
-            analysisCountryField.hidden = true;
-            analysisCountrySelect.innerHTML = '<option value="">Все страны</option>';
-            return;
-        }
+        // Одна страна в данных — выбирать не из чего
+        if (names.length < 2) { hide(); return; }
 
-        var keep = analysisCountryFilter && names.indexOf(analysisCountryFilter) !== -1
-            ? analysisCountryFilter : '';
-        analysisCountryFilter = keep;
-        analysisCountrySelect.innerHTML = '<option value="">Все страны</option>' +
-            names.map(function (n) {
-                return '<option value="' + marketEsc(n) + '"' + (n === keep ? ' selected' : '') + '>' +
-                    marketEsc(n) + '</option>';
-            }).join('');
+        analysisCountryMulti.setOptions(names.map(function (n) {
+            return { value: n, label: n };
+        }));
         analysisCountryField.hidden = false;
     }
 
@@ -6319,18 +6440,19 @@ document.addEventListener('DOMContentLoaded', function () {
        наименование товара из первой встреченной строки с этим кодом,
        чтобы не заставлять угадывать продукт по голым цифрам. */
     function renderAnalysisProductFilter() {
-        if (!analysisProductSelect) { return; }
+        if (!analysisProductMulti) { return; }
         var headers = getActiveHeaders();
         var data = getActiveData();
         var hsCol = findColumn(headers, COL_HS_CODE);
         var nameCol = findColumn(headers, COL_PRODUCT_NAME);
 
-        if (!hsCol || !data.length) {
-            analysisProductFilter = '';
+        function hide() {
+            analysisProductFilter.length = 0;
             analysisProductField.hidden = true;
-            analysisProductSelect.innerHTML = '<option value="">Все товары</option>';
-            return;
+            analysisProductMulti.setOptions([]);
         }
+
+        if (!hsCol || !data.length) { hide(); return; }
 
         var names = {};
         var seen = {};
@@ -6344,20 +6466,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
         var codes = Object.keys(seen).sort();
-        if (codes.length < 2) {
-            analysisProductFilter = '';
-            analysisProductField.hidden = true;
-            analysisProductSelect.innerHTML = '<option value="">Все товары</option>';
-            return;
-        }
+        if (codes.length < 2) { hide(); return; }
 
-        var keep = analysisProductFilter && seen[analysisProductFilter] ? analysisProductFilter : '';
-        analysisProductFilter = keep;
-        analysisProductSelect.innerHTML = '<option value="">Все товары</option>' +
-            codes.map(function (code) {
-                return '<option value="' + marketEsc(code) + '"' + (code === keep ? ' selected' : '') + '>' +
-                    marketEsc(analysisProductLabel(code, names[code])) + '</option>';
-            }).join('');
+        analysisProductMulti.setOptions(codes.map(function (code) {
+            return { value: code, label: analysisProductLabel(code, names[code]) };
+        }));
         analysisProductField.hidden = false;
 
         /*
@@ -6368,9 +6481,7 @@ document.addEventListener('DOMContentLoaded', function () {
          */
         if (!hsNamesData) {
             loadHsNames().then(function () {
-                if (analysisProductSelect && !analysisProductField.hidden) {
-                    renderAnalysisProductFilter();
-                }
+                if (!analysisProductField.hidden) { renderAnalysisProductFilter(); }
             });
         }
     }
