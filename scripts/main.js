@@ -1189,6 +1189,14 @@ document.addEventListener('DOMContentLoaded', function () {
      * Клик по региону: если он отмечен целиком — снимаем, иначе дожимаем до
      * полного. Частично отмеченный регион по клику доотмечается, а не
      * сбрасывается, — так кнопка не стирает страны, выбранные вручную.
+     *
+     * Особый случай — вложенные регионы (Евросоюз внутри континента
+     * Европа). Если уже активен более широкий регион, целиком включающий
+     * кликнутый, то кликнутый и без того подсвечен «весь выбран» — клик по
+     * нему без этой развилки читался бы как «снять», а после снятия и
+     * повторного клика всё равно остался бы широкий набор. Вместо этого
+     * узкий клик обрезает более широкий до себя: человек нажал «Евросоюз» —
+     * значит, ему нужны именно эти 27, а не 54 из «Европы».
      */
     function toggleComtradeRegion(regionId) {
         var region = null;
@@ -1196,6 +1204,27 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!region) { return; }
 
         var codes = comtradeRegionCodes(region);
+        var codeSet = {};
+        codes.forEach(function (code) { codeSet[code] = true; });
+
+        var supersets = comtradeRegions.filter(function (r) {
+            if (r.id === region.id) { return false; }
+            if (comtradeRegionState(r) !== 'all') { return false; }
+            var rCodes = comtradeRegionCodes(r);
+            if (rCodes.length <= codes.length) { return false; }
+            return codes.every(function (code) { return rCodes.indexOf(code) !== -1; });
+        });
+
+        if (supersets.length > 0) {
+            supersets.forEach(function (r) {
+                comtradeRegionCodes(r).forEach(function (code) {
+                    if (!codeSet[code]) { delete comtradeSelected[code]; }
+                });
+            });
+            codes.forEach(function (code) { comtradeSelected[code] = true; });
+            return;
+        }
+
         var turnOff = comtradeRegionState(region) === 'all';
 
         codes.forEach(function (code) {
