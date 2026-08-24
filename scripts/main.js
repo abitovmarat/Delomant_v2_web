@@ -6355,11 +6355,32 @@ document.addEventListener('DOMContentLoaded', function () {
         analysisProductFilter = keep;
         analysisProductSelect.innerHTML = '<option value="">Все товары</option>' +
             codes.map(function (code) {
-                var label = code + (names[code] ? ' — ' + (names[code].length > 40 ? names[code].substring(0, 38) + '...' : names[code]) : '');
                 return '<option value="' + marketEsc(code) + '"' + (code === keep ? ' selected' : '') + '>' +
-                    marketEsc(label) + '</option>';
+                    marketEsc(analysisProductLabel(code, names[code])) + '</option>';
             }).join('');
         analysisProductField.hidden = false;
+
+        /*
+         * Голый код («030616») ничего не говорит о товаре. Наименование
+         * берём сначала из данных, а если его там нет — из справочника
+         * ТН ВЭД. Справочник грузится лениво и большой, поэтому после
+         * загрузки перерисовываем список ещё раз.
+         */
+        if (!hsNamesData) {
+            loadHsNames().then(function () {
+                if (analysisProductSelect && !analysisProductField.hidden) {
+                    renderAnalysisProductFilter();
+                }
+            });
+        }
+    }
+
+    /** Подпись товара в фильтре: «код — краткое название». */
+    function analysisProductLabel(code, ownName) {
+        var name = (ownName || '').trim() || hsNameFor(code);
+        if (!name) { return code; }
+        if (name.length > 45) { name = name.substring(0, 43) + '…'; }
+        return code + ' — ' + name;
     }
 
     /* ================================
@@ -8294,7 +8315,7 @@ document.addEventListener('DOMContentLoaded', function () {
                        '#EC4899', '#0891B2', '#EA580C', '#4F46E5', '#059669'];
 
     function renderPriceDynamicsAnalysis(data, headers) {
-        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна происхождения');
+        var countryCol = findAnalysisCountryColumn(headers);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
         var weightCol = findColumn(headers, COL_WEIGHT);
         var yearCol = findColumn(headers, COL_YEAR);
@@ -11814,8 +11835,11 @@ document.addEventListener('DOMContentLoaded', function () {
         var yearCol = findColumn(headers, COL_YEAR);
         var quarterCol = findColumn(headers, COL_QUARTER);
         var hsCol = findColumn(headers, COL_HS_CODE);
-        var countryCol = findColumn(headers, 'Страна отправления') ||
-                         findColumn(headers, 'Страна происхождения');
+        // Один и тот же поиск страны, что и в анализе: на экспортных выгрузках
+        // колонка называется «Страна назначения», на режиме «весь мир» —
+        // «Страна-экспортёр»/«Страна-импортёр». Короткий список из двух имён
+        // молча выкидывал из книги все страновые листы.
+        var countryCol = findAnalysisCountryColumn(headers);
         var rubCtx = buildRubCtx(headers);
         var hasRub = rubCtx.customsCol || rubCtx.invoiceRubCol || rubCtx.statUsdCol;
 
@@ -12564,9 +12588,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         function supplyStr(cm) {
             if (!cm.leader) return '—';
-            if (cm.leaderShare >= 70) return 'Основной поставщик — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%); нужен поиск альтернатив для снижения рисков';
-            if (cm.leaderShare >= 40) return 'Ведущий поставщик — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%) при выраженной концентрации';
-            return 'Диверсифицированный портфель поставщиков; лидер ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%), риски сбалансированы';
+            var w = cm.market || { counterparty: 'контрагент', counterpartyGen: 'контрагента' };
+            if (cm.leaderShare >= 70) return 'Основной ' + w.counterparty + ' — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%); нужен поиск альтернатив для снижения рисков';
+            if (cm.leaderShare >= 40) return 'Ведущий ' + w.counterparty + ' — ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%) при выраженной концентрации';
+            return 'Диверсифицированная география; лидер ' + cm.leader + ' (' + presRuNum(cm.leaderShare, 1) + '%), риски сбалансированы';
         }
         function priceStr(pm) {
             if (pm.priceMin == null) return '—';
@@ -12574,7 +12599,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         function keyStr(vm, cm) {
             var t = presTrendPhrase(vm.cagrWeight);
-            if (cm.leaderShare >= 70 && t.dir === 'up') return 'Рынок привлекателен высокими темпами роста, но зависит от одного поставщика. Это ключевой риск';
+            if (cm.leaderShare >= 70 && t.dir === 'up') return 'Рынок привлекателен высокими темпами роста, но зависит от одного ' + ((cm.market && cm.market.counterpartyGen) || 'контрагента') + '. Это ключевой риск';
             if (t.dir === 'up') return 'Растущий рынок с приемлемым уровнем риска, благоприятен для входа';
             if (t.dir === 'down') return 'Рынок сжимается, поэтому вход требует осторожности и ценовых преимуществ';
             return 'Рынок стабилен, успех определяется операционной эффективностью в условиях конкуренции';
@@ -13039,7 +13064,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var weightCol = findColumn(headers, COL_WEIGHT);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
         var hsCol = findColumn(headers, COL_HS_CODE);
-        var countryCol = findColumn(headers, 'Страна отправления') || findColumn(headers, 'Страна назначения') || findColumn(headers, 'Страна происхождения');
+        var countryCol = findAnalysisCountryColumn(headers);
         if (!data || data.length === 0) return presNoData(title);
 
         var byYear = {}, byYearQ = {}, byCountry = {}, hsSet = {};
@@ -13410,7 +13435,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Объёмы по странам (pivot) ---
     function renderPresCountries(data, headers, slide) {
-        var countryCol = findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f') || findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043f\u0440\u043e\u0438\u0441\u0445\u043e\u0436\u0434\u0435\u043d\u0438\u044f');
+        var countryCol = findAnalysisCountryColumn(headers);
         var weightCol = findColumn(headers, COL_WEIGHT);
         var yearCol = findColumn(headers, COL_YEAR);
         if (!countryCol || !weightCol || !yearCol || data.length === 0) return presNoData(slide.title);
@@ -13509,7 +13534,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderPresPriceDynamics(data, headers, slide) {
         var statUsdCol = findColumn(headers, COL_STAT_USD);
         var weightCol = findColumn(headers, COL_WEIGHT);
-        var countryCol = findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f') || findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043f\u0440\u043e\u0438\u0441\u0445\u043e\u0436\u0434\u0435\u043d\u0438\u044f');
+        var countryCol = findAnalysisCountryColumn(headers);
         var yearCol = findColumn(headers, COL_YEAR);
         if (!statUsdCol || !weightCol || !countryCol || !yearCol || data.length === 0) return presNoData(slide.title);
 
@@ -13833,6 +13858,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function computeSlideMetrics(type, data, headers, slide) {
         var m = { years: [], trend: 'stable' };
+        // Направление и название рынка — тексты слайдов собираются из метрик
+        // и без этого писали бы «поставщик»/«импорт» даже на экспортной выгрузке
+        m.market = presMarketPhrase(data, headers);
         var yearCol = findColumn(headers, COL_YEAR);
         var weightCol = findColumn(headers, COL_WEIGHT);
         var statUsdCol = findColumn(headers, COL_STAT_USD);
@@ -13900,7 +13928,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (type === 'countries' || type === 'price-dynamics') {
-            var countryCol = findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f') || findColumn(headers, '\u0421\u0442\u0440\u0430\u043d\u0430 \u043f\u0440\u043e\u0438\u0441\u0445\u043e\u0436\u0434\u0435\u043d\u0438\u044f');
+            var countryCol = findAnalysisCountryColumn(headers);
             if (countryCol && weightCol) {
                 var totalByC = {};
                 var grand = 0;
@@ -14097,7 +14125,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // Заголовок-вывод (action title) из метрик. '' если данных мало.
     function generateActionTitle(type, m) {
         var product = (m.product || '').trim();
-        var subj = product ? 'Импорт ' + product : 'Импорт';
+        // Направление берём из данных: зашитый «Импорт» в заголовках слайдов
+        // просто неверен на экспортной выгрузке
+        var flowWord = (m.market && m.market.flowGen === 'экспорта') ? 'Экспорт'
+            : ((m.market && m.market.flowGen === 'торговли') ? 'Поставки' : 'Импорт');
+        var flowGen = (m.market && m.market.flowGen) || 'импорта';
+        var subj = product ? flowWord + ' ' + product : flowWord;
         var of = product ? ' ' + product : '';
         var period = (m.firstYear && m.lastYear) ? m.firstYear + '–' + m.lastYear : '';
 
@@ -14136,7 +14169,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (type === 'price-dynamics' && m.priceMin != null) {
-            return 'Цены на импорт' + of + ' варьируются от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения';
+            return 'Цены ' + flowGen + of + ' варьируются от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения';
         }
 
         if ((type === 'sankey-sender' || type === 'sankey-manufacturer') && m.leader) {
@@ -14154,7 +14187,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (type === 'quarterly-prices' && m.usdMin != null) {
-            var priceScope = m.annualPrices ? 'Среднегодовая цена импорта' : 'Поквартальная цена импорта';
+            var priceScope = m.annualPrices ? ('Среднегодовая цена ' + flowGen) : ('Поквартальная цена ' + flowGen);
             return priceScope + of + ' колебалась в диапазоне ' + presRuNum(m.usdMin, 1) + '–' + presRuNum(m.usdMax, 1) + ' USD/кг';
         }
 
@@ -14170,6 +14203,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function generateTemplateText(type, m) {
         var lines = [];
+        // \u041d\u0430\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438: \u043d\u0430 \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0439 \u0432\u044b\u0433\u0440\u0443\u0437\u043a\u0435 \u00ab\u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u00bb \u0438 \u00ab\u0438\u043c\u043f\u043e\u0440\u0442\u00bb
+        // \u0432 \u0442\u0435\u043a\u0441\u0442\u0435 \u0431\u044b\u043b\u0438 \u0431\u044b \u043f\u0440\u043e\u0441\u0442\u043e \u043d\u0435\u0432\u0435\u0440\u043d\u044b. \u0417\u0430\u043f\u0430\u0441\u043d\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u2014 \u0434\u043b\u044f \u043c\u0435\u0442\u0440\u0438\u043a,
+        // \u0441\u043e\u0431\u0440\u0430\u043d\u043d\u044b\u0445 \u0434\u043e \u043f\u043e\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u043e\u043b\u044f (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440, \u0432 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u043e\u043c \u0447\u0435\u0440\u043d\u043e\u0432\u0438\u043a\u0435).
+        var mkc = m.market || { flowGen: '\u0442\u043e\u0440\u0433\u043e\u0432\u043b\u0438', counterparty: '\u043a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442', counterpartyGen: '\u043a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u0430' };
         var trendWord = m.trend === 'growth' ? '\u0443\u0441\u0442\u043e\u0439\u0447\u0438\u0432\u044b\u0439 \u0440\u043e\u0441\u0442' : m.trend === 'decline' ? '\u0441\u043d\u0438\u0436\u0435\u043d\u0438\u0435' : '\u0441\u0442\u0430\u0431\u0438\u043b\u044c\u043d\u0443\u044e \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0443';
 
         if (type === 'volumes') {
@@ -14222,18 +14259,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (type === 'countries') {
             if (m.leader) {
-                lines.push('Ведущий поставщик — ' + m.leader + ' с долей ' + presRuNum(m.leaderShare, 1) + '% от общего объёма импорта.');
+                lines.push('Ведущий ' + mkc.counterparty + ' — ' + m.leader + ' с долей ' + presRuNum(m.leaderShare, 1) + '% от общего объёма ' + mkc.flowGen + '.');
             }
             if (m.leaderShare != null) {
                 var c;
-                if (m.leaderShare >= 70) c = 'Рынок зависит от одного поставщика, что создаёт логистические и ценовые риски';
+                if (m.leaderShare >= 70) c = 'Рынок зависит от одного ' + mkc.counterpartyGen + ', что создаёт логистические и ценовые риски';
                 else if (m.leaderShare >= 40) c = 'Концентрация высокая: лидер формирует основную часть поставок';
                 else c = 'Структура диверсифицирована, зависимость от отдельных стран умеренная';
                 if (m.secondName) c += ' (второй по объёму — ' + m.secondName + ', ' + presRuNum(m.secondShare, 1) + '%)';
                 lines.push(c + '.');
             }
             if (m.topCoverage) {
-                lines.push('ТОП-' + m.topN + ' стран обеспечивают ' + presRuNum(m.topCoverage, 1) + '% поставок; всего в импорте участвует ' + (m.countriesCount || '?') + ' стран.');
+                lines.push('ТОП-' + m.topN + ' стран обеспечивают ' + presRuNum(m.topCoverage, 1) + '% поставок; всего участвует ' + (m.countriesCount || '?') + ' стран.');
             }
         }
 
@@ -14242,11 +14279,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 lines.push('Средневзвешенная цена варьируется от ' + presRuNum(m.priceMin, 1) + ' до ' + presRuNum(m.priceMax, 1) + ' USD/кг в зависимости от страны происхождения.');
                 var spread = m.priceMin > 0 ? round2((m.priceMax - m.priceMin) / m.priceMin * 100) : 0;
                 if (spread >= 30) {
-                    lines.push('Разброс цен между странами значительный (' + presRuNum(Math.round(spread)) + '%), поэтому выбор поставщика существенно влияет на закупочную стоимость.');
+                    lines.push('Разброс цен между странами значительный (' + presRuNum(Math.round(spread)) + '%), поэтому выбор контрагента существенно влияет на закупочную стоимость.');
                 }
             }
             if (m.leader) {
-                lines.push(m.leader + ' как основной поставщик (' + presRuNum(m.leaderShare, 1) + '% объёма) задаёт ценовой ориентир рынка.');
+                lines.push(m.leader + ' как основной ' + mkc.counterparty + ' (' + presRuNum(m.leaderShare, 1) + '% объёма) задаёт ценовой ориентир рынка.');
             }
         }
 
@@ -14264,7 +14301,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (type === 'segments') {
             if (m.leadSegment) {
-                lines.push('Основной канал сбыта — «' + m.leadSegment + '» с долей ' + presRuNum(m.leadSegmentShare, 1) + '% от общего объёма импорта.');
+                lines.push('Основной канал сбыта — «' + m.leadSegment + '» с долей ' + presRuNum(m.leadSegmentShare, 1) + '% от общего объёма ' + mkc.flowGen + '.');
             }
             if (m.growSegment && m.growSegment.seg) {
                 lines.push('Доля сегмента «' + m.growSegment.seg + '» выросла с ' + presRuNum(m.growSegment.from, 1) +
@@ -14313,6 +14350,70 @@ document.addEventListener('DOMContentLoaded', function () {
         return lines;
     }
 
+    /*
+     * Как назвать рынок в обзорных текстах.
+     *
+     * Раньше во «Введении» стояло зашитое «Российский рынок импорта»: для
+     * файловой выгрузки российской таможни это верно, но на данных Comtrade
+     * и WITS — нет. Там репортёром может быть любая страна, а направление
+     * задаёт пользователь, поэтому отчёт по экспорту Европы в Азию писал
+     * про российский импорт.
+     *
+     * Теперь: направление берём из самих данных (колонка «Направление
+     * перемещения», ИМ/ЭК), а «Российский» ставим только там, где рынок
+     * действительно российский — то есть на своей выгрузке, не на
+     * международной статистике.
+     */
+    function presMarketPhrase(data, headers) {
+        var dirCol = findColumn(headers, COL_DIRECTION);
+        var seen = {};
+        if (dirCol) {
+            data.forEach(function (row) {
+                var d = String(row[dirCol] || '').trim().toUpperCase();
+                if (d) { seen[d] = true; }
+            });
+        }
+        var dirs = Object.keys(seen);
+
+        var noun = 'рынок';
+        var flowGen = 'торговли';        // «структура <чего>»
+        var counterparty = 'контрагент'; // именительный: «ключевой <кто>»
+        var counterpartyGen = 'контрагента'; // родительный: «зависимость от одного <кого>»
+        if (dirs.length === 1 && dirs[0] === 'ИМ') {
+            noun = 'рынок импорта';
+            flowGen = 'импорта';
+            counterparty = 'поставщик';
+            counterpartyGen = 'поставщика';
+        } else if (dirs.length === 1 && dirs[0] === 'ЭК') {
+            noun = 'рынок экспорта';
+            flowGen = 'экспорта';
+            counterparty = 'покупатель';
+            counterpartyGen = 'покупателя';
+        }
+
+        /*
+         * «Российский» ставим только на своей таможенной выгрузке. Признаки
+         * чужого рынка: источник — международная статистика, либо в данных
+         * есть колонка «Партнёр» (обе стороны сделки — иностранные) или
+         * зеркальные «Страна-экспортёр»/«Страна-импортёр».
+         */
+        var isForeignSource = appState.dataSource === 'comtrade' ||
+            appState.dataSource === 'wits' ||
+            !!findColumn(headers, COL_PARTNER) ||
+            !!findColumn(headers, 'Страна-экспортёр') ||
+            !!findColumn(headers, 'Страна-импортёр');
+        return {
+            noun: noun,
+            flowGen: flowGen,
+            counterparty: counterparty,
+            counterpartyGen: counterpartyGen,
+            // Заглавная форма для начала предложения
+            title: isForeignSource
+                ? noun.charAt(0).toUpperCase() + noun.slice(1)
+                : 'Российский ' + noun
+        };
+    }
+
     // Обзорный текст для «Введения» (kind='intro') и «Резюме» (kind='resume').
     // Собирается детерминированно из метрик объёмов и стран. Без ИИ.
     function generateReportText(kind, data, headers, slide) {
@@ -14324,12 +14425,13 @@ document.addEventListener('DOMContentLoaded', function () {
         var periodLast = vm.trendLastYear || vm.lastYear;
         var period = (periodFirst && periodLast) ? periodFirst + '–' + periodLast : '';
         var t = presTrendPhrase(vm.cagrWeight);
+        var mk = presMarketPhrase(data, headers);
         var lines = [];
 
         if (kind === 'intro') {
             if (vm.cagrWeight != null && vm.firstWeight != null) {
                 var wu = presWeightUnit(Math.max(Math.abs(vm.firstWeight), Math.abs(vm.lastWeight)));
-                lines.push('Российский рынок импорта' + of + (period ? ' в ' + period + ' гг.' : '') + ' демонстрирует ' + t.adj +
+                lines.push(mk.title + of + (period ? ' в ' + period + ' гг.' : '') + ' демонстрирует ' + t.adj +
                     ': объём поставок ' + (t.dir === 'down' ? 'снизился' : (t.dir === 'up' ? 'вырос' : 'изменился')) +
                     ' с ' + presRuNum(vm.firstWeight / wu.div, wu.d) + ' до ' + presRuNum(vm.lastWeight / wu.div, wu.d) + ' ' + wu.unit +
                     ' (CAGR ' + presRuNum(Math.round(vm.cagrWeight)) + '%).');
@@ -14339,9 +14441,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     ') — темпы роста рассчитаны по полным годам.');
             }
             if (cm.leader) {
-                var concPhrase = cm.leaderShare >= 70 ? 'высокая зависимость от одного поставщика'
+                var concPhrase = cm.leaderShare >= 70 ? ('высокая зависимость от одного ' + mk.counterpartyGen)
                     : (cm.leaderShare >= 40 ? 'выраженная концентрация поставок' : 'диверсифицированная география поставок');
-                lines.push('Структура импорта характеризуется: ' + concPhrase + ' — ключевой поставщик ' + cm.leader +
+                lines.push('Структура ' + mk.flowGen + ' характеризуется: ' + concPhrase + ' — ключевой ' + mk.counterparty + ' ' + cm.leader +
                     ' (' + presRuNum(cm.leaderShare, 1) + '% объёма), всего в поставках участвует ' + (cm.countriesCount || '?') + ' стран.');
             }
             if (vm.cagrUsd != null && vm.cagrWeight != null) {
@@ -14355,11 +14457,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (kind === 'resume') {
             if (vm.cagrWeight != null) {
-                lines.push('Рынок импорта' + of + (period ? ' в ' + period + ' гг.' : '') + ' развивался в режиме «' + t.adj + '»: ' +
+                lines.push(mk.noun.charAt(0).toUpperCase() + mk.noun.slice(1) + of + (period ? ' в ' + period + ' гг.' : '') + ' развивался в режиме «' + t.adj + '»: ' +
                     'ключевые показатели подтверждают ' + (t.dir === 'up' ? 'растущий спрос' : (t.dir === 'down' ? 'сжатие спроса' : 'устойчивое состояние')) + ' сегмента.');
             }
             if (cm.leader && cm.leaderShare >= 70) {
-                lines.push('Главный риск это высокая зависимость от одного поставщика (' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
+                lines.push('Главный риск это высокая зависимость от одного ' + mk.counterpartyGen + ' (' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
                     '%): диверсификация географии закупок становится приоритетной задачей.');
             } else if (cm.leader) {
                 lines.push('Структура поставок относительно устойчива (лидер ' + cm.leader + ' — ' + presRuNum(cm.leaderShare, 1) +
@@ -14388,7 +14490,12 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function presSectionRequirements() {
         var money = [COL_STAT_USD, COL_CUSTOMS];
-        var country = ['Страна отправления', 'Страна происхождения'];
+        // Полный набор имён страновой колонки: на экспортных выгрузках это
+        // «Страна назначения», на режиме «весь мир» — «Страна-экспортёр» или
+        // «Страна-импортёр». Иначе мастер считал страновые разделы
+        // недоступными и молча выкидывал их из отчёта.
+        var country = ['Страна отправления', 'Страна происхождения',
+                       'Страна назначения', 'Страна-импортёр', 'Страна-экспортёр'];
         return [
             { type: 'volumes', groups: [[COL_WEIGHT].concat(money), [COL_YEAR]] },
             { type: 'countries', groups: [country, [COL_WEIGHT].concat(money)] },
