@@ -8670,6 +8670,31 @@ document.addEventListener('DOMContentLoaded', function () {
             yOff += h + rightGap;
         });
 
+        // Подписи узлов (имя + тонны, две строки) могут занимать больше места,
+        // чем расстояние между тесными узлами. Заранее считаем итоговую Y
+        // каждой подписи с минимальным отступом, чтобы они не наезжали друг
+        // на друга, и растягиваем высоту SVG под них — иначе подписи уезжают
+        // за пределы холста.
+        var minLabelGap = 28;
+        function stackLabels(positions, order) {
+            var out = {};
+            var last = -Infinity;
+            order.forEach(function (key) {
+                var centerY = positions[key].y + positions[key].h / 2;
+                var labelY = Math.max(centerY, last + minLabelGap);
+                out[key] = labelY;
+                last = labelY;
+            });
+            return out;
+        }
+        var leftLabelY = stackLabels(leftPositions, leftNodes);
+        var rightLabelY = stackLabels(rightPositions, rightNodes);
+        var maxLabelBottom = Math.max(
+            leftNodes.length ? leftLabelY[leftNodes[leftNodes.length - 1]] + 16 : 0,
+            rightNodes.length ? rightLabelY[rightNodes[rightNodes.length - 1]] + 16 : 0
+        );
+        svgH = Math.max(svgH, maxLabelBottom + topPad);
+
         html += '<div class="analysis-section">';
         html += '<svg class="analysis-chart sankey-chart" width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
         html += '<style>text { font-family: ' + CHART_FONT + '; }</style>';
@@ -8721,17 +8746,14 @@ document.addEventListener('DOMContentLoaded', function () {
         // Рисуем левые узлы (прямоугольники + подписи)
         // Соседние узлы могут быть намного тоньше расстояния, нужного двум
         // строкам текста (имя + тонны) — тогда подписи наезжают друг на
-        // друга. Раздвигаем такие подписи и рисуем выноску к узлу.
-        var minLabelGap = 28;
-        var lastLeftLabelY = -Infinity;
+        // друга. leftLabelY/rightLabelY уже разведены заранее; если подпись
+        // сместилась от центра узла — рисуем выноску.
         leftNodes.forEach(function (s) {
             var p = leftPositions[s];
             var tons = round2(senderTotals[s] / 1000);
             html += '<rect x="' + leftX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
-            // Подпись слева
             var centerY = p.y + p.h / 2;
-            var labelY = Math.max(centerY, lastLeftLabelY + minLabelGap);
-            lastLeftLabelY = labelY + 12;
+            var labelY = leftLabelY[s];
             if (labelY - centerY > 1) {
                 html += '<line x1="' + leftX + '" y1="' + centerY + '" x2="' + (leftX - labelPadL) + '" y2="' + (labelY - 4) +
                     '" stroke="' + CHART_COLORS.textMuted + '" stroke-width="1"/>';
@@ -8741,15 +8763,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         // Рисуем правые узлы
-        var lastRightLabelY = -Infinity;
         rightNodes.forEach(function (r) {
             var p = rightPositions[r];
             var tons = round2(receiverTotals[r] / 1000);
             html += '<rect x="' + rightX + '" y="' + p.y + '" width="' + nodeW + '" height="' + p.h + '" fill="' + p.color + '" rx="2"/>';
-            // Подпись справа
             var centerY = p.y + p.h / 2;
-            var labelY = Math.max(centerY, lastRightLabelY + minLabelGap);
-            lastRightLabelY = labelY + 12;
+            var labelY = rightLabelY[r];
             if (labelY - centerY > 1) {
                 html += '<line x1="' + (rightX + nodeW) + '" y1="' + centerY + '" x2="' + (rightX + nodeW + labelPadR) + '" y2="' + (labelY - 4) +
                     '" stroke="' + CHART_COLORS.textMuted + '" stroke-width="1"/>';
