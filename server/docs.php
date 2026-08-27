@@ -57,20 +57,6 @@ function fileSizeLabel(string $name): string {
         : number_format($kb, 0, ',', ' ') . ' КБ';
 }
 
-$updated = '';
-foreach ($FILES as $meta) {
-    $p = __DIR__ . '/docs_files/' . $meta[0];
-    if (is_file($p)) {
-        $t = filemtime($p);
-        if ($t > 0 && ($updated === '' || $t > (int)$updated)) { $updated = (string)$t; }
-    }
-}
-$months = [1=>'января','февраля','марта','апреля','мая','июня',
-           'июля','августа','сентября','октября','ноября','декабря'];
-$updatedLabel = $updated !== ''
-    ? (int)date('j', (int)$updated) . ' ' . $months[(int)date('n', (int)$updated)] . ' ' . date('Y', (int)$updated)
-    : '';
-
 header('Content-Type: text/html; charset=utf-8');
 ?>
 <!DOCTYPE html>
@@ -185,13 +171,8 @@ header('Content-Type: text/html; charset=utf-8');
                     <dd><a href="/">delomant-analytics-system.ru</a></dd>
 
                     <dt>Техническая поддержка</dt>
-                    <dd><a href="mailto:info@delomant.ru">info@delomant.ru</a>, +7 937 531-55-48<br>
+                    <dd><a href="mailto:info@delomant.ru">info@delomant.ru</a><br>
                         понедельник — пятница, 09:00–18:00 по московскому времени</dd>
-<?php if ($updatedLabel !== ''): ?>
-
-                    <dt>Документы обновлены</dt>
-                    <dd><?= htmlspecialchars($updatedLabel, ENT_QUOTES) ?></dd>
-<?php endif; ?>
                 </dl>
             </div>
         </div>
