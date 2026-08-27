@@ -14,10 +14,15 @@
 declare(strict_types=1);
 
 // Отдача файла: ?f=<ключ>
+/*
+ * Публикуются только документы без учётных данных экспертного доступа.
+ * «Информация для эксплуатации» сюда не входит: в ней напечатаны логин и
+ * пароль. В инструкции по установке те же значения вырезаны — публичная
+ * версия отличается от передаваемой эксперту.
+ */
 $FILES = [
     'features'   => ['funkcionalnye-harakteristiki.pdf',  'Функциональные характеристики'],
     'install'    => ['instrukciya-po-ustanovke.pdf',      'Инструкция по установке'],
-    'operation'  => ['informaciya-dlya-ekspluatacii.pdf', 'Информация для эксплуатации'],
     'lifecycle'  => ['processy-zhiznennogo-cikla.pdf',    'Процессы жизненного цикла'],
 ];
 
@@ -151,19 +156,9 @@ header('Content-Type: text/html; charset=utf-8');
                         <span class="ico">PDF</span>
                         <span class="txt">
                             <span class="t">Инструкция по установке</span>
-                            <span class="d">Требования к рабочему месту, порядок получения доступа, признаки успешного запуска</span>
+                            <span class="d">Требования к рабочему месту, порядок входа и признаки успешного запуска. Учётные данные предоставляются правообладателем отдельно</span>
                         </span>
                         <span class="size"><?= htmlspecialchars(fileSizeLabel($FILES['install'][0]), ENT_QUOTES) ?></span>
-                    </a>
-                </li>
-                <li>
-                    <a href="?f=operation">
-                        <span class="ico">PDF</span>
-                        <span class="txt">
-                            <span class="t">Информация для эксплуатации</span>
-                            <span class="d">Работа с разделами «Данные», «Анализ», «Презентация», формирование и сохранение результатов</span>
-                        </span>
-                        <span class="size"><?= htmlspecialchars(fileSizeLabel($FILES['operation'][0]), ENT_QUOTES) ?></span>
                     </a>
                 </li>
                 <li>
