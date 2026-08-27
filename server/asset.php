@@ -40,6 +40,11 @@ session_write_close();
 $map = [
     'js'   => ['main.js.dat',               'application/javascript; charset=UTF-8'],
     'css'  => ['main.css.dat',              'text/css; charset=UTF-8'],
+    'xlsx' => ['xlsx-0.20.3.full.min.js.dat','application/javascript; charset=UTF-8'],
+    'jszip' => ['jszip-3.10.1.min.js.dat',   'application/javascript; charset=UTF-8'],
+    'jspdf' => ['jspdf-2.5.1.umd.min.js.dat','application/javascript; charset=UTF-8'],
+    'html2canvas' => ['html2canvas-1.4.1.min.js.dat', 'application/javascript; charset=UTF-8'],
+    'pptxgenjs' => ['pptxgenjs-3.12.0.bundle.js.dat', 'application/javascript; charset=UTF-8'],
     'logo' => ['Logo.png.dat',              'image/png'],
     'cbr'  => ['cbr_rates.dat',             'application/json; charset=UTF-8'],
     'dict' => ['company_dictionary.dat',    'application/json; charset=UTF-8'],

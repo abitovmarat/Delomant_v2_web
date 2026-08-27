@@ -23,7 +23,7 @@
  * случайный (для CI он не важен: после первой установки setup отключён).
  */
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -44,6 +44,11 @@ function write(rel, data) {
 const ASSETS = [
     ['styles/main.css',              'assets/main.css.dat'],
     ['scripts/main.js',              'assets/main.js.dat'],
+    ['vendor/xlsx-0.20.3.full.min.js','assets/xlsx-0.20.3.full.min.js.dat'],
+    ['vendor/jszip-3.10.1.min.js',    'assets/jszip-3.10.1.min.js.dat'],
+    ['vendor/jspdf-2.5.1.umd.min.js', 'assets/jspdf-2.5.1.umd.min.js.dat'],
+    ['vendor/html2canvas-1.4.1.min.js','assets/html2canvas-1.4.1.min.js.dat'],
+    ['vendor/pptxgenjs-3.12.0.bundle.js', 'assets/pptxgenjs-3.12.0.bundle.js.dat'],
     ['data/Logo.png',                'assets/Logo.png.dat'],
     ['data/cbr_rates.json',          'assets/cbr_rates.dat'],
     ['data/company_dictionary.json', 'assets/company_dictionary.dat'],
@@ -52,6 +57,15 @@ const ASSETS = [
     ['data/wits_countries.json',     'assets/wits_countries.dat'],
     ['data/wits_regions.json',       'assets/wits_regions.dat'],
     ['data/hs_names_ru.json',        'assets/hs_names_ru.dat'],
+];
+
+const LEGAL_FILES = [
+    ['vendor/THIRD_PARTY_NOTICES.md', 'third-party-licenses/THIRD_PARTY_NOTICES.md'],
+    ['vendor/licenses/SheetJS-0.20.3-Apache-2.0.txt', 'third-party-licenses/SheetJS-0.20.3-Apache-2.0.txt'],
+    ['vendor/licenses/JSZip-3.10.1.txt', 'third-party-licenses/JSZip-3.10.1.txt'],
+    ['vendor/licenses/jsPDF-2.5.1.txt', 'third-party-licenses/jsPDF-2.5.1.txt'],
+    ['vendor/licenses/html2canvas-1.4.1.txt', 'third-party-licenses/html2canvas-1.4.1.txt'],
+    ['vendor/licenses/PptxGenJS-3.12.0.txt', 'third-party-licenses/PptxGenJS-3.12.0.txt'],
 ];
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');
@@ -66,6 +80,18 @@ sizes.push(['asset.php', write('asset.php', read('server/asset.php'))]);
 sizes.push(['comtrade.php', write('comtrade.php', read('server/comtrade.php'))]);
 sizes.push(['wits.php', write('wits.php', read('server/wits.php'))]);
 sizes.push(['admin.php', write('admin.php', read('server/admin.php'))]);
+
+/*
+ * Публичная страница документации и сами PDF. Открыты без входа: реестр
+ * требует, чтобы описание функциональных характеристик и сведения для
+ * установки открывались по прямой ссылке. Каталог docs_files закрыт в
+ * .htaccess, файлы отдаёт docs.php по белому списку.
+ */
+sizes.push(['docs.php', write('docs.php', read('server/docs.php'))]);
+for (const f of readdirSync('public_docs')) {
+    if (!f.endsWith('.pdf')) { continue; }
+    sizes.push(['docs_files/' + f, write('docs_files/' + f, read('public_docs/' + f))]);
+}
 sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 
 // setup.php с подставленным токеном установки
@@ -85,7 +111,7 @@ if (process.env.COMTRADE_KEY) {
  * Приложение. К ссылкам на свою статику дописываем метку версии сборки
  * (?v=…), чтобы браузер гарантированно скачивал свежий файл после деплоя,
  * а не отдавал старый из кэша. HTML отдаётся с no-cache, поэтому новая
- * метка доходит сразу. CDN-скрипты не трогаем — у них свои версии в пути.
+ * метка доходит сразу. Локальные сторонние библиотеки уже содержат версии в имени файла.
  */
 const buildId = Date.now().toString(36);
 let appHtml = read('index.html')
@@ -110,6 +136,10 @@ for (const [src, dst] of ASSETS) {
         writeFileSync(full, gz);
         sizes.push([dst + '.gz', gz.length]);
     }
+}
+
+for (const [src, dst] of LEGAL_FILES) {
+    sizes.push([dst, write(dst, read(src))]);
 }
 
 const pad = Math.max(...sizes.map(([n]) => n.length));

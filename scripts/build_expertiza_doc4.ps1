@@ -1,7 +1,7 @@
 ﻿param(
     [string]$TemplatePath = "документация для проверки\Документация,_содержащая_описание_процессов,_обеспечивающих_поддержание.docx",
-    [string]$MarkdownPath = "docs\reestr\13_Технические_средства_хранения_и_компиляции.md",
-    [string]$OutputPath = "документация для проверки\Технические_средства_хранения_и_компиляции_Delomant_0.9.docx"
+    [string]$MarkdownPath = "docs\reestr\expertiza\4_Информация_для_эксплуатации.md",
+    [string]$OutputPath = "docs\reestr\expertiza\4_Информация_для_эксплуатации_Delomant_0.9.docx"
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,7 +66,7 @@ function Add-DocumentParagraph {
             $paragraph.Range.Font.Size = 12
             $paragraph.Range.Font.Bold = $true
             $paragraph.Range.Font.Color = 6957840
-            $paragraph.Format.SpaceBefore = 12
+            $paragraph.Format.SpaceBefore = 0
             $paragraph.Format.SpaceAfter = 0
             $paragraph.Format.LineSpacingRule = 1
             $paragraph.Format.LineSpacing = 18
@@ -76,9 +76,9 @@ function Add-DocumentParagraph {
             $paragraph.Range.Style = $Document.Styles.Item(-3)
             $paragraph.Range.Font.Name = 'Montserrat'
             $paragraph.Range.Font.Size = 12
-            $paragraph.Range.Font.Bold = $true
-            $paragraph.Range.Font.Color = 6957840
-            $paragraph.Format.SpaceBefore = 12
+            $paragraph.Range.Font.Bold = $false
+            $paragraph.Range.Font.Color = -16777216
+            $paragraph.Format.SpaceBefore = 0
             $paragraph.Format.SpaceAfter = 0
             $paragraph.Format.LineSpacingRule = 1
             $paragraph.Format.LineSpacing = 18
@@ -89,7 +89,7 @@ function Add-DocumentParagraph {
             $paragraph.Range.Font.Name = 'Montserrat'
             $paragraph.Range.Font.Size = 12
             $paragraph.Range.Font.Bold = $true
-            $paragraph.Range.Font.Color = 0
+            $paragraph.Range.Font.Color = 26012
             $paragraph.Format.LeftIndent = 21.3
             $paragraph.Format.SpaceBefore = 0
             $paragraph.Format.SpaceAfter = 0
@@ -101,7 +101,7 @@ function Add-DocumentParagraph {
             $paragraph.Range.Font.Name = 'Montserrat'
             $paragraph.Range.Font.Size = 12
             $paragraph.Range.Font.Bold = $false
-            $paragraph.Range.Font.Color = 0
+            $paragraph.Range.Font.Color = 4929060
             $paragraph.Format.SpaceBefore = 0
             $paragraph.Format.SpaceAfter = 0
             $paragraph.Format.LineSpacingRule = 1
@@ -112,7 +112,7 @@ function Add-DocumentParagraph {
             $paragraph.Range.Font.Name = 'Montserrat'
             $paragraph.Range.Font.Size = 12
             $paragraph.Range.Font.Bold = $false
-            $paragraph.Range.Font.Color = 0
+            $paragraph.Range.Font.Color = if ($Kind -in @('bullet', 'number')) { -16777216 } else { 4929060 }
             $paragraph.Format.SpaceBefore = 0
             $paragraph.Format.SpaceAfter = 0
             $paragraph.Format.LineSpacingRule = 1
@@ -122,7 +122,7 @@ function Add-DocumentParagraph {
                 $paragraph.Range.ListFormat.ApplyListTemplate($script:BulletListTemplate, $true)
                 $paragraph.Range.Font.Name = 'Montserrat'
                 $paragraph.Range.Font.Size = 12
-                $paragraph.Range.Font.Color = 0
+                $paragraph.Range.Font.Color = -16777216
                 $paragraph.Format.LeftIndent = 21.3
                 $paragraph.Format.FirstLineIndent = -18
             } elseif ($Kind -eq 'number') {
@@ -141,7 +141,7 @@ function Add-DocumentParagraph {
         } else {
             $spanRange.Font.Name = 'Montserrat'
             $spanRange.Font.Size = 11
-            $spanRange.Font.Color = 0
+            $spanRange.Font.Color = 3487029
         }
         Release-ComObject $spanRange
     }
@@ -155,89 +155,9 @@ function Add-DocumentParagraph {
     Release-ComObject $paragraph
 }
 
-function Add-DocumentTable {
-    param($Document, $Selection, [string[]]$Rows)
-
-    # Разбираем markdown-строки вида | a | b | в матрицу ячеек.
-    $matrix = [Collections.Generic.List[object]]::new()
-    foreach ($row in $Rows) {
-        $trimmed = $row.Trim().Trim('|')
-        if ($trimmed -match '^[\s\-:|]+$') { continue }  # строка-разделитель
-        $cells = $trimmed -split '\|' | ForEach-Object { $_.Trim() }
-        $matrix.Add($cells)
-    }
-    if ($matrix.Count -eq 0) { return }
-
-    $colCount = 0
-    foreach ($r in $matrix) { if ($r.Count -gt $colCount) { $colCount = $r.Count } }
-
-    $Selection.SetRange($Document.Content.End - 1, $Document.Content.End - 1)
-    $range = $Selection.Range
-    $table = $Document.Tables.Add($range, $matrix.Count, $colCount)
-    # Границы рисуем явно: имя встроенного стиля таблицы зависит от языка Word.
-    foreach ($b in 1, 2, 3, 4, 5, 6) {
-        try {
-            $border = $table.Borders.Item($b)
-            $border.LineStyle = 1
-            $border.LineWidth = 4
-            $border.Color = 12632256
-            Release-ComObject $border
-        } catch {}
-    }
-    $table.Range.Font.Name = "Montserrat"
-    $table.Range.Font.Size = 11
-    $table.Range.Font.Color = 0
-    $table.Range.Font.Italic = $false
-    $table.Range.ParagraphFormat.Alignment = 0
-    $table.Range.ParagraphFormat.SpaceAfter = 0
-    $table.Range.ParagraphFormat.SpaceBefore = 0
-    $table.Range.ParagraphFormat.LineSpacingRule = 0
-
-    for ($r = 0; $r -lt $matrix.Count; $r++) {
-        $cells = $matrix[$r]
-        for ($c = 0; $c -lt $colCount; $c++) {
-            $value = if ($c -lt $cells.Count) { $cells[$c] } else { "" }
-            # Инлайн-разметку в ячейках убираем: жирный и код смысла в таблице не несут.
-            $value = $value -replace '\*\*', '' -replace '`', ''
-            $cell = $table.Cell($r + 1, $c + 1)
-            $cell.Range.Text = $value
-            Release-ComObject $cell
-        }
-    }
-
-    # Шапка: полужирная и повторяется при переносе таблицы на новую страницу.
-    $headerRow = $table.Rows.Item(1)
-    $headerRow.Range.Font.Bold = $true
-    $headerRow.HeadingFormat = $true
-    Release-ComObject $headerRow
-
-    $table.Rows.AllowBreakAcrossPages = $false
-    # Небольшие таблицы держим целиком: перенос одной строки на следующую
-    # страницу ухудшает читаемость экспертного документа.
-    if ($matrix.Count -le 9) {
-        for ($rowIndex = 1; $rowIndex -lt $matrix.Count; $rowIndex++) {
-            $row = $table.Rows.Item($rowIndex)
-            $row.Range.ParagraphFormat.KeepWithNext = $true
-            Release-ComObject $row
-        }
-    }
-    $table.PreferredWidthType = 2
-    $table.PreferredWidth = 100
-    Release-ComObject $table
-    Release-ComObject $range
-
-    $Selection.SetRange($Document.Content.End - 1, $Document.Content.End - 1)
-    $Selection.TypeParagraph()
-}
 function Flush-Block {
     param($Document, $Selection, [ref]$Kind, [ref]$Parts)
     if ($Parts.Value.Count -eq 0) { return }
-    if ($Kind.Value -eq 'table') {
-        Add-DocumentTable $Document $Selection $Parts.Value.ToArray()
-        $Kind.Value = $null
-        $Parts.Value = [Collections.Generic.List[string]]::new()
-        return
-    }
     $text = ($Parts.Value -join ' ').Trim()
     if ($text) { Add-DocumentParagraph $Document $Selection $text $Kind.Value }
     $Kind.Value = $null
@@ -259,11 +179,11 @@ try {
     $document.SaveAs($output, 16)
 
     Set-ParagraphText $document.Paragraphs.Item(5) 'ДОКУМЕНТАЦИЯ,'
-    Set-ParagraphText $document.Paragraphs.Item(6) 'содержащая описание технических средств хранения исходного текста и объектного кода программного обеспечения, а также технических средств компиляции исходного текста в объектный код программного обеспечения'
+    Set-ParagraphText $document.Paragraphs.Item(6) 'содержащая информацию, необходимую для эксплуатации экземпляра программного обеспечения, предоставленного для проведения экспертной проверки'
     Set-ParagraphText $document.Paragraphs.Item(13) 'Программное обеспечение: «Delomant Analytics System»'
     Set-ParagraphText $document.Paragraphs.Item(14) 'Правообладатель: ООО «ДЕЛОМАНТ ГРУПП»'
-    Set-ParagraphText $document.Paragraphs.Item(15) 'Версия: 0.9'
-    Set-ParagraphText $document.Paragraphs.Item(16) 'Российская Федерация'
+    Set-ParagraphText $document.Paragraphs.Item(15) 'Экспертный стенд: https://delomant-analytics-system.ru/'
+    Set-ParagraphText $document.Paragraphs.Item(16) 'Версия: 0.9'
     Set-ParagraphText $document.Paragraphs.Item(21) 'Delomant Group'
     Set-ParagraphText $document.Paragraphs.Item(22) 'август 2026'
 
@@ -276,6 +196,14 @@ try {
         $coverParagraph.Format.LineSpacing = 18
         Release-ComObject $coverParagraph
     }
+
+    $coverUrlText = 'https://delomant-analytics-system.ru/'
+    $coverUrlParagraph = $document.Paragraphs.Item(15)
+    $coverUrlStart = $coverUrlParagraph.Range.Start + $coverUrlParagraph.Range.Text.IndexOf($coverUrlText)
+    $coverUrlRange = $document.Range($coverUrlStart, $coverUrlStart + $coverUrlText.Length)
+    try { [void]$document.Hyperlinks.Add($coverUrlRange, $coverUrlText) } catch {}
+    Release-ComObject $coverUrlRange
+    Release-ComObject $coverUrlParagraph
 
     $script:BulletListTemplate = $document.Paragraphs.Item(31).Range.ListFormat.ListTemplate
     $script:NumberListTemplate = $document.Paragraphs.Item(75).Range.ListFormat.ListTemplate
@@ -314,15 +242,6 @@ try {
             Flush-Block $document $selection ([ref]$blockKind) ([ref]$blockParts)
             $numberSequenceActive = $false
             Add-DocumentParagraph $document $selection $Matches[1] 'heading2'
-            continue
-        }
-        if ($line -match '^\s*\|.*\|\s*$') {
-            if ($blockKind -ne 'table') {
-                Flush-Block $document $selection ([ref]$blockKind) ([ref]$blockParts)
-                $numberSequenceActive = $false
-                $blockKind = 'table'
-            }
-            $blockParts.Add($line)
             continue
         }
         if ($line -match '^-\s+(.+)$') {
@@ -382,10 +301,10 @@ try {
     }
 
     try {
-        $document.BuiltInDocumentProperties.Item('Title').Value = 'Технические средства хранения исходного текста и компиляции. Delomant Analytics System 0.9'
+        $document.BuiltInDocumentProperties.Item('Title').Value = 'Информация для эксплуатации экземпляра ПО Delomant 0.9'
         $document.BuiltInDocumentProperties.Item('Subject').Value = 'Документация для проведения экспертной проверки'
         $document.BuiltInDocumentProperties.Item('Author').Value = 'ООО «ДЕЛОМАНТ ГРУПП»'
-        $document.BuiltInDocumentProperties.Item('Keywords').Value = 'Delomant, хранение исходного текста, компиляция, экспертная проверка'
+        $document.BuiltInDocumentProperties.Item('Keywords').Value = 'Delomant, эксплуатация, экспертная проверка'
     } catch {}
 
     $document.Fields.Update() | Out-Null

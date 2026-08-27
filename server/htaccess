@@ -5,12 +5,17 @@
 RewriteEngine On
 
 # Точки входа отдаём как есть
-RewriteRule ^(index|asset|setup|comtrade|wits|admin)\.php$ - [L]
+RewriteRule ^(index|asset|setup|comtrade|wits|admin|docs)\.php$ - [L]
 
 # Пути, к которым обращается фронтенд, проксируем на asset.php.
 # Проверку сессии делает сам asset.php.
 RewriteRule ^styles/main\.css$              asset.php?f=css  [L]
 RewriteRule ^scripts/main\.js$              asset.php?f=js   [L]
+RewriteRule ^vendor/xlsx-0\.20\.3\.full\.min\.js$       asset.php?f=xlsx [L]
+RewriteRule ^vendor/jszip-3\.10\.1\.min\.js$             asset.php?f=jszip [L]
+RewriteRule ^vendor/jspdf-2\.5\.1\.umd\.min\.js$         asset.php?f=jspdf [L]
+RewriteRule ^vendor/html2canvas-1\.4\.1\.min\.js$        asset.php?f=html2canvas [L]
+RewriteRule ^vendor/pptxgenjs-3\.12\.0\.bundle\.js$      asset.php?f=pptxgenjs [L]
 RewriteRule ^data/Logo\.png$                asset.php?f=logo [L]
 RewriteRule ^data/cbr_rates\.json$          asset.php?f=cbr  [L]
 RewriteRule ^data/company_dictionary\.json$ asset.php?f=dict [L]
@@ -20,12 +25,17 @@ RewriteRule ^data/wits_countries\.json$     asset.php?f=wits [L]
 RewriteRule ^data/wits_regions\.json$       asset.php?f=witsreg [L]
 RewriteRule ^data/hs_names_ru\.json$         asset.php?f=hsnames [L]
 
+# Публичная документация: открыта без входа, требование реестра —
+# описание функциональных характеристик и сведения для установки должны
+# быть доступны по прямой ссылке.
+RewriteRule ^docs/?$ docs.php [L]
+
 # Корень сайта → форма входа / приложение
 RewriteRule ^$ index.php [L]
 
 # Прямой доступ к внутренностям запрещён (nginx .dat не перехватывает,
 # поэтому запрос доходит до Apache и получает 403)
-RewriteRule ^(app|assets|cache)(/|$) - [F]
+RewriteRule ^(app|assets|cache|docs_files)(/|$) - [F]
 
 # Хеш пароля и ключ подписки Comtrade недоступны снаружи в любом случае
 <FilesMatch "^(config|comtrade_key|users)\.php$">
