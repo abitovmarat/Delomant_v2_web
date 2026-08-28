@@ -115,7 +115,7 @@ sizes.push(['data/demo/frozen_strawberries.json',
 
 // Фавиконки. Публичные: браузер запрашивает их до входа, поэтому в assets/
 // под сессией им не место.
-for (const f of ['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png']) {
+for (const f of ['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png', 'logo-mark-128.png']) {
     sizes.push(['data/' + f, write('data/' + f, read('data/' + f))]);
 }
 

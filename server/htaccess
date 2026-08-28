@@ -14,7 +14,7 @@ RewriteRule ^scripts/landing\.js$                  - [L]
 RewriteRule ^data/demo/frozen_strawberries\.json$  - [L]
 
 # Фавиконки: браузер тянет их и на странице входа, до авторизации
-RewriteRule ^data/(favicon\.ico|favicon-32\.png|apple-touch-icon\.png)$ - [L]
+RewriteRule ^data/(favicon\.ico|favicon-32\.png|apple-touch-icon\.png|logo-mark-128\.png)$ - [L]
 RewriteRule ^favicon\.ico$  data/favicon.ico [L]
 
 # Пути, к которым обращается фронтенд, проксируем на asset.php.

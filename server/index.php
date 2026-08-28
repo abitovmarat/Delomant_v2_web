@@ -93,18 +93,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role = 'expert';
     }
 
+    /*
+     * Вход из модального окна витрины (landing.html) приходит с этим полем.
+     * Отвечаем JSON, чтобы при неверном пароле человек остался в окне и не
+     * улетал на отдельную страницу. Обычная отправка формы не меняется.
+     */
+    $isAjax = isset($_POST['ajax']);
+
     if ($role !== null) {
         session_regenerate_id(true); // защита от фиксации сессии
         $_SESSION['auth'] = true;
         $_SESSION['role'] = $role;
         $_SESSION['name'] = $name;
         $_SESSION['uid']  = $uid;
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => true, 'redirect' => '/login'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
         // В приложение, а не на /: корень занят публичной витриной
         header('Location: /login');
         exit;
     }
     $error = true;
     usleep(600000); // мягко тормозим перебор
+
+    if ($isAjax) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(
+            ['ok' => false, 'error' => 'Неверный логин или пароль.'],
+            JSON_UNESCAPED_UNICODE
+        );
+        exit;
+    }
 }
 
 // Уже вошли

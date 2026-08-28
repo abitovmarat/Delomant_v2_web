@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Delomant Analytics System — аналитика внешней торговли</title>
+<title>Delomant Analytics System: аналитика внешней торговли</title>
 <meta name="description" content="Аналитическая платформа для бизнес-аналитиков: данные UN Comtrade и World Bank WITS превращаются в готовые отчёты и презентации.">
 <!-- ICO для старых браузеров, PNG для остальных, apple-touch — для iOS
      (у него белая подложка: прозрачную iOS заливает чёрным) -->
@@ -44,11 +44,16 @@ a{color:var(--brand)}
              background:radial-gradient(circle,rgba(47,43,199,.35),transparent 65%);pointer-events:none}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:20px;position:relative;z-index:2;margin-bottom:66px}
 .brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:16px}
-.brand .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--brand-2),var(--brand));
-             display:flex;align-items:center;justify-content:center;font:800 20px var(--font);box-shadow:0 8px 20px rgba(47,43,199,.5)}
+/* Знак тёмно-синий, поэтому подложка светлая: на фирменном градиенте
+   он сливался бы с фоном */
+.brand .mark{width:38px;height:38px;border-radius:11px;background:#fff;padding:5px;
+             object-fit:contain;box-shadow:0 8px 20px rgba(2,6,23,.35)}
 .nav-links{display:flex;gap:26px;align-items:center;font-size:14.5px}
 .nav-links a{color:#CBD5E1;text-decoration:none}
 .nav-links a:hover{color:#fff}
+.nav-cta{display:flex;align-items:center;gap:18px}
+.nav-login{color:#CBD5E1;text-decoration:none;font-size:14.5px;font-weight:600;white-space:nowrap}
+.nav-login:hover{color:#fff}
 .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;position:relative;z-index:2}
 .hero h1{font-size:45px;line-height:1.13;font-weight:800;margin-bottom:20px}
 .hero h1 em{font-style:normal;background:linear-gradient(120deg,#818CF8,#C7D2FE);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -132,7 +137,9 @@ a{color:var(--brand)}
 .src{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px}
 .src h3{font-size:16.5px;margin-bottom:9px}
 .src p{margin:0;font-size:14px;color:var(--muted)}
-.src-wide{grid-column:1/-1;border-left:3px solid var(--brand)}
+/* Акцентная полоса слева — вставкой, а не толстой рамкой: рамка в 3px
+   рядом с обычной в 1px выпирала на скруглённом углу */
+.src-wide{grid-column:1/-1;box-shadow:inset 3px 0 0 var(--brand)}
 
 /* ---------- Результат ---------- */
 .out-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
@@ -173,11 +180,36 @@ a{color:var(--brand)}
 .cta-docs{margin:32px 0 0;font-size:13.5px;color:#64748B;max-width:660px}
 .cta-docs a{color:#A5B4FC}
 
+/* ---------- Вход поверх витрины ---------- */
+.modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal[hidden]{display:none}
+.modal-back{position:absolute;inset:0;background:rgba(2,6,23,.72);backdrop-filter:blur(3px);animation:fade .2s ease}
+.modal-card{position:relative;width:100%;max-width:400px;background:#fff;color:var(--ink);border-radius:17px;
+            padding:36px 34px 28px;box-shadow:0 26px 70px rgba(0,0,0,.45);animation:rise .28s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.modal-x{position:absolute;top:12px;right:14px;background:none;border:0;font-size:26px;line-height:1;
+         color:#94A3B8;cursor:pointer;padding:4px 8px;border-radius:8px}
+.modal-x:hover{color:var(--ink);background:var(--soft)}
+/* Шапка окна по центру: знак, заголовок и подпись */
+.modal-mark{display:block;width:60px;height:60px;margin:0 auto 16px;object-fit:contain}
+.modal-card h2{font-size:22px;font-weight:800;margin-bottom:4px;text-align:center}
+.modal-sub{margin:0 0 24px;font-size:13.5px;color:var(--muted);text-align:center}
+.modal-f{display:block;margin-bottom:14px}
+.modal-f span{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
+.modal-f input{width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 13px;
+               font:14px var(--font);color:var(--ink);background:#fff;transition:.15s}
+.modal-f input:focus{outline:0;border-color:var(--brand);box-shadow:0 0 0 3px rgba(33,28,176,.12)}
+.modal-err{margin:0 0 14px;padding:10px 13px;border-radius:9px;background:#FEF2F2;color:var(--bad);
+           font-size:13.5px;border:1px solid #FECACA}
+.modal-card .btn{width:100%;margin-top:4px}
+.modal-note{margin:18px 0 0;font-size:12.5px;color:var(--muted);text-align:center}
+
 /* ---------- Подвал ---------- */
 .foot{background:#020617;color:#64748B;padding:30px 0;font-size:13.5px}
 .foot-grid{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .foot .brand{color:#CBD5E1;font-size:14.5px}
-.foot .mark{width:31px;height:31px;font-size:16px;border-radius:9px}
+.foot .mark{width:31px;height:31px;border-radius:9px;padding:4px}
 .foot-links{display:flex;gap:22px}
 .foot-links a{color:#94A3B8;text-decoration:none}
 .foot-links a:hover{color:#fff}
@@ -212,7 +244,7 @@ a{color:var(--brand)}
 <header class="hero">
   <div class="wrap">
     <nav class="nav">
-      <div class="brand"><div class="mark">D</div> Delomant Analytics</div>
+      <div class="brand"><img class="mark" src="/data/logo-mark-128.png" alt=""> Delomant Analytics</div>
       <div class="nav-links">
         <a href="#how">Как работает</a>
         <a href="#analyses">Анализы</a>
@@ -221,7 +253,10 @@ a{color:var(--brand)}
         <a href="#request">Тарифы</a>
         <a href="/docs/">Документация</a>
       </div>
-      <a class="btn btn-ghost" href="#request">Запросить доступ</a>
+      <div class="nav-cta">
+        <a class="nav-login" href="/login" data-login>Вход</a>
+        <a class="btn btn-ghost" href="#request">Запросить доступ</a>
+      </div>
     </nav>
 
     <div class="hero-grid">
@@ -264,7 +299,7 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Как работает</div>
       <h2>Четыре шага от данных до решения</h2>
-      <p>Каждый шаг — отдельный модуль программы. Данные проходят весь путь в одном окне, без выгрузок в промежуточные файлы и ручных сводных таблиц.</p>
+      <p>Каждый шаг это отдельный модуль программы. Данные проходят весь путь в одном окне, без выгрузок в промежуточные файлы и ручных сводных таблиц.</p>
     </div>
     <div class="flow">
       <div class="step"><div class="num">1</div><h3>Источники</h3><p>UN Comtrade и World Bank WITS: более 200 стран, годовая и месячная частота. Поиск по названию товара, а не по кодам ТН ВЭД.</p></div>
@@ -280,7 +315,7 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Функционал</div>
       <h2>Двенадцать видов анализа</h2>
-      <p>Все сценарии запускаются в один клик по загруженному набору данных. Наведите на карточку — увидите, как выглядит результат.</p>
+      <p>Все сценарии запускаются в один клик по загруженному набору данных. Наведите на карточку, чтобы увидеть, как выглядит результат.</p>
     </div>
     <div class="tiles" id="tiles"></div>
   </div>
@@ -291,7 +326,7 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Интерактивное демо</div>
       <h2>Соберите отчёт прямо здесь</h2>
-      <p>Выберите страны и вид анализа — график построится тем же кодом, что работает внутри программы. Данные настоящие: импорт замороженной клубники в Европу, UN Comtrade, 2020–2024.</p>
+      <p>Выберите страны и вид анализа: график построится тем же кодом, что работает внутри программы. Данные настоящие: импорт замороженной клубники в Европу, UN Comtrade, 2020–2024.</p>
     </div>
 
     <div class="demo">
@@ -307,7 +342,7 @@ a{color:var(--brand)}
           </div>
           <div class="demo-checks" id="demoCountries"></div>
         </div>
-        <p class="demo-hint">В программе так же выбираются товарные коды, годы и направление — импорт или экспорт.</p>
+        <p class="demo-hint">В программе так же выбираются товарные коды, годы и направление: импорт или экспорт.</p>
       </aside>
 
       <div class="demo-main">
@@ -367,7 +402,7 @@ a{color:var(--brand)}
     </div>
     <div class="out-grid">
       <div class="out"><div class="out-tag">XLSX</div><h3>Excel</h3><p>Сводные таблицы и исходные строки с сохранением форматов и единиц измерения.</p></div>
-      <div class="out"><div class="out-tag">HTML</div><h3>Аналитическая записка</h3><p>Готовый документ с графиками, выводами и указанием источников — открывается в любом браузере.</p></div>
+      <div class="out"><div class="out-tag">HTML</div><h3>Аналитическая записка</h3><p>Готовый документ с графиками, выводами и указанием источников, открывается в любом браузере.</p></div>
       <div class="out"><div class="out-tag">PPTX</div><h3>Презентация</h3><p>Слайды в фирменном стиле собираются из результатов анализа за один клик.</p></div>
       <div class="out"><div class="out-tag">PNG</div><h3>Отдельные графики</h3><p>Любую диаграмму можно выгрузить картинкой и вставить в свой документ.</p></div>
     </div>
@@ -384,7 +419,7 @@ a{color:var(--brand)}
   <div class="wrap">
     <div class="cta-head">
       <h2>Тарифы</h2>
-      <p>Начните с бесплатного демо-доступа на неделю. При годовой оплате — скидка 20%.</p>
+      <p>Начните с бесплатного демо-доступа на неделю. При годовой оплате скидка 20%.</p>
     </div>
 
     <div class="plans">
@@ -428,7 +463,7 @@ a{color:var(--brand)}
     </div>
 
     <p class="cta-docs">
-      Оставьте заявку — свяжемся, уточним задачи и откроем доступ.
+      Оставьте заявку, свяжемся и откроем доступ.
       <a href="/docs/">Публичная документация</a> с функциональными характеристиками открыта без регистрации.
     </p>
   </div>
@@ -436,14 +471,45 @@ a{color:var(--brand)}
 
 <footer class="foot">
   <div class="wrap foot-grid">
-    <div class="brand"><div class="mark">D</div> Delomant Analytics System</div>
+    <div class="brand"><img class="mark" src="/data/logo-mark-128.png" alt=""> Delomant Analytics System</div>
     <div class="foot-links">
       <a href="/docs/">Документация</a>
-      <a href="/login">Вход в систему</a>
+      <a href="/login" data-login>Вход в систему</a>
       <a href="https://delomant.ru/delomant-analytics-system#_lp_block_1402756516" target="_blank" rel="noopener">Запросить доступ</a>
     </div>
   </div>
 </footer>
+
+<!--
+  Вход поверх витрины. Форма отправляется на /login с полем ajax=1, поэтому
+  при неверном пароле окно остаётся открытым. Без JavaScript это обычная
+  форма: браузер отправит её на /login и покажет отдельную страницу входа.
+-->
+<div class="modal" id="loginModal" hidden>
+  <div class="modal-back" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <button class="modal-x" type="button" data-close aria-label="Закрыть">&times;</button>
+    <img class="modal-mark" src="/data/logo-mark-128.png" alt="">
+    <h2 id="loginTitle">Вход в систему</h2>
+    <p class="modal-sub">Delomant Analytics System</p>
+
+    <form method="post" action="/login" autocomplete="off" id="loginForm">
+      <input type="hidden" name="ajax" value="1">
+      <p class="modal-err" id="loginErr" role="alert" hidden></p>
+      <label class="modal-f">
+        <span>Логин</span>
+        <input type="text" name="login" autocomplete="username" placeholder="Логин пользователя">
+      </label>
+      <label class="modal-f">
+        <span>Пароль</span>
+        <input type="password" name="password" required autocomplete="current-password" placeholder="Введите пароль">
+      </label>
+      <button class="btn btn-primary" type="submit" id="loginBtn">Войти</button>
+    </form>
+
+    <p class="modal-note">Доступ выдаётся по заявке. <a href="#request" data-close>Посмотреть тарифы</a></p>
+  </div>
+</div>
 
 <script src="scripts/landing.js"></script>
 </body>

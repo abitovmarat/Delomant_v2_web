@@ -397,6 +397,90 @@
         if (csv) { csv.addEventListener('click', demoCsv); }
     }
 
+    /* ---------- Вход поверх витрины ---------- */
+
+    /*
+     * Модальное окно входа. Форма уходит на /login с полем ajax=1, поэтому
+     * при неверном пароле окно остаётся открытым. Если JavaScript отключён,
+     * ссылки ведут на /login, а форма отправляется обычным способом —
+     * пользователь просто увидит отдельную страницу входа.
+     */
+    function initLogin() {
+        var modal = document.getElementById('loginModal');
+        var form = document.getElementById('loginForm');
+        if (!modal || !form) { return; }
+
+        var err = document.getElementById('loginErr');
+        var btn = document.getElementById('loginBtn');
+        var lastFocus = null;
+
+        function open(e) {
+            if (e) { e.preventDefault(); }
+            lastFocus = document.activeElement;
+            modal.hidden = false;
+            document.body.style.overflow = 'hidden';
+            var first = form.querySelector('input[name="login"]');
+            if (first) { first.focus(); }
+        }
+
+        function close() {
+            modal.hidden = true;
+            document.body.style.overflow = '';
+            err.hidden = true;
+            form.reset();
+            if (lastFocus) { lastFocus.focus(); }
+        }
+
+        // Любая ссылка с data-login открывает окно вместо перехода
+        Array.prototype.forEach.call(document.querySelectorAll('[data-login]'), function (el) {
+            el.addEventListener('click', open);
+        });
+
+        modal.addEventListener('click', function (e) {
+            if (e.target.hasAttribute('data-close')) {
+                // Ссылка на тарифы должна и закрыть окно, и увести к якорю
+                if (e.target.tagName !== 'A') { e.preventDefault(); }
+                close();
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.hidden) { close(); }
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            err.hidden = true;
+            btn.disabled = true;
+            btn.textContent = 'Проверяем…';
+
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin'
+            })
+                .then(function (r) {
+                    return r.json().catch(function () { return { ok: false }; });
+                })
+                .then(function (res) {
+                    if (res.ok) {
+                        window.location.href = res.redirect || '/login';
+                        return;
+                    }
+                    err.textContent = res.error || 'Неверный логин или пароль.';
+                    err.hidden = false;
+                    btn.disabled = false;
+                    btn.textContent = 'Войти';
+                    var pass = form.querySelector('input[name="password"]');
+                    if (pass) { pass.value = ''; pass.focus(); }
+                })
+                .catch(function () {
+                    // Сеть или сервер не ответили — уводим на обычную страницу входа
+                    window.location.href = '/login';
+                });
+        });
+    }
+
     /* ---------- Запуск ---------- */
 
     // Графики нужны и мини-демо, поэтому отдаём их наружу
@@ -411,6 +495,7 @@
     };
 
     renderTiles();
+    initLogin();
 
     fetch(DEMO_URL)
         .then(function (r) {
