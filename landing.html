@@ -52,7 +52,10 @@ a{color:var(--brand)}
 .hero::after{content:"";position:absolute;top:-180px;right:-160px;width:620px;height:620px;border-radius:50%;
              background:radial-gradient(circle,rgba(47,43,199,.35),transparent 65%);pointer-events:none}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:20px;position:relative;z-index:2;margin-bottom:66px}
-.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:16px}
+/* Полное название длинное: на узком экране даём ему переноситься по
+   словам, но не разрывать строку посреди слова */
+.brand{display:flex;align-items:center;gap:12px;font-weight:700;font-size:16px;line-height:1.25}
+.brand .mark{flex:0 0 auto}
 /* Знак тёмно-синий, поэтому подложка светлая: на фирменном градиенте
    он сливался бы с фоном */
 .brand .mark{width:38px;height:38px;border-radius:11px;background:#fff;padding:5px;
@@ -251,10 +254,10 @@ a{color:var(--brand)}
 <header class="hero">
   <div class="wrap">
     <nav class="nav">
-      <div class="brand"><img class="mark" src="/data/logo-mark-128.png" alt=""> Delomant Analytics</div>
+      <div class="brand"><img class="mark" src="/data/logo-mark-128.png" alt=""> Delomant Analytics System</div>
       <div class="nav-links">
         <a href="#how">Как работает</a>
-        <a href="#analyses">Анализы</a>
+        <a href="#analyses">Аналитика</a>
         <a href="#demo">Демо</a>
         <a href="#sources">Источники</a>
         <a href="#request">Тарифы</a>
@@ -269,7 +272,7 @@ a{color:var(--brand)}
     <div class="hero-grid">
       <div>
         <h1>От сырых данных<br>до <em>готового отчёта</em></h1>
-        <p class="lead">Платформа для бизнес-аналитиков: собирает данные внешней торговли из UN Comtrade и World Bank WITS, считает двенадцать видов анализа и отдаёт результат в Excel, аналитическую записку и презентацию.</p>
+        <p class="lead">Delomant Analytics System: платформа для бизнес-аналитиков, которая получает данные внешней торговли из UN Comtrade и World Bank WITS, рассчитывает аналитические показатели и формирует результаты в форматах XLSX, PPTX, PDF, HTML, CSV и PNG.</p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="#demo">Попробовать демо</a>
           <a class="btn btn-ghost" href="#request">Запросить доступ</a>
@@ -306,11 +309,11 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Как работает</div>
       <h2>Четыре шага от данных до решения</h2>
-      <p>Каждый шаг это отдельный модуль программы. Данные проходят весь путь в одном окне, без выгрузок в промежуточные файлы и ручных сводных таблиц.</p>
+      <p>Каждый шаг это отдельный этап работы в программе. Данные проходят весь путь в одном окне, без промежуточных файлов и ручных сводных таблиц.</p>
     </div>
     <div class="flow">
       <div class="step"><div class="num">1</div><h3>Источники</h3><p>UN Comtrade и World Bank WITS: более 200 стран, годовая и месячная частота. Поиск по названию товара, а не по кодам ТН ВЭД.</p></div>
-      <div class="step"><div class="num">2</div><h3>Обработка</h3><p>Очистка, приведение единиц, пересчёт в рубли по курсу ЦБ, расчётные колонки и сохранённые шаблоны обработки.</p></div>
+      <div class="step"><div class="num">2</div><h3>Обработка</h3><p>Получение и нормализация данных из доступных источников, приведение единиц измерения и расчёт аналитических показателей.</p></div>
       <div class="step"><div class="num">3</div><h3>Анализ</h3><p>Двенадцать готовых сценариев: структура импорта, динамика цен, потоки между странами, сигналы и риски.</p></div>
       <div class="step"><div class="num">4</div><h3>Отчёт</h3><p>Excel, аналитическая записка в HTML и презентация. Любой график выгружается отдельным PNG.</p></div>
     </div>
@@ -322,7 +325,7 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Функционал</div>
       <h2>Двенадцать видов анализа</h2>
-      <p>Все сценарии запускаются в один клик по загруженному набору данных. Наведите на карточку, чтобы увидеть, как выглядит результат.</p>
+      <p>Все сценарии запускаются по выбранному набору данных, полученному из доступных источников международной торговой статистики.</p>
     </div>
     <div class="tiles" id="tiles"></div>
   </div>
@@ -333,7 +336,7 @@ a{color:var(--brand)}
     <div class="sec-head">
       <div class="eyebrow">Интерактивное демо</div>
       <h2>Соберите отчёт прямо здесь</h2>
-      <p>Выберите страны и вид анализа: график построится тем же кодом, что работает внутри программы. Данные настоящие: импорт замороженной клубники в Европу, UN Comtrade, 2020–2024.</p>
+      <p>Выберите страны и вид анализа: график построится тем же кодом, что работает внутри программы. Используются реальные данные UN Comtrade по импорту замороженной клубники в страны Европы за 2020–2024 годы.</p>
     </div>
 
     <div class="demo">
@@ -363,7 +366,7 @@ a{color:var(--brand)}
         <div class="chart-slot" id="demoChart"></div>
         <div class="demo-foot">
           <div class="prov">
-            <b>Источник:</b> UN Comtrade · <b>Товар:</b> ТН ВЭД 0811 10 · <b>Период:</b> 2020–2024 ·
+            <b>Источник:</b> UN Comtrade · <b>Товар:</b> код HS 081110 · <b>Период:</b> 2020–2024 ·
             <b>Единицы:</b> кг, USD/кг · <b>Выгружено:</b> 14.03.2025
           </div>
           <div class="demo-actions">
@@ -386,11 +389,11 @@ a{color:var(--brand)}
     <div class="src-grid">
       <div class="src">
         <h3>UN Comtrade</h3>
-        <p>Официальная статистика ООН по международной торговле. Более 200 стран, годовая и месячная частота, поиск товара по названию.</p>
+        <p>Официальная статистика ООН по международной торговле: более 200 стран и территорий, годовая и месячная статистика, поиск товарного кода по русскому наименованию.</p>
       </div>
       <div class="src">
         <h3>World Bank WITS</h3>
-        <p>Объёмы торговли и тарифные ставки: РНБ и фактические, простые и взвешенные средние. Показывает барьеры входа на рынок.</p>
+        <p>Объёмы торговли и тарифные данные WITS TRAINS: ставки РНБ и фактические, простые и взвешенные средние. Показывает барьеры входа на рынок.</p>
       </div>
       <div class="src src-wide">
         <h3>Журнал источников</h3>
@@ -435,9 +438,12 @@ a{color:var(--brand)}
         <div class="plan-price">0 ₽<span>/ 7 дней</span></div>
         <div class="plan-users">1 пользователь</div>
         <ul class="plan-list">
-          <li>Полный функционал платформы</li>
-          <li>Все источники данных</li>
-          <li>Выгрузка отчётов и презентаций</li>
+          <li>1 пользователь</li>
+          <li>Ограниченный доступ к основным функциям</li>
+          <li>UN Comtrade: ограниченно</li>
+          <li>World Bank WITS и WITS TRAINS: просмотр</li>
+          <li>Аналитические таблицы и графики: ограниченно</li>
+          <li>Формирование и экспорт материалов: ограниченно</li>
         </ul>
         <a class="btn btn-outline plan-btn" href="https://delomant.ru/delomant-analytics-system#_lp_block_1402756516" target="_blank" rel="noopener">Получить демо</a>
       </div>
@@ -461,9 +467,10 @@ a{color:var(--brand)}
         <div class="plan-price">120 000 ₽<span>/ месяц</span></div>
         <div class="plan-users">До 10 пользователей</div>
         <ul class="plan-list">
-          <li>Всё из базового тарифа</li>
-          <li>Командная работа</li>
-          <li>Приоритетная поддержка</li>
+          <li>Всё, что входит в Базовый тариф</li>
+          <li>Консультация аналитика: 1 раз в месяц</li>
+          <li>Приоритетная техническая поддержка</li>
+          <li>Расширенное обучение и сопровождение</li>
         </ul>
         <a class="btn btn-outline plan-btn" href="https://delomant.ru/delomant-analytics-system#_lp_block_1402756516" target="_blank" rel="noopener">Запросить доступ</a>
       </div>
