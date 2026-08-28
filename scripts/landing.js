@@ -31,8 +31,18 @@
     function fmt(n) {
         return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     }
+    /*
+     * Экранируем и кавычки: значения подставляются не только в текст, но и
+     * в HTML-атрибуты (value у чекбоксов). Демо-данные свои, но файл может
+     * смениться, а незакрытая кавычка в атрибуте — готовая дыра.
+     */
     function esc(s) {
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     function svgOpen(w, h, cls) {
         return '<svg class="' + (cls || '') + '" viewBox="0 0 ' + w + ' ' + h + '" ' +
@@ -148,8 +158,13 @@
         return s + '</svg>';
     }
 
-    /** Кольцо долей рынка. */
-    function chartDonut(items) {
+    /**
+     * Кольцо долей. Доли и подпись в центре считаются по переданным
+     * странам, а не по всему рынку: иначе при выборе одной страны кольцо
+     * заполнено целиком, а в легенде стоит её доля от мира — цифры
+     * противоречат картинке.
+     */
+    function chartDonut(items, totalWeight) {
         var w = 560, h = 236, cx = 118, cy = h / 2, r = 82, thick = 30;
         var top = items.slice(0, 6);
         var rest = items.slice(6).reduce(function (a, it) { return a + it.share; }, 0);
@@ -159,6 +174,14 @@
         if (rest > 0.05) { parts.push({ name: 'Прочие', share: rest, color: '#CBD5E1' }); }
 
         var total = parts.reduce(function (a, p) { return a + p.share; }, 0) || 1;
+        // Доли пересчитываем от выбранных стран, чтобы сумма давала 100%
+        // и совпадала с тем, что нарисовано в кольце
+        parts.forEach(function (p) { p.pct = p.share / total * 100; });
+
+        // Вес выбранных стран в тоннах — для подписи в центре
+        var tons = typeof totalWeight === 'number'
+            ? totalWeight
+            : items.reduce(function (a, it) { return a + (it.weight || 0); }, 0) / 1000;
         var s = svgOpen(w, h);
         var angle = -Math.PI / 2;
         parts.forEach(function (p) {
@@ -171,8 +194,9 @@
                  'fill="none" stroke="' + p.color + '" stroke-width="' + thick + '"/>';
             angle = end;
         });
-        s += '<text x="' + cx + '" y="' + (cy - 3) + '" text-anchor="middle" font-size="19" font-weight="800">1 413 т</text>';
-        s += '<text x="' + cx + '" y="' + (cy + 15) + '" text-anchor="middle" font-size="11" fill="' + C.muted + '">импорт 2024</text>';
+        s += '<text x="' + cx + '" y="' + (cy - 3) + '" text-anchor="middle" font-size="19" font-weight="800">' +
+             fmt(tons) + ' т</text>';
+        s += '<text x="' + cx + '" y="' + (cy + 15) + '" text-anchor="middle" font-size="11" fill="' + C.muted + '">импорт 2020–2024</text>';
 
         var lx = 250, ly = cy - parts.length * 11 + 6;
         parts.forEach(function (p, i) {
@@ -180,7 +204,7 @@
             s += '<rect x="' + lx + '" y="' + (y - 8) + '" width="11" height="11" rx="3" fill="' + p.color + '"/>';
             s += '<text x="' + (lx + 19) + '" y="' + (y + 1) + '" font-size="11.5">' + esc(p.name) + '</text>';
             s += '<text x="' + (lx + 250) + '" y="' + (y + 1) + '" text-anchor="end" font-size="11.5" fill="' + C.muted + '">' +
-                 p.share.toFixed(1) + '%</text>';
+                 p.pct.toFixed(1) + '%</text>';
         });
         return s + '</svg>';
     }
@@ -244,9 +268,9 @@
     /* ---------- Интерактивное мини-демо ---------- */
 
     var MODES = [
-        { id: 'volume', name: 'Объёмы по странам',  sub: 'Топ направлений по весу за 2024 год' },
+        { id: 'volume', name: 'Объёмы по странам',  sub: 'Топ направлений по весу, 2020–2024' },
         { id: 'price',  name: 'Динамика цен',       sub: 'Средняя импортная цена, USD за килограмм' },
-        { id: 'share',  name: 'Структура импорта',  sub: 'Доли стран в общем объёме поставок' },
+        { id: 'share',  name: 'Структура импорта',  sub: 'Доли стран в объёме поставок, 2020–2024' },
         { id: 'trend',  name: 'Динамика объёмов',   sub: 'Как менялись поставки с 2020 по 2024 год' }
     ];
 

@@ -109,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($isAjax) {
             header('Content-Type: application/json; charset=utf-8');
+            header('X-Content-Type-Options: nosniff');
             echo json_encode(['ok' => true, 'redirect' => '/login'], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -122,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($isAjax) {
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
         echo json_encode(
             ['ok' => false, 'error' => 'Неверный логин или пароль.'],
             JSON_UNESCAPED_UNICODE
