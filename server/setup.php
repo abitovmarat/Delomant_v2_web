@@ -114,7 +114,7 @@ header('Content-Type: text/html; charset=UTF-8');
         <h1>Пароль установлен</h1>
         <div class="sub">Теперь можно войти в приложение.</div>
         <div class="msg ok">Готово. Установка отключена.</div>
-        <a class="btn" href="/">Перейти ко входу</a>
+        <a class="btn" href="/login">Перейти ко входу</a>
     <?php else: ?>
         <h1>Установка пароля</h1>
         <div class="sub">Задайте пароль для входа в Delomant Analytics.</div>

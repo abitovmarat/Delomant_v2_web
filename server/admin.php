@@ -25,7 +25,7 @@ session_start();
 if (empty($_SESSION['auth']) || (($_SESSION['role'] ?? '') !== 'full')) {
     http_response_code(403);
     header('Content-Type: text/html; charset=UTF-8');
-    exit('Доступ только для владельца. <a href="/">Войти</a>');
+    exit('Доступ только для владельца. <a href="/login">Войти</a>');
 }
 
 $usersFile = __DIR__ . '/users.php';
@@ -118,6 +118,9 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Delomant — Пользователи</title>
+<link rel="icon" href="/data/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/data/favicon-32.png">
+<link rel="apple-touch-icon" href="/data/apple-touch-icon.png">
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -161,7 +164,7 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
     <div class="wrap">
         <div class="top">
             <h1>Пользователи</h1>
-            <a href="/">← в приложение</a>
+            <a href="/login">← в приложение</a>
         </div>
 
         <?php if ($error): ?><div class="msg err"><?= h($error) ?></div><?php endif; ?>

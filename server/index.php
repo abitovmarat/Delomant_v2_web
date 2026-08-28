@@ -99,7 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['role'] = $role;
         $_SESSION['name'] = $name;
         $_SESSION['uid']  = $uid;
-        header('Location: /');
+        // В приложение, а не на /: корень занят публичной витриной
+        header('Location: /login');
         exit;
     }
     $error = true;
@@ -154,6 +155,9 @@ function renderCabinet(?string $name): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Delomant — Личный кабинет</title>
+<link rel="icon" href="/data/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/data/favicon-32.png">
+<link rel="apple-touch-icon" href="/data/apple-touch-icon.png">
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -208,7 +212,7 @@ function renderCabinet(?string $name): void
                 <div class="who">Здравствуйте, <?= $who ?></div>
                 <div class="sub">Demo-стенд «Delomant Analytics» · доступ для экспертизы реестра</div>
             </div>
-            <a class="logout" href="/?logout=1">Выйти</a>
+            <a class="logout" href="/login?logout=1">Выйти</a>
         </div>
         <div class="body">
             <div class="lead">
@@ -220,7 +224,7 @@ function renderCabinet(?string $name): void
 
             <!-- Кнопка идёт до инструкции: она длинная, и искать переход
                  под ней пришлось бы прокруткой. -->
-            <div class="cta-row"><a class="cta" href="/?stand=1">Открыть демо-стенд →</a></div>
+            <div class="cta-row"><a class="cta" href="/login?stand=1">Открыть демо-стенд →</a></div>
             <div class="guide-title">Как пользоваться</div>
 
             <div class="steps">
@@ -262,6 +266,9 @@ header('Content-Type: text/html; charset=UTF-8');
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Delomant — Вход</title>
+<link rel="icon" href="/data/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/data/favicon-32.png">
+<link rel="apple-touch-icon" href="/data/apple-touch-icon.png">
 <style>
     :root {
         --primary: #2563EB;

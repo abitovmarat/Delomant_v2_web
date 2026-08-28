@@ -7,6 +7,16 @@ RewriteEngine On
 # Точки входа отдаём как есть
 RewriteRule ^(index|asset|setup|comtrade|wits|admin|docs)\.php$ - [L]
 
+# Публичная витрина: лендинг, его скрипт и обезличенные демо-данные.
+# Открыты без входа — это страница для новых клиентов.
+RewriteRule ^landing\.html$                        - [L]
+RewriteRule ^scripts/landing\.js$                  - [L]
+RewriteRule ^data/demo/frozen_strawberries\.json$  - [L]
+
+# Фавиконки: браузер тянет их и на странице входа, до авторизации
+RewriteRule ^data/(favicon\.ico|favicon-32\.png|apple-touch-icon\.png)$ - [L]
+RewriteRule ^favicon\.ico$  data/favicon.ico [L]
+
 # Пути, к которым обращается фронтенд, проксируем на asset.php.
 # Проверку сессии делает сам asset.php.
 RewriteRule ^styles/main\.css$              asset.php?f=css  [L]
@@ -30,8 +40,12 @@ RewriteRule ^data/hs_names_ru\.json$         asset.php?f=hsnames [L]
 # быть доступны по прямой ссылке.
 RewriteRule ^docs/?$ docs.php [L]
 
-# Корень сайта → форма входа / приложение
-RewriteRule ^$ index.php [L]
+# Корень сайта → публичная витрина. Форма входа переехала на /login:
+# первым делом посетитель должен видеть, что продукт умеет, а не пароль.
+# Вошедшего index.php сам пускает в приложение, поэтому старая закладка
+# на / ничего не ломает — с неё человек уходит на витрину и жмёт «Вход».
+RewriteRule ^$ landing.html [L]
+RewriteRule ^login/?$ index.php [L]
 
 # Прямой доступ к внутренностям запрещён (nginx .dat не перехватывает,
 # поэтому запрос доходит до Apache и получает 403)

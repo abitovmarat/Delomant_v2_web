@@ -65,6 +65,9 @@ header('Content-Type: text/html; charset=utf-8');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Документация — Delomant Analytics System</title>
+<link rel="icon" href="/data/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/data/favicon-32.png">
+<link rel="apple-touch-icon" href="/data/apple-touch-icon.png">
 <meta name="description" content="Документация Delomant Analytics System: функциональные характеристики, установка, эксплуатация и процессы жизненного цикла.">
 <style>
     * { box-sizing: border-box; }

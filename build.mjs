@@ -70,6 +70,12 @@ const LEGAL_FILES = [
 
 const setupToken = process.env.SETUP_TOKEN || randomBytes(24).toString('hex');
 
+/*
+ * Метка версии сборки. Дописывается к ссылкам на свою статику (?v=…), чтобы
+ * после деплоя браузер скачал свежие файлы, а не отдал старые из кэша.
+ */
+const buildId = Date.now().toString(36);
+
 rmSync(OUT, { recursive: true, force: true });
 
 const sizes = [];
@@ -92,6 +98,27 @@ for (const f of readdirSync('public_docs')) {
     if (!f.endsWith('.pdf')) { continue; }
     sizes.push(['docs_files/' + f, write('docs_files/' + f, read('public_docs/' + f))]);
 }
+/*
+ * Публичная витрина: лендинг, его скрипт и демо-данные. Открыты без входа —
+ * это страница для новых клиентов. Лежат обычными файлами, а не в assets/,
+ * потому что защищать здесь нечего: демо-набор обезличен.
+ *
+ * Метка версии — как у приложения, чтобы после деплоя браузер не отдавал
+ * старый скрипт из кэша.
+ */
+const landingHtml = read('landing.html')
+    .replace('src="scripts/landing.js"', 'src="scripts/landing.js?v=' + buildId + '"');
+sizes.push(['landing.html', write('landing.html', landingHtml)]);
+sizes.push(['scripts/landing.js', write('scripts/landing.js', read('scripts/landing.js'))]);
+sizes.push(['data/demo/frozen_strawberries.json',
+            write('data/demo/frozen_strawberries.json', read('data/demo/frozen_strawberries.json'))]);
+
+// Фавиконки. Публичные: браузер запрашивает их до входа, поэтому в assets/
+// под сессией им не место.
+for (const f of ['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png']) {
+    sizes.push(['data/' + f, write('data/' + f, read('data/' + f))]);
+}
+
 sizes.push(['.htaccess', write('.htaccess', read('server/htaccess'))]);
 
 // setup.php с подставленным токеном установки
@@ -113,7 +140,6 @@ if (process.env.COMTRADE_KEY) {
  * а не отдавал старый из кэша. HTML отдаётся с no-cache, поэтому новая
  * метка доходит сразу. Локальные сторонние библиотеки уже содержат версии в имени файла.
  */
-const buildId = Date.now().toString(36);
 let appHtml = read('index.html')
     .replace('href="styles/main.css"', 'href="styles/main.css?v=' + buildId + '"')
     .replace('src="scripts/main.js"', 'src="scripts/main.js?v=' + buildId + '"');
