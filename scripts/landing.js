@@ -46,15 +46,20 @@
     function chartBars(items, opts) {
         opts = opts || {};
         var top = items.slice(0, opts.limit || 8);
-        // Поля слева и справа считаем по самым длинным строкам: иначе
-        // «469 720 кг (28.3%)» упирается в край и обрезается
+        /*
+         * Поля слева и справа считаем по самым длинным строкам: иначе
+         * «469 720 кг (28.3%)» упирается в край, а «Великобритания»
+         * обрезается слева. Названия у лидера рисуются жирным, поэтому
+         * коэффициент берём с запасом на bold, а потолок — такой, чтобы
+         * самое длинное название целиком помещалось.
+         */
         var nameLen = 0, valLen = 0;
         top.forEach(function (it) {
             if (it.name.length > nameLen) { nameLen = it.name.length; }
             if (it.label.length > valLen) { valLen = it.label.length; }
         });
         var w = 560;
-        var labelW = Math.min(170, Math.max(96, nameLen * 6.4 + 14));
+        var labelW = Math.min(200, Math.max(96, nameLen * 7.3 + 16));
         var valueW = Math.min(150, Math.max(70, valLen * 5.9 + 14));
         var barH = 20, gap = 9, padTop = 8;
         var h = padTop * 2 + top.length * (barH + gap) - gap;
@@ -63,13 +68,18 @@
         top.forEach(function (it) { if (it.value > max) { max = it.value; } });
         if (!max) { max = 1; }
 
+        // Название, не влезающее даже в максимальное поле, укорачиваем:
+        // иначе оно уходит за левый край картинки
+        var maxChars = Math.floor((labelW - 12) / 7.3);
+
         var s = svgOpen(w, h);
         top.forEach(function (it, i) {
             var y = padTop + i * (barH + gap);
             var bw = Math.max(2, it.value / max * innerW);
             var color = it.highlight ? C.brand : C.primary;
+            var name = it.name.length > maxChars ? it.name.slice(0, maxChars - 1) + '…' : it.name;
             s += '<text x="' + (labelW - 8) + '" y="' + (y + barH / 2 + 4) + '" text-anchor="end" font-size="11.5"' +
-                 (it.highlight ? ' font-weight="700"' : '') + '>' + esc(it.name) + '</text>';
+                 (it.highlight ? ' font-weight="700"' : '') + '>' + esc(name) + '</text>';
             s += '<rect x="' + labelW + '" y="' + y + '" width="' + bw + '" height="' + barH + '" fill="' + color + '" rx="3"/>';
             s += '<text x="' + (labelW + bw + 7) + '" y="' + (y + barH / 2 + 4) + '" font-size="11" fill="' + C.muted + '">' +
                  esc(it.label) + '</text>';
